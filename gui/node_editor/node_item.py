@@ -1,12 +1,10 @@
 """
-节点图形项 - 绘制和交互
-严格解耦：只通过EventBus与Core层通信
+节点图形项 — WPF VisionMaster风格外观
+左侧状态条、选中高亮、悬停效果
 """
 
-from PySide6.QtWidgets import (
-    QGraphicsItem, QStyleOptionGraphicsItem, QGraphicsTextItem
-)
-from PySide6.QtCore import Qt, QRectF, QPointF, Signal
+from PySide6.QtWidgets import QGraphicsItem, QStyleOptionGraphicsItem
+from PySide6.QtCore import Qt, QRectF, QPointF
 from PySide6.QtGui import (
     QBrush, QColor, QPen, QFont, QPainter, QPainterPath,
     QLinearGradient, QGradient
@@ -18,22 +16,26 @@ from .socket_item import GraphicsSocket
 
 
 class GraphicsNode(QGraphicsItem):
-    """
-    图形节点
-    负责节点的可视化显示和用户交互
-    """
+    """WPF风格的图形节点"""
 
-    # 节点颜色方案
+    # 节点颜色方案 (WPF VisionMaster配色)
     COLORS = {
-        "io": {"bg": QColor(40, 60, 50), "header": QColor(60, 100, 70)},
-        "preprocessing": {"bg": QColor(50, 50, 60), "header": QColor(70, 70, 100)},
-        "feature": {"bg": QColor(60, 50, 50), "header": QColor(100, 70, 70)},
-        "match": {"bg": QColor(50, 50, 50), "header": QColor(80, 80, 100)},
-        "measurement": {"bg": QColor(50, 60, 60), "header": QColor(70, 100, 100)},
-        "enhance": {"bg": QColor(60, 50, 40), "header": QColor(100, 80, 60)},
-        "geometry": {"bg": QColor(50, 50, 55), "header": QColor(80, 80, 90)},
-        "color": {"bg": QColor(55, 45, 55), "header": QColor(90, 70, 90)},
-        "default": {"bg": QColor(50, 50, 60), "header": QColor(70, 70, 100)}
+        "IO": {"bg": QColor(40, 60, 50), "header": QColor(60, 110, 70)},
+        "预处理": {"bg": QColor(45, 48, 58), "header": QColor(65, 70, 95)},
+        "特征检测": {"bg": QColor(55, 48, 45), "header": QColor(95, 65, 65)},
+        "匹配": {"bg": QColor(48, 48, 55), "header": QColor(75, 75, 95)},
+        "测量": {"bg": QColor(48, 55, 55), "header": QColor(65, 95, 95)},
+        "增强": {"bg": QColor(55, 48, 40), "header": QColor(95, 75, 55)},
+        "几何变换": {"bg": QColor(48, 48, 53), "header": QColor(75, 75, 85)},
+        "颜色处理": {"bg": QColor(52, 43, 52), "header": QColor(85, 65, 85)},
+        "default": {"bg": QColor(48, 48, 55), "header": QColor(65, 65, 95)}
+    }
+
+    # 状态颜色
+    STATE_COLORS = {
+        "Running": QColor("#2196F3"),   # 蓝色
+        "Success": QColor("#4CAF50"),   # 绿色
+        "Error": QColor("#F44336"),     # 红色
     }
 
     def __init__(self, node_data: dict, event_bus: EventBus, parent=None):
@@ -51,7 +53,8 @@ class GraphicsNode(QGraphicsItem):
         # 尺寸
         self.width = 180
         self.height = 80
-        self.header_height = 32
+        self.header_height = 34
+        self.status_bar_width = 6
 
         # 端口
         self.input_sockets = []
@@ -60,6 +63,7 @@ class GraphicsNode(QGraphicsItem):
         # 交互状态
         self._selected = False
         self._hovered = False
+        self._execution_state = None  # None / "Running" / "Success" / "Error"
 
         # 设置标志
         self.setFlag(QGraphicsItem.ItemIsMovable, True)
@@ -75,79 +79,91 @@ class GraphicsNode(QGraphicsItem):
 
     def _create_sockets(self):
         """创建端口图形项"""
-        # 输入端口（左侧）
         for i, socket_def in enumerate(self.inputs):
             socket = GraphicsSocket(socket_def, self, self.event_bus, is_input=True)
-            socket.setPos(0, self.header_height + 15 + i * 28)
+            socket.setPos(0, self.header_height + 12 + i * 26)
             socket.setParentItem(self)
             self.input_sockets.append(socket)
 
-        # 输出端口（右侧）
         for i, socket_def in enumerate(self.outputs):
             socket = GraphicsSocket(socket_def, self, self.event_bus, is_input=False)
-            socket.setPos(self.width, self.header_height + 15 + i * 28)
+            socket.setPos(self.width, self.header_height + 12 + i * 26)
             socket.setParentItem(self)
             self.output_sockets.append(socket)
 
-        # 调整高度
         max_sockets = max(len(self.input_sockets), len(self.output_sockets), 1)
-        self.height = self.header_height + max_sockets * 28 + 15
+        self.height = self.header_height + max_sockets * 26 + 12
 
     def _get_colors(self):
         """获取节点颜色"""
         colors = self.COLORS.get(self.category, self.COLORS["default"])
+
         if self._selected:
-            bg = colors["header"].lighter(120)
+            bg = QColor(60, 60, 70)
             header = colors["header"].lighter(120)
         elif self._hovered:
-            bg = colors["bg"].lighter(110)
+            bg = QColor(55, 55, 65)
             header = colors["header"].lighter(110)
         else:
             bg = colors["bg"]
             header = colors["header"]
+
         return bg, header
 
     def boundingRect(self) -> QRectF:
-        """边界矩形"""
         return QRectF(0, 0, self.width, self.height)
 
     def shape(self) -> QPainterPath:
-        """形状（用于碰撞检测）"""
         path = QPainterPath()
         path.addRoundedRect(0, 0, self.width, self.height, 6, 6)
         return path
 
     def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget=None):
-        """绘制节点"""
         painter.setRenderHint(QPainter.Antialiasing)
 
         bg_color, header_color = self._get_colors()
 
-        # 节点背景
-        path = QPainterPath()
-        path.addRoundedRect(0, 0, self.width, self.height, 6, 6)
-        painter.fillPath(path, QBrush(bg_color))
+        # 阴影效果
+        shadow_path = QPainterPath()
+        shadow_path.addRoundedRect(2, 3, self.width, self.height + 1, 6, 6)
+        painter.fillPath(shadow_path, QColor(0, 0, 0, 40))
+
+        # 节点主体
+        body_path = QPainterPath()
+        body_path.addRoundedRect(0, 0, self.width, self.height, 6, 6)
+        painter.fillPath(body_path, QBrush(bg_color))
 
         # 边框
-        border_color = QColor(80, 80, 100) if not self._selected else QColor(100, 150, 200)
-        painter.setPen(QPen(border_color, 1.5))
-        painter.drawPath(path)
+        if self._selected:
+            border_color = QColor("#FF9800")  # 橙色选中边框
+            border_width = 2
+        elif self._hovered:
+            border_color = QColor(120, 120, 140)
+            border_width = 1.5
+        else:
+            border_color = QColor(70, 70, 85)
+            border_width = 1
+
+        painter.setPen(QPen(border_color, border_width))
+        painter.drawPath(body_path)
+
+        # 左侧状态条
+        if self._execution_state in self.STATE_COLORS:
+            state_color = self.STATE_COLORS[self._execution_state]
+            status_bar = QPainterPath()
+            status_bar.addRoundedRect(0, 1, self.status_bar_width, self.height - 2, 3, 3)
+            painter.fillPath(status_bar, QBrush(state_color))
 
         # 标题栏
         header_path = QPainterPath()
-        header_path.moveTo(6, 0)
-        header_path.lineTo(self.width - 6, 0)
-        header_path.arcTo(self.width - 12, 0, 12, 12, 90, -90)
-        header_path.lineTo(self.width, self.header_height)
-        header_path.lineTo(0, self.header_height)
-        header_path.lineTo(0, 12)
-        header_path.arcTo(0, 0, 12, 12, 180, -90)
-        header_path.closeSubpath()
+        header_path.setFillRule(Qt.WindingFill)
+        header_path.addRoundedRect(0, 0, self.width, self.header_height, 6, 6)
+        # 覆盖底部圆角为直角
+        header_path.addRect(0, self.header_height - 6, self.width, 6)
 
-        # 标题栏渐变
         gradient = QLinearGradient(0, 0, self.width, 0)
         gradient.setColorAt(0, header_color)
-        gradient.setColorAt(1, header_color.darker(105))
+        gradient.setColorAt(1, header_color.darker(108))
         painter.fillPath(header_path, QBrush(gradient))
 
         # 标题文字
@@ -155,36 +171,31 @@ class GraphicsNode(QGraphicsItem):
         painter.setFont(font)
         painter.setPen(QColor(255, 255, 255))
 
-        # 截断过长标题
-        display_name = self.node_name[:12] + ".." if len(self.node_name) > 12 else self.node_name
-        painter.drawText(QRectF(8, 0, self.width - 16, self.header_height),
+        display_name = self.node_name[:16] + ".." if len(self.node_name) > 16 else self.node_name
+        painter.drawText(QRectF(6, 0, self.width - 12, self.header_height),
                          Qt.AlignVCenter | Qt.AlignCenter,
                          display_name)
 
-        # 分类标签（小字）
+        # 分类标签
         if self.category != "default":
             font_small = QFont("Microsoft YaHei", 7)
             painter.setFont(font_small)
-            painter.setPen(QColor(180, 180, 200))
-            painter.drawText(QRectF(8, self.header_height - 14, self.width - 16, 12),
-                             Qt.AlignRight,
-                             self.category)
+            painter.setPen(QColor(160, 160, 180))
+            painter.drawText(QRectF(6, self.header_height - 13, self.width - 12, 11),
+                            Qt.AlignRight,
+                            self.category[:10])
 
     def hoverEnterEvent(self, event):
-        """鼠标进入"""
         self._hovered = True
         self.update()
 
     def hoverLeaveEvent(self, event):
-        """鼠标离开"""
         self._hovered = False
         self.update()
 
     def mousePressEvent(self, event):
-        """鼠标按下"""
         if event.button() == Qt.LeftButton:
             self.setSelected(True)
-            # 发送节点选中事件
             self.event_bus.emit(Event(
                 type=EventType.NODE_SELECTED,
                 data={
@@ -202,7 +213,6 @@ class GraphicsNode(QGraphicsItem):
         super().mousePressEvent(event)
 
     def mouseDoubleClickEvent(self, event):
-        """鼠标双击 - 打开参数面板"""
         self.event_bus.emit(Event(
             type=EventType.NODE_DOUBLE_CLICKED,
             data={"node_id": self.node_id}
@@ -210,45 +220,39 @@ class GraphicsNode(QGraphicsItem):
         super().mouseDoubleClickEvent(event)
 
     def itemChange(self, change, value):
-        """项目变化事件"""
         if change == QGraphicsItem.ItemPositionChange:
-            # 发送节点位置变化事件
             self.event_bus.emit(Event(
                 type=EventType.NODE_MOVED,
-                data={
-                    "node_id": self.node_id,
-                    "pos_x": value.x(),
-                    "pos_y": value.y()
-                }
+                data={"node_id": self.node_id, "pos_x": value.x(), "pos_y": value.y()}
             ))
         elif change == QGraphicsItem.ItemSelectedChange:
             self._selected = value
             self.update()
-
         return super().itemChange(change, value)
 
+    def set_execution_state(self, state: str):
+        """设置执行状态 (None/Running/Success/Error)"""
+        self._execution_state = state
+        self.update()
+
     def get_input_socket(self, name: str):
-        """获取输入端口"""
         for socket in self.input_sockets:
             if socket.socket_name == name:
                 return socket
         return None
 
     def get_output_socket(self, name: str):
-        """获取输出端口"""
         for socket in self.output_sockets:
             if socket.socket_name == name:
                 return socket
         return None
 
     def get_socket_by_name(self, name: str, is_input: bool):
-        """根据名称获取端口"""
         if is_input:
             return self.get_input_socket(name)
         else:
             return self.get_output_socket(name)
 
     def update_node_data(self, node_data: dict):
-        """更新节点数据"""
         self.node_name = node_data.get("name", self.node_name)
         self.update()
