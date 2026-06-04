@@ -33,12 +33,14 @@ class MOG(OpenCVNodeDataBase):
 class VideoWriter(OpenCVNodeDataBase):
     """Write frames to a video file."""
     __group__ = "视频处理模块"
-    output_path = Property("output.avi", name="输出路径", group=PropertyGroupNames.RUN_PARAMETERS)
-    fps = Property(30.0, name="帧率", group=PropertyGroupNames.RUN_PARAMETERS)
-    fourcc_code = Property("XVID", name="编码格式", group=PropertyGroupNames.RUN_PARAMETERS,
-                           description="FourCC 编码代码 (XVID/MJPG/H264/MP4V)")
     output_path = Property("output.avi", name="输出路径", group=PropertyGroupNames.RUN_PARAMETERS,
                            description="视频输出文件路径 (.avi/.mp4)")
+    fps = Property(30.0, name="帧率", group=PropertyGroupNames.RUN_PARAMETERS,
+                    description="输出视频帧率")
+    fourcc_code = Property("XVID", name="编码格式", group=PropertyGroupNames.RUN_PARAMETERS,
+                           description="FourCC 编码代码 (XVID/MJPG/H264/MP4V)")
+    frame_count = Property(0, name="已写入帧数", group=PropertyGroupNames.RESULT_PARAMETERS,
+                           readonly=True)
 
     # Valid fourcc codes for common encoders
     VALID_FOURCC = {"XVID", "MJPG", "H264", "MP4V", "DIVX", "I420", "IYUV", "WMV1", "WMV2"}
@@ -47,7 +49,6 @@ class VideoWriter(OpenCVNodeDataBase):
         super().__init__()
         self.name = "视频写入"
         self._writer: cv2.VideoWriter | None = None
-        self._frame_count = 0
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
         mat = from_node.mat if from_node else None
@@ -66,8 +67,8 @@ class VideoWriter(OpenCVNodeDataBase):
             except Exception as e:
                 return self.error(None, f"初始化视频编码器失败: {e}")
         self._writer.write(mat)
-        self._frame_count += 1
-        return self.ok(mat, f"写入第 {self._frame_count} 帧")
+        self.frame_count += 1
+        return self.ok(mat, f"写入第 {self.frame_count} 帧")
 
     def _update_result_image_source(self):
         self._result_image_source = self._mat

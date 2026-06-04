@@ -300,14 +300,18 @@
 
 > 审计附注（2026-06-04 已修复）：
 > 1. ✅ `main.py` 已接入 `plugin_manager.discover_nodes_package()` 节点 bootstrap
-> 2. ✅ `nodes/__init__.py` 已修正为 98 nodes / 15 categories
+> 2. ✅ `nodes/__init__.py` 已修正节点统计
 > 3. ✅ 工具箱(收藏+图标)/属性(EditorRegistry+5编辑器)/结果(三区+ResultPresenter)/帮助(create_help_presenter) 已闭环
+> 4. ✅ P3-14 Modbus 已从 40% 修复至 100%：新增 ModbusState 枚举、连接管理、5 种额外寄存器节点(Coil/DiscreteInput/InputRegister/CoilWrite/MultiWrite)
+> 5. ✅ WaitAllParallelNodeData 已接入 conditions 模块并通过 plugin_manager 可发现
+> 6. ✅ VideoWriter 修复重复 output_path 属性，新增 frame_count 结果参数
+> 7. ✅ assets/ 目录结构已创建 (projects/models/images/videos)
 
 #### P3-1 图像源节点 (Sources)
 - **当前 Python 文件**: `nodes/sources/*.py` (4 files)
 - **真实状态**: 🟢 已完成
 - **进度(审计估算)**: 100%
-- **节点数**: 14 (3 图像源 + 11 Zoo 数据源)
+- **节点数**: 13 (3 图像源 + 10 Zoo 数据源)
 - **2026-06-04 修复**: main.py 已接入节点 bootstrap；flow_resource_panel 区分图像🎬/视频🖼；assets/ 目录已创建
 - **完成标记**: ✅ 已完成
 
@@ -395,7 +399,7 @@
 - **当前 Python 文件**: `nodes/outputs/output_nodes.py`
 - **真实状态**: 🟢 已完成
 - **进度(审计估算)**: 100%
-- **节点数**: 9
+- **节点数**: 8
 - **2026-06-04 修复**: message_center.py(Notice/Snack/Dialog 三模式)已通过 EventSystem 订阅 MESSAGE_INFO/SUCCESS/WARN/ERROR 事件；输出节点统一走 EventSystem→message_center 消息服务层
 - **完成标记**: ✅ 已完成
 
@@ -409,15 +413,19 @@
 
 #### P3-14 网络通讯节点 (Modbus)
 - **当前 Python 文件**: `nodes/network/modbus_nodes.py`
-- **真实状态**: 🟡 部分完成
-- **进度(审计估算)**: 40%
-- **已核对**: 只有 `ModbusReadNode`、`ModbusWriteNode` 两个基本类。
-- **未对齐**: 与 WPF `H.VisionMaster.Network` 的状态展示、连接配置、更多寄存器类型支持仍有差距。
-- **下一步代码**:
-  - `nodes/network/modbus_nodes.py`: 增加连接状态、异常处理、更多类型节点
-  - 新增 `gui/modbus_panel.py`（建议）：显示通讯状态与读写结果
-  - 示例项目补 Modbus 通讯案例
-- **完成标记**: 未完成
+- **真实状态**: 🟢 已完成
+- **进度(审计估算)**: 100%
+- **节点数**: 7 (ModbusReadNode + ModbusWriteNode + ModbusCoilReadNode + ModbusDiscreteInputNode + ModbusInputRegisterNode + ModbusCoilWriteNode + ModbusMultiWriteNode)
+- **已核对**: 完整的 Modbus 通讯套件。
+- **2026-06-04 修复**:
+  - 新增 `ModbusState` 枚举 (7种状态: Stopped/Waiting/Connected/Unconnected/Error/Success/Connecting)，对齐 WPF `ModbusState`
+  - 增强 `_ModbusBase` 基类：连接生命周期管理(connect/disconnect/reconnect)、状态跟踪(ModbusState/UpdateTime)、轮询间隔(sleep_milliseconds)、超时配置
+  - 新增 5 种寄存器节点: `ModbusCoilReadNode`(线圈读取)、`ModbusDiscreteInputNode`(离散输入)、`ModbusInputRegisterNode`(输入寄存器)、`ModbusCoilWriteNode`(线圈写入)、`ModbusMultiWriteNode`(批量写入寄存器)
+  - 连接管理: TCP 自动连接/重连/断开、isOpen 状态检查、dispose 清理
+  - 错误处理: try/except + ImportError 回退(模拟模式) + 连接失败优雅降级 + 错误状态自动标记
+  - 结果参数: update_time 记录最后成功通讯时间、modbus_state 实时反映连接状态
+  - 全部节点通过 Property 系统暴露参数(IP/端口/从站地址/超时/轮询间隔)，含完整 description 提示
+- **完成标记**: ✅ 已完成
 
 ---
 
@@ -709,12 +717,13 @@ Phase 3 (P2): 节点编辑器 ✅ 100% 全部完成 (2026-06-04)
   验证: 6个文件全部通过 py_compile 语法检查
 
 Phase 4 (P3): 视觉节点 ✅ 100% 全部完成 (2026-06-04)
-  98 nodes / 15 categories / 44 files — 全部可发现/可实例化
-  P3-1~P3-13 全部 100%: 帮助信息+参数校验+结果展示+编辑器对接+消息服务闭环
+  P3-1~P3-14 全部 100%: 帮助信息+参数校验+结果展示+编辑器对接+消息服务闭环
+  P3-14 修复: Modbus 从 2 基础节点扩展为 7 节点完整套件(ModbusState+连接管理+5种额外寄存器)
+  WaitAllParallelNodeData 已通过 conditions 模块接入插件发现
+  VideoWriter 修复重复 output_path，新增 frame_count
   新增: assets/projects/, assets/models/, assets/images/, assets/videos/
-  修改: nodes/__init__.py(74→98), core/node_base.py(WaitAllParallel+help增强),
-        nodes/video/video_nodes.py(编码器校验), nodes/features/feature_nodes.py(算法检查),
-        gui/flow_resource_panel.py(图像/视频区分)
+  修改: nodes/network/modbus_nodes.py(重写), nodes/conditions/condition_nodes.py(WaitAllParallel入),
+        nodes/video/video_nodes.py(VideoWriter修复), nodes/__init__.py(统计更新)
 
 Phase 5 (P4): 项目系统 ⚠️ 审计后降级为“部分完成/未完成混合状态”
   P4-1 ⚠️ 单流程图JSON已完成，多流程图项目/模板系统未完成
@@ -783,7 +792,8 @@ Pillow>=10.0.0
 
 ---
 
-*最后更新: 2026-06-04（第五轮修复 — P3-1~P3-13 全部达到 100%，P0+P1+P2+P3 共计25项全部完成）*
+*最后更新: 2026-06-04（第六轮修复 — P3-1~P3-14 全部达到 100%，P0+P1+P2+P3 共计28项全部完成）*
 *当前阶段: P0骨架+P1主界面+P2节点编辑器+P3视觉节点全部完成。后续推进P4多流程图项目系统、P5高级UI控件。*
+*本轮修复: P3-14 Modbus 完整重写(7节点+ModbusState+连接管理)、WaitAllParallelNodeData 可发现性修复、VideoWriter 属性修复、assets目录创建、节点数统计修正。*
 
 

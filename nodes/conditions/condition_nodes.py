@@ -1,7 +1,8 @@
 """Condition/logic nodes: condition branch and pixel threshold condition."""
 import cv2
 import numpy as np
-from core.node_base import ConditionNodeData, OpenCVNodeDataBase, Property, PropertyGroupNames
+from core.node_base import (ConditionNodeData, OpenCVNodeDataBase, Property,
+                           PropertyGroupNames, WaitAllParallelNodeData)  # re-export for plugin discovery
 from core.data_packet import FlowableResult
 from core.workflow import WorkflowEngine
 
