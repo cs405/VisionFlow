@@ -14,23 +14,26 @@ from core.node_group import node_data_group_manager, NodeGroup
 from core.registry import node_registry
 
 
-# Group color indicators (matching WPF node group colors)
-GROUP_COLORS = {
-    "数据源": "#4a9eff",
-    "图像预处理": "#ff8c00",
-    "滤波模糊": "#9c27b0",
-    "图像分割": "#e91e63",
-    "形态学": "#00bcd4",
-    "条件": "#ff5722",
-    "模板匹配": "#4caf50",
-    "检测": "#f44336",
-    "特征提取": "#ff9800",
-    "其他": "#607d8b",
-    "视频": "#795548",
-    "输出": "#607d8b",
-    "ONNX": "#e91e63",
-    "网络通讯": "#795548",
+# Group color indicators + Unicode icons (matching WPF node group colors)
+GROUP_META = {
+    "数据源":     {"color": "#4a9eff", "icon": "📷"},
+    "图像预处理":  {"color": "#ff8c00", "icon": "⚙"},
+    "滤波模糊":    {"color": "#9c27b0", "icon": "🌊"},
+    "图像分割":    {"color": "#e91e63", "icon": "✂"},
+    "形态学":      {"color": "#00bcd4", "icon": "🔲"},
+    "条件":        {"color": "#ff5722", "icon": "🔀"},
+    "模板匹配":    {"color": "#4caf50", "icon": "🎯"},
+    "检测":        {"color": "#f44336", "icon": "🔍"},
+    "特征提取":    {"color": "#ff9800", "icon": "📊"},
+    "其他":        {"color": "#607d8b", "icon": "📦"},
+    "视频":        {"color": "#795548", "icon": "🎬"},
+    "输出":        {"color": "#607d8b", "icon": "📤"},
+    "ONNX":        {"color": "#e91e63", "icon": "🧠"},
+    "网络通讯":    {"color": "#795548", "icon": "🌐"},
 }
+
+GROUP_COLORS = {k: v["color"] for k, v in GROUP_META.items()}
+GROUP_ICONS = {k: v["icon"] for k, v in GROUP_META.items()}
 
 
 class ToolboxPanel(QWidget):
@@ -122,6 +125,11 @@ class ToolboxPanel(QWidget):
         self.tree.itemDoubleClicked.connect(self._on_item_double_clicked)
         layout.addWidget(self.tree)
 
+        # Stats footer
+        self._stats_label = QLabel()
+        self._stats_label.setStyleSheet("color: #666; font-size: 10px; padding: 3px 8px; background: #1e1e1e; border-top: 1px solid #3f3f46;")
+        layout.addWidget(self._stats_label)
+
     # ── Favorites ────────────────────────────────────────────────────
 
     def _load_favorites(self):
@@ -182,13 +190,18 @@ class ToolboxPanel(QWidget):
             fav_group.setExpanded(True)
 
         # Regular groups
+        total_groups = 0
+        total_nodes = 0
         for group in node_data_group_manager.get_all_groups():
             if not group.node_types:
                 continue
 
+            total_groups += 1
             group_item = QTreeWidgetItem(self.tree)
             count = len(group.node_types)
-            group_item.setText(0, f"{group.name}  ({count})")
+            total_nodes += count
+            icon = GROUP_ICONS.get(group.name, "📁")
+            group_item.setText(0, f"{icon}  {group.name}  ({count})")
             group_item.setData(0, Qt.UserRole, "")  # empty = group
             group_item.setFlags(group_item.flags() & ~Qt.ItemIsDragEnabled)
 
@@ -201,6 +214,9 @@ class ToolboxPanel(QWidget):
                 self._add_node_item(group_item, node_type)
 
             group_item.setExpanded(True)
+
+        self._stats_label.setText(f"  {total_groups} 个分组 · {total_nodes} 个节点"
+                                  f"{' · ★ 收藏 ' + str(len(self._favorites)) + ' 个' if self._favorites else ''}")
 
     def _add_node_item(self, parent: QTreeWidgetItem, node_type: type, is_fav: bool = False):
         """Add a single node type entry under a group."""

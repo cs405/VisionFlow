@@ -14,7 +14,7 @@ from typing import Any
 from PyQt5.QtWidgets import (QGraphicsView, QGraphicsScene, QGraphicsPixmapItem,
                               QWidget,
                               QVBoxLayout, QLabel, QHBoxLayout)
-from PyQt5.QtCore import Qt, QRectF, QPointF, pyqtSignal, QPropertyAnimation, QEasingCurve
+from PyQt5.QtCore import Qt, QRectF, QPointF, pyqtSignal, QPropertyAnimation, QEasingCurve, QVariantAnimation
 from PyQt5.QtGui import (QPixmap, QImage, QPen, QColor, QBrush, QPainter,
                           QWheelEvent, QMouseEvent, QFont)
 
@@ -233,25 +233,58 @@ class ImageViewer(QGraphicsView):
         Args:
             rect: (x, y, w, h) in image coordinates
             padding: fraction of viewport to pad around the rect
-            animate: if True, smoothly animate to the target
+            animate: if True, smoothly animate to the target rect
         """
         x, y, w, h = rect
         if w <= 0 or h <= 0:
             return
 
-        # Expand by padding
         pw = w * padding
         ph = h * padding
         target_rect = QRectF(x - pw, y - ph, w + 2 * pw, h + 2 * ph)
 
-        if animate:
-            self.fitInView(target_rect, Qt.KeepAspectRatio)
+        if animate and hasattr(self, '_zoom_anim') and self._zoom_anim is not None:
+            self._zoom_anim.stop()
+
+        if animate and not target_rect.isEmpty():
+            self._animate_to_rect(target_rect)
         else:
             self.fitInView(target_rect, Qt.KeepAspectRatio)
+            self._zoom = self.transform().m11()
+            self._fit_to_window = False
+            self.zoom_changed.emit(self._zoom)
 
-        self._zoom = self.transform().m11()
-        self._fit_to_window = False
-        self.zoom_changed.emit(self._zoom)
+    def _animate_to_rect(self, target_rect: QRectF):
+        """Smoothly animate the view to the target rect."""
+        start_rect = self.viewport_rect_in_scene()
+        if start_rect.isEmpty():
+            self.fitInView(target_rect, Qt.KeepAspectRatio)
+            self._zoom = self.transform().m11()
+            self._fit_to_window = False
+            self.zoom_changed.emit(self._zoom)
+            return
+
+        self._zoom_anim = QVariantAnimation(self)
+        self._zoom_anim.setDuration(250)  # 250ms smooth animation
+        self._zoom_anim.setEasingCurve(QEasingCurve.OutCubic)
+        self._zoom_anim.setStartValue(start_rect)
+        self._zoom_anim.setEndValue(target_rect)
+
+        def _step(rect):
+            self.fitInView(rect, Qt.KeepAspectRatio)
+            self._zoom = self.transform().m11()
+            self._fit_to_window = False
+
+        self._zoom_anim.valueChanged.connect(_step)
+        self._zoom_anim.finished.connect(lambda: (
+            self.zoom_changed.emit(self._zoom),
+            setattr(self, '_zoom_anim', None)
+        ))
+        self._zoom_anim.start()
+
+    def viewport_rect_in_scene(self) -> QRectF:
+        """Get the currently visible scene rect."""
+        return self.mapToScene(self.viewport().rect()).boundingRect()
 
     # ── Pan ───────────────────────────────────────────────────────────
 
