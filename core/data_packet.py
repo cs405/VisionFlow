@@ -1,63 +1,101 @@
-"""
-数据包定义 - 节点间传递的数据结构
-支持图像、数值、ROI、列表等多种类型
+"""Data packet and flow result types - ported from H.Controls.Diagram.Presenter.Flowables.
+
+Defines the data structures passed between nodes during workflow execution.
 """
 
-from typing import Any, Optional, Dict, List
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import Enum, auto
+from typing import Any
 import numpy as np
 
 
-class DataType(Enum):
-    """数据类型枚举"""
-    IMAGE = "image"  # numpy.ndarray (BGR格式)
-    GRAY_IMAGE = "gray"  # 灰度图
-    NUMBER = "number"  # int/float
-    STRING = "string"  # str
-    BOOL = "bool"  # bool
-    POINT = "point"  # (x, y)
-    RECT = "rect"  # (x, y, w, h)
-    ROI_LIST = "roi_list"  # List[Dict]
-    ANY = "any"  # 任意类型
+class FlowableResultState(Enum):
+    """Result state for flow control - mirrors C# FlowableResultState."""
+    OK = "OK"
+    ERROR = "Error"
+    BREAK = "Break"
+    RUNNING = "Running"
+    NONE = "None"
+
+
+class FlowableInvokeMode(Enum):
+    """How a node is invoked in the flow pipeline."""
+    SEQUENTIAL = auto()
+    PARALLEL = auto()
+
+
+@dataclass
+class FlowableResult:
+    """Result from a node invocation. Carries data + state + message.
+
+    Ported from C# FlowableResult<T>.
+    """
+    value: Any = None
+    message: str = ""
+    state: FlowableResultState = FlowableResultState.OK
+
+    @property
+    def is_ok(self) -> bool:
+        return self.state == FlowableResultState.OK
+
+    @property
+    def is_error(self) -> bool:
+        return self.state == FlowableResultState.ERROR
+
+    @property
+    def is_break(self) -> bool:
+        return self.state == FlowableResultState.BREAK
+
+    @classmethod
+    def ok(cls, value: Any = None, message: str = "运行成功"):
+        return cls(value=value, message=message, state=FlowableResultState.OK)
+
+    @classmethod
+    def error(cls, value: Any = None, message: str = "运行错误"):
+        return cls(value=value, message=message, state=FlowableResultState.ERROR)
+
+    @classmethod
+    def break_(cls, value: Any = None, message: str = "不满足条件返回"):
+        return cls(value=value, message=message, state=FlowableResultState.BREAK)
+
+    def __bool__(self):
+        return self.state == FlowableResultState.OK
 
 
 @dataclass
 class DataPacket:
-    """数据包"""
-    type: DataType
-    value: Any
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    """Data flowing between nodes. Contains image data + metadata.
 
-    def is_valid(self) -> bool:
-        """验证数据类型是否正确"""
-        if self.type == DataType.IMAGE:
-            return isinstance(self.value, np.ndarray)
-        elif self.type == DataType.NUMBER:
-            return isinstance(self.value, (int, float))
-        elif self.type == DataType.STRING:
-            return isinstance(self.value, str)
-        elif self.type == DataType.BOOL:
-            return isinstance(self.value, bool)
-        elif self.type == DataType.POINT:
-            return len(self.value) == 2 and all(isinstance(v, (int, float)) for v in self.value)
-        elif self.type == DataType.RECT:
-            return len(self.value) == 4 and all(isinstance(v, (int, float)) for v in self.value)
-        return True
+    In C#, nodes pass Mat<T> objects. In Python, we use numpy.ndarray for images
+    and DataPacket for richer data exchange (metadata, multiple outputs, etc.).
+    """
+    image: np.ndarray | None = None
+    images: list[np.ndarray] = field(default_factory=list)
+    numeric_value: float = 0.0
+    text_value: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+    result_objects: list[Any] = field(default_factory=list)
 
-    def to_dict(self) -> Dict:
-        """转换为字典"""
-        value = self.value
-        if isinstance(value, np.ndarray):
-            return {
-                "type": self.type.value,
-                "value": None,  # numpy数组无法直接JSON序列化
-                "shape": value.shape,
-                "dtype": str(value.dtype),
-                "metadata": self.metadata
-            }
-        return {
-            "type": self.type.value,
-            "value": value,
-            "metadata": self.metadata
-        }
+    @property
+    def has_image(self) -> bool:
+        return self.image is not None
+
+    @property
+    def image_shape(self) -> tuple | None:
+        if self.image is not None:
+            return self.image.shape
+        return None
+
+
+@dataclass
+class VisionResultImage:
+    """Represents a named result image from a vision node.
+
+    Ported from C# VisionResultImage<T>.
+    """
+    name: str
+    image: np.ndarray | None = None
+
+    def dispose(self):
+        """Release image memory."""
+        self.image = None

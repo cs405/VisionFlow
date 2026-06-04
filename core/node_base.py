@@ -1,281 +1,1220 @@
-"""
-算子基类 - 所有视觉算子的抽象基类
-纯逻辑实现，不依赖任何UI框架
+"""Node base class hierarchy - ported from H.VisionMaster.NodeData/Base/ (25+ C# files).
+
+Defines the complete inheritance chain for all vision processing nodes.
+
+Inheritance (top to bottom):
+    NodeBase  (ports, styles, diagram data)
+      -> VisionNodeDataBase  (flow delays)
+        -> ShowPropertyNodeDataBase  (property presenter)
+          -> HelpNodeDataBase  (help URL)
+            -> DemoNodeDataBase  (example parameters)
+              -> VisionNodeData  (Mat, ResultImages, Invoke lifecycle)
+                -> ROINodeData  (DrawROI / FromROI / InputROI)
+                -> SelectableResultImageNodeData  (select upstream result)
+                  -> OpenCVNodeDataBase  (OpenCV-specific Mat handling)
+                -> SrcFilesVisionNodeData  (file-based image sources)
+                -> Base64MatchingNodeData  (template matching)
+                -> ConditionNodeData  (conditional branching)
+                -> WaitAllParallelNodeData  (parallel sync barrier)
+
+Python replaces C# generics <T> with duck typing - image type is numpy.ndarray.
 """
 
-from typing import Any, Dict, List, Optional, Tuple
-from enum import Enum
-from dataclasses import dataclass, field
-from abc import ABC, abstractmethod
+from __future__ import annotations
+
+import time
 import uuid
+from abc import ABC, abstractmethod
+from enum import Enum, auto
+from typing import Any, Callable
 
-from .events import EventBus, Event, EventType
-from .data_packet import DataPacket, DataType
+import numpy as np
 
-
-class ParamType(Enum):
-    """参数类型枚举"""
-    INT = "int"
-    FLOAT = "float"
-    BOOL = "bool"
-    STRING = "str"
-    SLIDER = "slider"  # 整数滑块
-    FLOAT_SLIDER = "float_slider"
-    RANGE = "range"  # 范围选择
-    COLOR = "color"
-    POINT = "point"
-    RECT = "rect"
-    ENUM = "enum"  # 枚举下拉
+from core.data_packet import FlowableResult, FlowableResultState, FlowableInvokeMode, VisionResultImage, DataPacket
+from core.events import EventType, event_system
 
 
-@dataclass
-class NodeParameter:
-    """节点参数定义"""
-    name: str  # 参数名（唯一标识）
-    label: str  # 显示名称
-    type: ParamType  # 参数类型
-    default: Any  # 默认值
-    min: Optional[float] = None  # 最小值
-    max: Optional[float] = None  # 最大值
-    step: Optional[float] = None  # 步长
-    options: Optional[List[str]] = None  # ENUM类型的选项
+# =============================================================================
+# Parameter group names - ported from VisionPropertyGroupNames.cs
+# =============================================================================
+
+class PropertyGroupNames:
+    RUN_PARAMETERS = "运行参数"
+    BASE_PARAMETERS = "基本参数"
+    RESULT_PARAMETERS = "结果参数"
+    FLOW_PARAMETERS = "流程控制"
+    DISPLAY_PARAMETERS = "显示参数"
+    OTHER_PARAMETERS = "其他参数"
 
 
-@dataclass
-class Socket:
-    """端口定义"""
-    name: str
-    data_type: DataType
-    is_input: bool
-    description: str = ""
-    multi_connection: bool = False  # 是否允许多连接
+# =============================================================================
+# Property descriptor - replaces C# [Display], [DefaultValue], [ReadOnly] attributes
+# =============================================================================
 
+class Property:
+    """Observable property descriptor with metadata.
 
-class NodeBase(ABC):
-    """
-    所有算子的基类
-    不包含任何UI代码，通过EventBus发送事件
+    Replaces the C# pattern:
+        [Display(Name="...", GroupName="...")]
+        [DefaultValue(...)]
+        public T PropertyName { get => _field; set { _field=value; RaisePropertyChanged(); } }
     """
 
-    def __init__(self, node_id: str = None):
-        self.node_id = node_id or str(uuid.uuid4())
-        self.name = "Node"
-        self.category = "通用"
-        self.description = ""
+    def __init__(self, default: Any = None, *, name: str = "", group: str = "",
+                 description: str = "", readonly: bool = False, order: int = 0):
+        self.default = default
+        self.display_name = name
+        self.group = group
+        self.description = description
+        self.readonly = readonly
+        self.order = order
 
-        # 端口定义（子类在__init__中定义）
-        self.input_sockets: List[Socket] = []
-        self.output_sockets: List[Socket] = []
+    def __set_name__(self, owner, name):
+        self.attr_name = f"_{name}"
+        self.public_name = name
 
-        # 参数定义
-        self.parameters: Dict[str, NodeParameter] = {}
-        self._param_values: Dict[str, Any] = {}
+    def __get__(self, obj, objtype=None):
+        if obj is None:
+            return self
+        return getattr(obj, self.attr_name, self.default)
 
-        # 运行时状态
-        self._last_inputs: Dict[str, Any] = {}
-        self._last_outputs: Dict[str, Any] = {}
-        self._cache_hash: Optional[int] = None
+    def __set__(self, obj, value):
+        old = getattr(obj, self.attr_name, self.default)
+        setattr(obj, self.attr_name, value)
+        if old != value:
+            obj._notify_property_changed(self.public_name, old, value)
 
-        # 位置信息（用于序列化）
-        self.pos_x: float = 0
-        self.pos_y: float = 0
 
-        # 事件总线
-        self._event_bus = EventBus()
+# =============================================================================
+# Port types - ported from H.Controls.Diagram (PortData, FlowablePortData)
+# =============================================================================
 
-        # 初始化参数默认值
-        for name, param in self.parameters.items():
-            self._param_values[name] = param.default
+class PortType(Enum):
+    INPUT = auto()
+    OUTPUT = auto()
+    BOTH = auto()
 
-    # ========== 子类必须实现的方法 ==========
 
-    @abstractmethod
-    def evaluate(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        核心执行方法，子类必须实现
+class PortDock(Enum):
+    TOP = auto()
+    BOTTOM = auto()
+    LEFT = auto()
+    RIGHT = auto()
 
-        Args:
-            inputs: 输入端口名 -> 值的字典
 
-        Returns:
-            输出端口名 -> 值的字典
-        """
-        pass
+class Port:
+    """A connection port on a node.
 
-    # ========== 可选重写的方法 ==========
+    Ported from C# FlowablePortData / OpenCVFlowablePortData.
+    Nodes have 4 ports: Top(input), Bottom(output), Left(input), Right(output).
+    """
 
-    def on_init(self):
-        """节点初始化时调用（在构造函数之后）"""
-        pass
+    def __init__(self, node_id: str, port_type: PortType, dock: PortDock,
+                 port_id: str = None, name: str = ""):
+        self.port_id = port_id or str(uuid.uuid4())[:8]
+        self.node_id = node_id
+        self.port_type = port_type
+        self.dock = dock
+        self.name = name
+        self.width = 6
+        self.height = 6
+        self.fill_color = "#FFFFFF"
+        self.link_color = "#FF8C00"  # Orange - matches OpenCVFlowablePortData
+        self.connected_links: list["LinkData"] = []
 
-    def on_param_changed(self, name: str, value: Any):
-        """参数改变时的回调"""
-        pass
+    @property
+    def is_input(self) -> bool:
+        return self.port_type in (PortType.INPUT, PortType.BOTH)
 
-    def on_execute_start(self, inputs: Dict[str, Any]):
-        """执行开始前的回调"""
-        pass
+    @property
+    def is_output(self) -> bool:
+        return self.port_type in (PortType.OUTPUT, PortType.BOTH)
 
-    def on_execute_end(self, outputs: Dict[str, Any]):
-        """执行结束后的回调"""
-        pass
-
-    def validate_inputs(self, inputs: Dict[str, Any]) -> bool:
-        """验证输入数据的有效性"""
-        for socket in self.input_sockets:
-            if socket.name not in inputs:
-                if not self._optional_input(socket.name):
-                    self._event_bus.emit_log("ERROR", f"节点[{self.name}]缺少输入: {socket.name}")
-                    return False
-        return True
-
-    def _optional_input(self, socket_name: str) -> bool:
-        """判断输入是否可选（默认全部必需）"""
-        return False
-
-    # ========== 公开API ==========
-
-    def get_param(self, name: str) -> Any:
-        """获取参数值"""
-        return self._param_values.get(name, self.parameters.get(name, None))
-
-    def set_param(self, name: str, value: Any) -> bool:
-        """设置参数值"""
-        if name not in self.parameters:
-            return False
-
-        # 类型验证和转换
-        param_def = self.parameters[name]
-        try:
-            if param_def.type in [ParamType.INT, ParamType.SLIDER]:
-                value = int(value)
-            elif param_def.type in [ParamType.FLOAT, ParamType.FLOAT_SLIDER]:
-                value = float(value)
-            elif param_def.type == ParamType.BOOL:
-                value = bool(value)
-
-            # 范围验证
-            if param_def.min is not None and value < param_def.min:
-                value = param_def.min
-            if param_def.max is not None and value > param_def.max:
-                value = param_def.max
-        except (ValueError, TypeError):
-            return False
-
-        old_value = self._param_values.get(name)
-        if old_value != value:
-            self._param_values[name] = value
-            self._cache_hash = None  # 清除缓存
-            self.on_param_changed(name, value)
-
-            # 发送事件
-            self._event_bus.emit(Event(
-                type=EventType.NODE_PARAM_CHANGED,
-                data={
-                    "node_id": self.node_id,
-                    "param_name": name,
-                    "old_value": old_value,
-                    "new_value": value
-                }
-            ))
-
-        return True
-
-    def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        执行节点（带缓存机制）
-        外部调用此方法
-        """
-        # 检查缓存
-        cache_key = self._compute_cache_key(inputs)
-        if self._cache_hash == cache_key and self._last_outputs:
-            return self._last_outputs
-
-        # 验证输入
-        if not self.validate_inputs(inputs):
-            return {}
-
-        # 保存输入
-        self._last_inputs = inputs.copy()
-
-        # 执行前回调
-        self.on_execute_start(inputs)
-
-        # 执行
-        try:
-            outputs = self.evaluate(inputs)
-        except Exception as e:
-            self._event_bus.emit_log("ERROR", f"节点[{self.name}]执行失败: {str(e)}")
-            return {}
-
-        # 执行后回调
-        self.on_execute_end(outputs)
-
-        # 更新缓存
-        self._last_outputs = outputs
-        self._cache_hash = cache_key
-
-        # 发送执行完成事件
-        self._event_bus.emit(Event(
-            type=EventType.NODE_EXECUTED,
-            data={"node_id": self.node_id, "outputs": outputs}
-        ))
-
-        return outputs
-
-    def _compute_cache_key(self, inputs: Dict[str, Any]) -> int:
-        """计算缓存键"""
-        # 使用参数值+输入哈希
-        param_hash = hash(frozenset(self._param_values.items()))
-        input_hash = hash(frozenset(inputs.items()))
-        return hash((param_hash, input_hash))
-
-    def get_metadata(self) -> Dict:
-        """获取节点元数据"""
+    def to_dict(self) -> dict:
         return {
-            "id": self.node_id,
+            "port_id": self.port_id,
+            "node_id": self.node_id,
+            "port_type": self.port_type.name,
+            "dock": self.dock.name,
             "name": self.name,
-            "category": self.category,
-            "description": self.description,
-            "inputs": [
-                {"name": s.name, "type": s.data_type.value, "description": s.description}
-                for s in self.input_sockets
-            ],
-            "outputs": [
-                {"name": s.name, "type": s.data_type.value, "description": s.description}
-                for s in self.output_sockets
-            ],
-            "parameters": [
-                {
-                    "name": p.name,
-                    "label": p.label,
-                    "type": p.type.value,
-                    "default": p.default,
-                    "min": p.min,
-                    "max": p.max,
-                    "step": p.step,
-                    "options": p.options
-                }
-                for p in self.parameters.values()
-            ]
         }
 
-    def to_dict(self) -> Dict:
-        """序列化为字典"""
+    @classmethod
+    def from_dict(cls, data: dict) -> "Port":
+        return cls(
+            node_id=data["node_id"],
+            port_type=PortType[data["port_type"]],
+            dock=PortDock[data["dock"]],
+            port_id=data.get("port_id"),
+            name=data.get("name", ""),
+        )
+
+
+class LinkData:
+    """A connection between two ports.
+
+    Ported from C# FlowableLinkData.
+    """
+
+    def __init__(self, from_node_id: str = "", from_port_id: str = "",
+                 to_node_id: str = "", to_port_id: str = "",
+                 text: str = ""):
+        self.link_id = str(uuid.uuid4())[:8]
+        self.from_node_id = from_node_id
+        self.from_port_id = from_port_id
+        self.to_node_id = to_node_id
+        self.to_port_id = to_port_id
+        self.text = text
+        self.stroke_color = "#FF8C00"  # Orange
+
+    def to_dict(self) -> dict:
+        return {
+            "link_id": self.link_id,
+            "from_node_id": self.from_node_id,
+            "from_port_id": self.from_port_id,
+            "to_node_id": self.to_node_id,
+            "to_port_id": self.to_port_id,
+            "text": self.text,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "LinkData":
+        link = cls(
+            from_node_id=data.get("from_node_id", ""),
+            from_port_id=data.get("from_port_id", ""),
+            to_node_id=data.get("to_node_id", ""),
+            to_port_id=data.get("to_port_id", ""),
+            text=data.get("text", ""),
+        )
+        link.link_id = data.get("link_id", link.link_id)
+        return link
+
+
+# =============================================================================
+# Node base classes
+# =============================================================================
+
+class NodeBase(ABC):
+    """Root base class for all diagram nodes.
+
+    Ported from: StyleNodeDataBase -> ResultImageSourceNodeDataBase -> ...
+    The C# inheritance chain is flattened here for Python.
+
+    Provides: ports, styling, diagram data management, serialization.
+    """
+
+    def __init__(self):
+        self._id = str(uuid.uuid4())[:8]
+        self._name = self.__class__.__name__
+        self._text = ""
+        self._title = ""
+
+        # Styling (from StyleNodeDataBase)
+        self.width: float = 120.0
+        self.height: float = 35.0
+        self.corner_radius: float = 2.0
+        self.fill_color: str = "#FFFFFF"
+        self.flag_length: float = 10.0
+
+        # Ports
+        self.ports: list[Port] = []
+        self._init_ports()
+
+        # Diagram data
+        self._diagram_data: "WorkflowEngine | None" = None
+        self.from_node_datas: list[NodeBase] = []
+        self.to_node_datas: list[NodeBase] = []
+
+        # Result image (from IResultImageSourceNodeData)
+        self.use_result_image_source: bool = True
+        self._result_image_source: Any = None   # QImage/QPixmap for GUI, numpy array internally
+
+        # Flowable
+        self.message: str = ""
+
+        # Execution mode
+        self.invoke_mode: FlowableInvokeMode = FlowableInvokeMode.SEQUENTIAL
+
+        # Order for toolbox sorting
+        self.order: int = 0
+
+        # Property change callbacks
+        self._property_callbacks: dict[str, list[Callable]] = {}
+
+        self.load_default()
+
+    # -- Property change notification --
+
+    def _notify_property_changed(self, name: str, old_value: Any, new_value: Any):
+        """Called by Property descriptor when a value changes."""
+        for cb in self._property_callbacks.get(name, []):
+            cb(name, old_value, new_value)
+        event_system.publish(EventType.NODE_PROPERTY_CHANGED,
+                            sender=self, name=name, old=old_value, new=new_value)
+
+    def on_property_changed(self, name: str, callback: Callable):
+        """Register a callback for property changes."""
+        self._property_callbacks.setdefault(name, []).append(callback)
+
+    # -- Identification --
+
+    @property
+    def node_id(self) -> str:
+        return self._id
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @name.setter
+    def name(self, value: str):
+        self._name = value
+
+    @property
+    def title(self) -> str:
+        return self._title or self._name
+
+    @title.setter
+    def title(self, value: str):
+        self._title = value
+        self._text = value
+
+    @property
+    def text(self) -> str:
+        return self._text or self._name
+
+    @text.setter
+    def text(self, value: str):
+        self._text = value
+
+    @property
+    def display_name(self) -> str:
+        """Name shown in the toolbox and UI."""
+        return self._name
+
+    # -- Diagram data binding --
+
+    @property
+    def diagram_data(self) -> "WorkflowEngine | None":
+        return self._diagram_data
+
+    @diagram_data.setter
+    def diagram_data(self, value: "WorkflowEngine | None"):
+        self._diagram_data = value
+
+    def get_all_from_node_datas(self) -> list["NodeBase"]:
+        """Get all upstream nodes recursively (traverse the graph backwards)."""
+        visited: set[str] = set()
+        result: list[NodeBase] = []
+
+        def traverse(node: NodeBase):
+            if node.node_id in visited:
+                return
+            visited.add(node.node_id)
+            for from_node in node.from_node_datas:
+                result.append(from_node)
+                traverse(from_node)
+
+        traverse(self)
+        return result
+
+    def get_all_from_this_node_datas(self) -> list["NodeBase"]:
+        """Get self + all upstream nodes."""
+        return [self] + self.get_all_from_node_datas()
+
+    def get_start_node_datas(self) -> list["NodeBase"]:
+        """Find root nodes (nodes with no inputs from other nodes)."""
+        all_nodes = self.get_all_from_this_node_datas()
+        return [n for n in all_nodes if len(n.from_node_datas) == 0]
+
+    def get_from_node_data(self, node_type: type) -> "NodeBase | None":
+        """Find the nearest upstream node of a specific type."""
+        for from_node in self.from_node_datas:
+            if isinstance(from_node, node_type):
+                return from_node
+            result = from_node.get_from_node_data(node_type)
+            if result is not None:
+                return result
+        return None
+
+    # -- Ports --
+
+    def _init_ports(self):
+        """Initialize the 4 default ports (Top/Bottom/Left/Right)."""
+        self.ports = []
+        # Top - Input
+        p = self.create_port_data()
+        p.dock = PortDock.TOP
+        p.port_type = PortType.INPUT
+        self.ports.append(p)
+        # Bottom - Output
+        p = self.create_port_data()
+        p.dock = PortDock.BOTTOM
+        p.port_type = PortType.OUTPUT
+        self.ports.append(p)
+        # Left - Input
+        p = self.create_port_data()
+        p.dock = PortDock.LEFT
+        p.port_type = PortType.INPUT
+        self.ports.append(p)
+        # Right - Output
+        p = self.create_port_data()
+        p.dock = PortDock.RIGHT
+        p.port_type = PortType.OUTPUT
+        self.ports.append(p)
+
+    def create_port_data(self) -> Port:
+        """Create a single port. Override for custom port styling."""
+        return Port(node_id=self.node_id, port_type=PortType.BOTH,
+                   dock=PortDock.TOP)
+
+    def get_input_ports(self) -> list[Port]:
+        return [p for p in self.ports if p.is_input]
+
+    def get_output_ports(self) -> list[Port]:
+        return [p for p in self.ports if p.is_output]
+
+    # -- Result image --
+
+    @property
+    def result_image_source(self) -> Any:
+        return self._result_image_source
+
+    @result_image_source.setter
+    def result_image_source(self, value: Any):
+        self._result_image_source = value
+
+    # -- Lifecycle --
+
+    def load_default(self):
+        """Set default values. Override in subclasses."""
+        pass
+
+    def to_dict(self) -> dict:
+        """Serialize node to dict for JSON project saving."""
         return {
             "id": self.node_id,
             "type": self.__class__.__name__,
             "name": self.name,
-            "params": self._param_values.copy(),
-            "pos_x": self.pos_x,
-            "pos_y": self.pos_y
+            "title": self._title,
+            "text": self._text,
+            "width": self.width,
+            "height": self.height,
+            "ports": [p.to_dict() for p in self.ports],
+            "invoke_mode": self.invoke_mode.name,
         }
 
-    def from_dict(self, data: Dict):
-        """从字典反序列化"""
-        self.node_id = data.get("id", self.node_id)
-        self.name = data.get("name", self.name)
-        self.pos_x = data.get("pos_x", 0)
-        self.pos_y = data.get("pos_y", 0)
-        for name, value in data.get("params", {}).items():
-            self.set_param(name, value)
+    @classmethod
+    def from_dict(cls, data: dict) -> "NodeBase":
+        """Deserialize node from dict."""
+        node = cls.__new__(cls)
+        NodeBase.__init__(node)
+        node._id = data.get("id", node._id)
+        node.name = data.get("name", node.name)
+        node._title = data.get("title", "")
+        node._text = data.get("text", "")
+        node.width = data.get("width", 120.0)
+        node.height = data.get("height", 35.0)
+        node.invoke_mode = FlowableInvokeMode[data.get("invoke_mode", "SEQUENTIAL")]
+        return node
+
+    def dispose(self):
+        """Release resources."""
+        pass
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(id={self.node_id}, name={self.name})"
+
+
+# =============================================================================
+# VisionNodeDataBase - flow delay parameters
+# =============================================================================
+
+class VisionNodeDataBase(NodeBase):
+    """Adds flow-control delay parameters.
+
+    Ported from C# VisionNodeDataBase.cs
+    """
+
+    preview_milliseconds_delay = Property(1500, name="预览延迟", group=PropertyGroupNames.FLOW_PARAMETERS,
+                                         description="设置生成图像后预览等待时间")
+    invoke_milliseconds_delay = Property(500, name="执行延迟", group=PropertyGroupNames.FLOW_PARAMETERS,
+                                         description="执行完成后等待时间")
+
+
+# =============================================================================
+# ShowPropertyNodeDataBase - property presenter
+# =============================================================================
+
+class ShowPropertyNodeDataBase(VisionNodeDataBase):
+    """Provides a property presenter for the property panel.
+
+    Ported from C# ShowPropertyNodeDataBase.cs
+    """
+
+    def get_property_presenter(self) -> Any:
+        """Return the object shown in the property panel. Default: self."""
+        return self
+
+
+# =============================================================================
+# HelpNodeDataBase - help/documentation URL
+# =============================================================================
+
+class HelpNodeDataBase(ShowPropertyNodeDataBase):
+    """Provides help presenter with documentation URL.
+
+    Ported from C# HelpNodeDataBase.cs + IHelpPresenter.
+    """
+
+    def create_help_presenter(self) -> dict:
+        """Return help info for the help panel."""
+        return {
+            "url": f"https://github.com/HeBianGu/WPF-VisionMaster/wiki/{type(self).__name__}",
+            "name": self.name,
+        }
+
+
+# =============================================================================
+# DemoNodeDataBase - example/demo parameters
+# =============================================================================
+
+class DemoNodeDataBase(HelpNodeDataBase):
+    """Adds demo/example parameters to show the parameter system pattern.
+
+    Ported from C# DemoNodeDataBase.cs
+    """
+
+    demo_base_parameter1 = Property("", name="示例：基本参数", group=PropertyGroupNames.BASE_PARAMETERS,
+                                    description="用来演示如何增加基本参数", order=9999)
+    demo_run_parameter1 = Property("", name="示例：运行参数", group=PropertyGroupNames.RUN_PARAMETERS,
+                                   description="用来演示如何增加结果参数", order=9999)
+    demo_result1 = Property("", name="示例：结果参数", group=PropertyGroupNames.RESULT_PARAMETERS,
+                            description="用来演示如何增加结果参数", readonly=True, order=9999)
+
+    def create_result_presenter(self) -> Any:
+        """Create a result presenter for the result panel. Override in subclasses."""
+        return None
+
+
+# =============================================================================
+# VisionNodeData - THE core vision processing node
+# =============================================================================
+
+class VisionNodeData(DemoNodeDataBase):
+    """Core generic vision processing node.
+
+    Ported from C# VisionNodeData<T> where T : IDisposable.
+    In Python, T is numpy.ndarray (image data).
+
+    This is the central class - most vision nodes extend this.
+    Key responsibilities:
+      - Hold the Mat (current image numpy array)
+      - Provide ResultImages list
+      - Implement the Invoke lifecycle (find source/from, execute, return result)
+      - Flow control helpers: OK(), Error(), Break()
+      - Image disposal management
+    """
+
+    # UseInvokedPart - controls whether output goes to history/preview
+    use_invoked_part = Property(True, name="启用输出历史记录", group=PropertyGroupNames.DISPLAY_PARAMETERS,
+                                description="用于控制是否输出到历史记录和预览图像")
+
+    def __init__(self):
+        super().__init__()
+        self._mat: np.ndarray | None = None
+        self._result_presenter: Any = None
+
+    # -- Mat (the current image/data) --
+
+    @property
+    def mat(self) -> np.ndarray | None:
+        return self._mat
+
+    @mat.setter
+    def mat(self, value: np.ndarray | None):
+        self._mat = value
+
+    # -- Result images --
+
+    @property
+    def result_images(self) -> list[VisionResultImage]:
+        return list(self._get_result_images())
+
+    def _get_result_images(self):
+        """Yield result images. Override to provide custom results."""
+        if self._mat is not None:
+            yield VisionResultImage(name=f"{self.name} - 图像", image=self._mat)
+
+    # -- Result presenter --
+
+    @property
+    def result_presenter(self) -> Any:
+        return self._result_presenter
+
+    @result_presenter.setter
+    def result_presenter(self, value: Any):
+        self._result_presenter = value
+
+    # -- Main invoke method --
+
+    def invoke(self, previors: LinkData | None, diagram: "WorkflowEngine") -> FlowableResult:
+        """Entry point called by the workflow engine.
+
+        Ported from C# VisionNodeData<T>.Invoke(IFlowableLinkData, IFlowableDiagramData).
+        1. Find the source node (ISrcVisionNodeData)
+        2. Find the from node (IVisionNodeData)
+        3. Call InvokeAction with the actual processing
+        """
+        src_data = self._find_source_node(diagram)
+        from_data = self._find_from_node(diagram, previors)
+        return self._invoke_action(lambda: self.invoke_core(src_data, from_data or src_data, diagram))
+
+    def update_invoke_current(self):
+        """Single-step execution from the first from-node.
+
+        Ported from C# VisionNodeData<T>.UpdateInvokeCurrent().
+        """
+        if self.diagram_data is None:
+            return
+        if hasattr(self.diagram_data, 'state') and self.diagram_data.state.name == "RUNNING":
+            return
+
+        src_data = self._find_source_node(self.diagram_data)
+        from_nodes = self.from_node_datas
+
+        if len(from_nodes) == 0:
+            from_data = self
+        elif len(from_nodes) > 1:
+            return  # Can't auto-pick with multiple inputs
+        else:
+            from_data = from_nodes[0]
+
+        if isinstance(from_data, VisionNodeData) and from_data.mat is not None:
+            if not self.is_valid(from_data.mat):
+                return
+            result = self._invoke_action(lambda: self.invoke_core(src_data, from_data, self.diagram_data))
+            if hasattr(self.diagram_data, 'result_image_source'):
+                self.diagram_data.result_image_source = self._result_image_source
+
+    def _invoke_action(self, action: Callable[[], FlowableResult]) -> FlowableResult:
+        """Wraps the actual invoke, managing Mat lifecycle.
+
+        Ported from C# VisionNodeData<T>.InvokeAction().
+        1. Clear previous result presenter
+        2. Execute the action
+        3. Dispose old Mat, set new Mat
+        4. Update result image source
+        5. Create result presenter if needed
+        """
+        self._result_presenter = None
+        event_system.publish(EventType.NODE_STARTED, sender=self)
+
+        result = action()
+
+        if self._mat is not None and result.value is not self._mat:
+            self._mat = None  # Old mat will be GC'd
+
+        self._mat = result.value
+        self.message = result.message
+
+        if self.use_result_image_source:
+            self._update_result_image_source()
+            time.sleep(self.preview_milliseconds_delay / 1000.0)
+
+        if self._result_presenter is None:
+            self._result_presenter = self.create_result_presenter()
+
+        if result.is_ok:
+            event_system.publish(EventType.NODE_COMPLETED, sender=self, result=result)
+        elif result.is_error:
+            event_system.publish(EventType.NODE_ERROR, sender=self, result=result)
+
+        return result
+
+    # -- Abstract methods subclasses must implement --
+
+    def is_valid(self, mat: np.ndarray) -> bool:
+        """Check if the input mat is valid for processing. Override in subclasses."""
+        return mat is not None
+
+    @abstractmethod
+    def invoke_core(self, src_image_node_data: "VisionNodeData | None",
+                    from_node_data: "VisionNodeData | None",
+                    diagram: "WorkflowEngine") -> FlowableResult:
+        """Core processing logic. Subclasses implement this.
+
+        Args:
+            src_image_node_data: The source image node (data origin).
+            from_node_data: The immediate upstream node.
+            diagram: The workflow engine context.
+
+        Returns:
+            FlowableResult with the processed image and metadata.
+        """
+        ...
+
+    @abstractmethod
+    def _update_result_image_source(self):
+        """Update the result image source for GUI display. Override in subclasses."""
+        ...
+
+    # -- Flow control helpers (ported from C#) --
+
+    def ok(self, mat: np.ndarray | None, message: str = "运行成功",
+           result_presenter: Any = None) -> FlowableResult:
+        """Return a successful result."""
+        self.message = message
+        if result_presenter is not None:
+            self._result_presenter = result_presenter
+        return FlowableResult.ok(mat, message)
+
+    def error(self, mat: np.ndarray | None = None, message: str = "运行错误") -> FlowableResult:
+        """Return an error result."""
+        self.message = message
+        return FlowableResult.error(mat, message)
+
+    def break_(self, mat: np.ndarray | None = None, message: str = "不满足条件返回") -> FlowableResult:
+        """Return a break result (flow stops at this branch)."""
+        self.message = message
+        return FlowableResult.break_(mat, message)
+
+    # -- Internal helpers --
+
+    def _find_source_node(self, diagram: "WorkflowEngine") -> "VisionNodeData | None":
+        """Find the source (data origin) node in the diagram."""
+        if diagram is None:
+            return None
+        starts = diagram.get_start_nodes()
+        for node in starts:
+            if isinstance(node, VisionNodeData):
+                return node
+        return None
+
+    def _find_from_node(self, diagram: "WorkflowEngine",
+                        previors: LinkData | None) -> "VisionNodeData | None":
+        """Find the immediate upstream node from the link data."""
+        if previors is not None and diagram is not None:
+            node = diagram.get_node_by_id(previors.from_node_id)
+            if isinstance(node, VisionNodeData):
+                return node
+        # Fallback: use the first from_node_data
+        for n in self.from_node_datas:
+            if isinstance(n, VisionNodeData):
+                return n
+        return None
+
+    # -- Serialization --
+
+    def to_dict(self) -> dict:
+        data = super().to_dict()
+        data["use_invoked_part"] = self.use_invoked_part
+        data["preview_milliseconds_delay"] = self.preview_milliseconds_delay
+        data["invoke_milliseconds_delay"] = self.invoke_milliseconds_delay
+        return data
+
+    def dispose(self):
+        """Release Mat memory and result images."""
+        super().dispose()
+        self._mat = None
+        self._result_presenter = None
+
+
+# =============================================================================
+# ROINodeData - ROI support (DrawROI / FromROI / InputROI)
+# =============================================================================
+
+class ROIBase:
+    """Base class for ROI definitions.
+
+    Ported from C# ROIBase.cs / IROI.cs
+    """
+    def __init__(self, roi_type: str = ""):
+        self.name = roi_type or self.__class__.__name__
+
+    def to_dict(self) -> dict:
+        return {"type": self.__class__.__name__, "name": self.name}
+
+
+class FromROI(ROIBase):
+    """ROI obtained from upstream node."""
+    def __init__(self, source_node: NodeBase = None):
+        super().__init__("使用上游ROI")
+        self.source_node = source_node
+
+
+class DrawROI(ROIBase):
+    """ROI drawn interactively on the image."""
+    def __init__(self):
+        super().__init__("绘制ROI")
+        self.image_source: Any = None
+        self.rect: tuple = (0, 0, 100, 100)  # x, y, w, h
+
+
+class InputROI(ROIBase):
+    """ROI entered manually as numeric values."""
+    def __init__(self):
+        super().__init__("输入ROI")
+        self.x: int = 0
+        self.y: int = 0
+        self.width: int = 100
+        self.height: int = 100
+
+
+class ROINodeData(VisionNodeData):
+    """Adds ROI support to vision nodes.
+
+    Ported from C# ROINodeData<T>.
+    Supports three ROI modes: FromROI (upstream), DrawROI (interactive), InputROI (manual).
+    """
+
+    roi = Property(None, name="ROI范围", group=PropertyGroupNames.BASE_PARAMETERS,
+                   description="设置ROI区域", order=1000)
+
+    def __init__(self):
+        super().__init__()
+        self.from_roi = FromROI(source_node=self)
+        self.draw_roi = DrawROI()
+        self.input_roi = InputROI()
+        self._roi: ROIBase = self.from_roi
+
+    @property
+    def roi(self) -> ROIBase:
+        return self._roi
+
+    @roi.setter
+    def roi(self, value: ROIBase):
+        self._roi = value
+
+    def get_rois(self) -> list[ROIBase]:
+        """Get all available ROI options."""
+        self.draw_roi.image_source = self._result_image_source
+        return [self.from_roi, self.draw_roi, self.input_roi]
+
+    def get_active_roi_rect(self) -> tuple | None:
+        """Get the currently active ROI rectangle as (x, y, w, h)."""
+        if isinstance(self._roi, DrawROI):
+            if self._roi.rect:
+                return self._roi.rect
+        elif isinstance(self._roi, InputROI):
+            return (self._roi.x, self._roi.y, self._roi.width, self._roi.height)
+        elif isinstance(self._roi, FromROI):
+            src = self._roi.source_node
+            if isinstance(src, ROINodeData) and src is not self:
+                return src.get_active_roi_rect()
+        return None
+
+    def invoke(self, previors: LinkData | None, diagram: "WorkflowEngine") -> FlowableResult:
+        result = super().invoke(previors, diagram)
+        self.draw_roi.image_source = self._result_image_source
+        return result
+
+
+# =============================================================================
+# SelectableResultImageNodeData - select which upstream result image to use
+# =============================================================================
+
+class SelectableResultImageNodeData(ROINodeData):
+    """Allows selecting which upstream result image to process.
+
+    Ported from C# SelectableResultImageNodeData<T>.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self._selected_result_image: VisionResultImage | None = None
+
+    @property
+    def selected_result_image(self) -> VisionResultImage | None:
+        return self._selected_result_image
+
+    @selected_result_image.setter
+    def selected_result_image(self, value: VisionResultImage | None):
+        self._selected_result_image = value
+
+    def get_selectable_src_node_datas(self) -> list[VisionResultImage]:
+        """Get all result images from upstream VisionNodeData nodes."""
+        results: list[VisionResultImage] = []
+        for node in self.get_all_from_node_datas():
+            if isinstance(node, VisionNodeData):
+                results.extend(node.result_images)
+        return results
+
+
+# =============================================================================
+# OpenCVNodeDataBase - OpenCV-specific Mat handling
+# =============================================================================
+
+class OpenCVNodeDataBase(SelectableResultImageNodeData):
+    """Base for OpenCV-based vision nodes. Mat is numpy.ndarray.
+
+    Ported from C# OpenCVNodeDataBase : SelectableResultImageNodeData<Mat>.
+    """
+
+    def is_valid(self, mat: np.ndarray) -> bool:
+        return mat is not None and mat.size > 0
+
+    def _update_result_image_source(self):
+        """Convert numpy array to displayable format (handled by GUI layer).
+
+        In the GUI, this becomes a QImage/QPixmap. At core level, we store the
+        numpy array and let the GUI layer handle conversion.
+        """
+        self._result_image_source = self._mat
+
+    def to_dict(self) -> dict:
+        data = super().to_dict()
+        if self._selected_result_image:
+            data["selected_result_image"] = self._selected_result_image.name
+        return data
+
+
+# =============================================================================
+# SrcFilesVisionNodeData - file-based image source node
+# =============================================================================
+
+class SrcFilesVisionNodeData(ROINodeData):
+    """Base for nodes that load images from files.
+
+    Ported from C# SrcFilesVisionNodeData<T>.
+    Provides file list management, image properties (width/height/color type).
+    """
+
+    pixel_width = Property(0, name="图像宽度", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)
+    pixel_height = Property(0, name="图像高度", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)
+    image_color_type = Property(0, name="颜色类型", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)
+    use_all_image = Property(False, name="使用所有图像", group=PropertyGroupNames.RUN_PARAMETERS)
+    use_auto_switch = Property(True, name="自动切换", group=PropertyGroupNames.RUN_PARAMETERS)
+    src_file_path = Property("", name="当前文件", group=PropertyGroupNames.RUN_PARAMETERS)
+
+    def __init__(self):
+        super().__init__()
+        self.use_start = True  # This node can be a flow start node
+        self.src_file_paths: list[str] = []
+
+    def add_files_from_folder(self, folder_path: str, image_extensions: tuple = None):
+        """Add all image files from a folder."""
+        if image_extensions is None:
+            image_extensions = (".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".webp")
+        import os
+        for f in sorted(os.listdir(folder_path)):
+            if f.lower().endswith(image_extensions):
+                self.src_file_paths.append(os.path.join(folder_path, f))
+        if self.src_file_paths and not self.src_file_path:
+            self.src_file_path = self.src_file_paths[0]
+
+    def add_files(self, file_paths: list[str]):
+        """Add specific image files."""
+        self.src_file_paths.extend(file_paths)
+        if self.src_file_paths and not self.src_file_path:
+            self.src_file_path = self.src_file_paths[0]
+
+    def clear_files(self):
+        """Clear all file paths."""
+        self.src_file_paths.clear()
+        self.src_file_path = ""
+
+    def delete_current_file(self):
+        """Remove the current file from the list."""
+        if self.src_file_path and self.src_file_path in self.src_file_paths:
+            idx = self.src_file_paths.index(self.src_file_path)
+            self.src_file_paths.remove(self.src_file_path)
+            if self.src_file_paths:
+                new_idx = min(idx, len(self.src_file_paths) - 1)
+                self.src_file_path = self.src_file_paths[new_idx]
+            else:
+                self.src_file_path = ""
+
+    def move_next(self) -> bool:
+        """Switch to the next file in the list. Returns True if cycled."""
+        if not self.src_file_paths:
+            return False
+        if self.src_file_path not in self.src_file_paths:
+            self.src_file_path = self.src_file_paths[0]
+            return True
+        idx = self.src_file_paths.index(self.src_file_path)
+        next_idx = (idx + 1) % len(self.src_file_paths)
+        if next_idx == 0 and not self.use_all_image:
+            return False
+        self.src_file_path = self.src_file_paths[next_idx]
+        return True
+
+    def is_valid_file_list(self) -> tuple[bool, str]:
+        """Check if the file list is valid. Returns (is_valid, message)."""
+        if not self.src_file_paths:
+            return False, "请选择数据源中的图片"
+        if self.src_file_path is None:
+            self.src_file_path = self.src_file_paths[0]
+        return self.src_file_path is not None, ""
+
+    def load_default(self):
+        super().load_default()
+        import os
+        assets_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "images")
+        if os.path.isdir(assets_dir):
+            self.add_files_from_folder(assets_dir)
+
+    def to_dict(self) -> dict:
+        data = super().to_dict()
+        data["src_file_paths"] = list(self.src_file_paths)
+        data["src_file_path"] = self.src_file_path
+        data["use_all_image"] = self.use_all_image
+        data["use_auto_switch"] = self.use_auto_switch
+        return data
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "SrcFilesVisionNodeData":
+        node = super().from_dict(data)
+        node.src_file_paths = data.get("src_file_paths", [])
+        node.src_file_path = data.get("src_file_path", "")
+        return node
+
+
+# =============================================================================
+# Base64MatchingNodeData - template matching base
+# =============================================================================
+
+class Base64MatchingNodeData(VisionNodeData):
+    """Base for template matching nodes that use Base64-encoded template images.
+
+    Ported from C# Base64MatchingNodeData<T>.
+    """
+
+    matching_count_result = Property(0, name="匹配数量", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)
+    confidence = Property(0.0, name="置信度", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)
+
+    def __init__(self):
+        super().__init__()
+        self._base64_string: str = ""
+
+    @property
+    def base64_string(self) -> str:
+        return self._base64_string
+
+    @base64_string.setter
+    def base64_string(self, value: str):
+        self._base64_string = value
+
+    def set_template_from_image(self, image: np.ndarray):
+        """Encode a numpy image to Base64 string for template storage."""
+        import base64
+        import cv2
+        _, buffer = cv2.imencode(".png", image)
+        self._base64_string = base64.b64encode(buffer).decode("utf-8")
+
+    def get_template_image(self) -> np.ndarray | None:
+        """Decode the Base64 template to a numpy image."""
+        if not self._base64_string:
+            return None
+        import base64
+        import cv2
+        buffer = base64.b64decode(self._base64_string)
+        arr = np.frombuffer(buffer, dtype=np.uint8)
+        return cv2.imdecode(arr, cv2.IMREAD_COLOR)
+
+    def to_dict(self) -> dict:
+        data = super().to_dict()
+        data["base64_string"] = self._base64_string
+        return data
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Base64MatchingNodeData":
+        node = super().from_dict(data)
+        node._base64_string = data.get("base64_string", "")
+        return node
+
+
+# =============================================================================
+# ConditionNodeData - conditional branching
+# =============================================================================
+
+class ConditionNodeData(VisionNodeData):
+    """Node that branches flow based on conditions evaluated on upstream results.
+
+    Ported from C# ConditionNodeData<T>.
+    When executed, evaluates conditions and directs flow to the matching output port.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.use_invoked_part = False
+        self._conditions: list["VisionPropertyCondition"] = []
+        self._conditions_presenter: Any = None
+
+    @property
+    def conditions(self) -> list["VisionPropertyCondition"]:
+        return self._conditions
+
+    @conditions.setter
+    def conditions(self, value: list["VisionPropertyCondition"]):
+        self._conditions = value
+
+    def add_condition(self, condition: "VisionPropertyCondition"):
+        """Add a condition rule."""
+        self._conditions.append(condition)
+
+    def remove_condition(self, index: int):
+        """Remove a condition by index."""
+        if 0 <= index < len(self._conditions):
+            self._conditions.pop(index)
+
+    def evaluate_conditions(self, upstream_results: dict[str, Any]) -> list["VisionPropertyCondition"]:
+        """Evaluate all conditions against upstream results.
+        Returns list of matching conditions.
+        """
+        matches = []
+        for cond in self._conditions:
+            if cond.evaluate(upstream_results):
+                matches.append(cond)
+        return matches
+
+    def invoke(self, previors: LinkData | None, diagram: "WorkflowEngine") -> FlowableResult:
+        """Execute conditional branching logic."""
+        # Gather upstream results
+        upstream_results = {}
+        for node in self.from_node_datas:
+            if isinstance(node, VisionNodeData):
+                for prop_name in dir(node):
+                    if prop_name.endswith("_result"):
+                        upstream_results[f"{node.name}.{prop_name}"] = getattr(node, prop_name, None)
+
+        # Evaluate conditions
+        matches = self.evaluate_conditions(upstream_results)
+
+        if matches:
+            # Route flow to the matched output nodes
+            result = self.ok(self.mat, f"匹配条件: {len(matches)} 个")
+            return result
+        else:
+            return self.break_(self.mat, "没有匹配的条件")
+
+    def _update_result_image_source(self):
+        self._result_image_source = self._mat
+
+    def invoke_core(self, src_image_node_data, from_node_data, diagram) -> FlowableResult:
+        return self.ok(from_node_data.mat if from_node_data else None)
+
+    def to_dict(self) -> dict:
+        data = super().to_dict()
+        data["conditions"] = [c.to_dict() for c in self._conditions]
+        return data
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "ConditionNodeData":
+        node = super().from_dict(data)
+        node._conditions = [VisionPropertyCondition.from_dict(c) for c in data.get("conditions", [])]
+        return node
+
+
+class VisionPropertyCondition:
+    """A single condition rule: property_name operator threshold_value -> output_node.
+
+    Ported from C# VisionPropertyConditionPrensenter.
+    """
+
+    def __init__(self, property_name: str = "", operator: str = ">",
+                 threshold: float = 0.0, output_node_id: str = ""):
+        self.property_name = property_name
+        self.operator = operator
+        self.threshold = threshold
+        self.output_node_id = output_node_id
+
+    def evaluate(self, upstream_results: dict[str, Any]) -> bool:
+        """Check if this condition matches the upstream results."""
+        value = upstream_results.get(self.property_name, None)
+        if value is None:
+            return False
+
+        ops = {
+            ">": lambda a, b: a > b,
+            "<": lambda a, b: a < b,
+            ">=": lambda a, b: a >= b,
+            "<=": lambda a, b: a <= b,
+            "==": lambda a, b: a == b,
+            "!=": lambda a, b: a != b,
+        }
+        op_func = ops.get(self.operator)
+        if op_func is None:
+            return False
+
+        try:
+            return op_func(float(value), self.threshold)
+        except (ValueError, TypeError):
+            return False
+
+    def to_dict(self) -> dict:
+        return {
+            "property_name": self.property_name,
+            "operator": self.operator,
+            "threshold": self.threshold,
+            "output_node_id": self.output_node_id,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "VisionPropertyCondition":
+        return cls(
+            property_name=data.get("property_name", ""),
+            operator=data.get("operator", ">"),
+            threshold=data.get("threshold", 0.0),
+            output_node_id=data.get("output_node_id", ""),
+        )
+
+
+# =============================================================================
+# WaitAllParallelNodeData - parallel execution sync barrier
+# =============================================================================
+
+class WaitAllParallelNodeData(VisionNodeData):
+    """Waits for all parallel upstream nodes to complete before proceeding.
+
+    Ported from C# WaitAllParallelNodeData<T>.
+    Acts as a synchronization barrier: counts invocations from parallel branches
+    and only proceeds when all parallel predecessors have completed.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self._result_count = 0
+
+    def invoke(self, previors: LinkData | None, diagram: "WorkflowEngine") -> FlowableResult:
+        """Count parallel invocations. Only proceed when all done."""
+        from_node = None
+        for n in self.from_node_datas:
+            if isinstance(n, VisionNodeData):
+                from_node = n
+                break
+
+        src_data = self._find_source_node(diagram)
+
+        # Call the per-parallel handler
+        self.on_parallel_from_invoked(src_data, from_node, diagram)
+        self._result_count += 1
+
+        # Count parallel from-nodes
+        parallel_count = sum(1 for n in self.from_node_datas
+                           if hasattr(n, 'invoke_mode') and n.invoke_mode == FlowableInvokeMode.PARALLEL)
+
+        if self._result_count >= parallel_count:
+            self._result_count = 0
+            return self._invoke_action(lambda: self.on_all_parallels_invoked(src_data, from_node, diagram))
+        else:
+            return self.break_(from_node.mat if from_node else None, "等待其他并行分支完成")
+
+    def on_parallel_from_invoked(self, src_image_node_data, from_node, diagram):
+        """Called for each parallel branch completion. Override to accumulate results."""
+        pass
+
+    def on_all_parallels_invoked(self, src_image_node_data, from_node, diagram) -> FlowableResult:
+        """Called when ALL parallel branches have completed. Override to merge results."""
+        return self.ok(from_node.mat if from_node else None)
+
+    def _update_result_image_source(self):
+        self._result_image_source = self._mat
+
+    def invoke_core(self, src_image_node_data, from_node_data, diagram) -> FlowableResult:
+        return self.ok(from_node_data.mat if from_node_data else None)
+
+    def to_dict(self) -> dict:
+        data = super().to_dict()
+        data["result_count"] = self._result_count
+        return data
