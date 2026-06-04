@@ -40,6 +40,7 @@ from gui.result_panel import ResultPanel
 from gui.image_viewer import ImageViewerPanel
 from gui.log_panel import LogPanel
 from gui.flow_resource_panel import FlowResourcePanel
+from gui.node_editor.editor_widget import DiagramEditorWidget
 
 
 class MainWindow(QMainWindow):
@@ -275,16 +276,23 @@ class MainWindow(QMainWindow):
 
         self.main_splitter.addWidget(left_tabs)
 
-        # === CENTER - Image viewer (placeholder for node editor in P2) ===
+        # === CENTER - Diagram Editor + Image Viewer ===
         center_widget = QWidget()
         center_layout = QVBoxLayout(center_widget)
         center_layout.setContentsMargins(0, 0, 0, 0)
         center_layout.setSpacing(0)
 
-        # Tab widget for diagram/image view
+        # Tab widget for diagram + image view
         self.center_tabs = QTabWidget()
+
+        # Diagram Editor (the main node canvas)
+        self.diagram_editor = DiagramEditorWidget()
+        self.center_tabs.addTab(self.diagram_editor, "流程编辑")
+
+        # Image Viewer
         self.image_panel = ImageViewerPanel()
         self.center_tabs.addTab(self.image_panel, "图像预览")
+
         center_layout.addWidget(self.center_tabs)
 
         self.main_splitter.addWidget(center_widget)
@@ -312,6 +320,8 @@ class MainWindow(QMainWindow):
         # Connect signals
         self.toolbox.node_type_selected.connect(self._on_node_type_selected)
         self.property_panel.property_changed.connect(self._on_property_changed)
+        self.diagram_editor.node_selected.connect(self._on_editor_node_selected)
+        self.diagram_editor.node_deselected.connect(lambda: self._select_node(None))
 
     # -- Status Bar --
 
@@ -405,6 +415,7 @@ class MainWindow(QMainWindow):
         if project:
             self.project_name_label.setText(f"  {project.display_name}  ")
             self._workflow = project.workflow
+            self.diagram_editor.bind_workflow(self._workflow)
             self._select_node(None)
 
     def _on_project_saved(self, sender, **kwargs):
@@ -443,14 +454,30 @@ class MainWindow(QMainWindow):
             self.image_panel.set_image(node._result_image_source)
 
     def _on_node_type_selected(self, type_name: str):
-        """Create a node from the toolbox and add it to the workflow."""
+        """Create a node from the toolbox and add it to the diagram."""
         if self._workflow is None:
             return
         node = node_registry.create(type_name)
         if node:
+            # Add to diagram editor (which adds to workflow)
+            group_name = self._get_group_for_type(type_name)
+            self.diagram_editor.add_node(node, group_name=group_name)
             self._workflow.add_node(node)
             self.log_panel.info(f"添加节点: {node.name}")
             self.node_count_label.setText(f"节点: {len(self._workflow.get_all_nodes())}")
+
+    def _on_editor_node_selected(self, node_data: NodeBase):
+        """Handle node selection from the diagram editor."""
+        self._select_node(node_data)
+
+    def _get_group_for_type(self, type_name: str) -> str:
+        """Find the group name for a node type."""
+        from core.node_group import node_data_group_manager
+        for group in node_data_group_manager.get_all_groups():
+            for nt in group.node_types:
+                if nt.__name__ == type_name:
+                    return group.name
+        return ""
 
     def _on_property_changed(self, name: str, old_value, new_value):
         """Handle property changes from the property panel."""
@@ -464,10 +491,10 @@ class MainWindow(QMainWindow):
     def _on_new_project(self):
         """Create a new empty project."""
         if self._workflow:
-            # TODO: Ask save if dirty
             pass
         project = project_service.new_project()
         self._workflow = project.workflow
+        self.diagram_editor.bind_workflow(self._workflow)
         self.project_name_label.setText(f"  {project.display_name}  ")
         self._select_node(None)
         self.log_panel.info("新建项目")

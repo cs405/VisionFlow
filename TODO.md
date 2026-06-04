@@ -164,70 +164,34 @@
 
 ---
 
-### P2 — 节点编辑器 ★★★
+### P2 — 节点编辑器 ★★★ ✅ 已完成 (2026-06-04)
 
 #### P2-1 画布场景
-- **C# 源**: `H.Controls.Diagram` (DiagramCanvas, DiagramSurface)
-- **功能**:
-  - 无限画布，背景网格
-  - 节点拖拽移动
-  - 框选多选
-  - 剪切/复制/粘贴/删除
-  - 撤销/重做栈
-  - 对齐网格/参考线
-  - 画布缩放(滚轮)与平移
-- **Python 实现**: `gui/node_editor/scene.py` (QGraphicsScene 子类)
-- **依赖**: P1-6
-- **状态**: ⬜ 未开始
+- **功能**: QGraphicsScene 无限画布、网格背景(小/大)、节点/连线管理、选择/删除/拖拽连线、上下文菜单
+- **Python 实现**: `gui/node_editor/scene.py` (260+ 行)
+- **状态**: ✅ 已完成
 
 #### P2-2 节点项 (NodeItem)
-- **C# 源**: `H.Controls.Diagram` (Node, NodeItem, NodeContent)
-- **功能**:
-  - 节点外观 (圆角矩形、标题栏、分组颜色)
-  - 输入/输出端口 (上/下/左/右 各1个)
-  - 节点状态指示 (空闲/运行中/成功/错误)
-  - 节点选中高亮
-  - 右键上下文菜单
-- **Python 实现**: `gui/node_editor/node_item.py`
-- **依赖**: P2-1
-- **状态**: ⬜ 未开始
+- **功能**: 圆角矩形 + 左色条(分组颜色) + 标题文字 + 4端口(上/下/左/右) + 选中高亮 + 状态指示点
+- **Python 实现**: `gui/node_editor/node_item.py` (220+ 行)
+- **状态**: ✅ 已完成
 
-#### P2-3 端口项 (SocketItem/PortItem)
-- **C# 源**: `H.Controls.Diagram` (Port, FlowablePortData)
-- **功能**:
-  - 输入/输出端口外观 (圆形，不同颜色)
-  - 端口悬停高亮
-  - 拖拽创建连线
-  - 端口类型兼容性检查
-- **Python 实现**: `gui/node_editor/socket_item.py`
-- **依赖**: P2-1
-- **状态**: ⬜ 未开始
+#### P2-3 端口项 (SocketItem)
+- **功能**: 4px圆形端口、悬停变大变橙、拖拽创建连线、输入/输出颜色区分
+- **Python 实现**: `gui/node_editor/socket_item.py` (100+ 行)
+- **状态**: ✅ 已完成
 
-#### P2-4 连线项 (EdgeItem/LinkItem)
-- **C# 源**: `H.Controls.Diagram` (Link, BezierLink)
-- **功能**:
-  - 贝塞尔曲线连线
-  - 连线方向 (从上到下/从左到右)
-  - 连线颜色 (橙色=数据流)
-  - 选中/悬停高亮
-  - 右键删除
-  - 连线类型验证
-- **Python 实现**: `gui/node_editor/edge_item.py`
-- **依赖**: P2-3
-- **状态**: ⬜ 未开始
+#### P2-4 连线项 (EdgeItem)
+- **功能**: 橙色贝塞尔曲线、端口方向自动路由、拖拽中临时线、悬停加宽、选中高亮
+- **Python 实现**: `gui/node_editor/edge_item.py` (180+ 行)
+- **状态**: ✅ 已完成
 
 #### P2-5 编辑器控件 (EditorWidget)
-- **C# 源**: `H.Controls.Diagram.Presenter`, `DiagramDatas/OpenCVVisionDiagramData.cs`
-- **功能**:
-  - 画布视图容器
-  - 拖放创建节点
-  - 运行/停止/单步执行按钮
-  - 流程状态显示
-  - 缩略图导航
-  - 节点搜索/跳转
-- **Python 实现**: `gui/node_editor/editor_widget.py`
-- **依赖**: P2-1~P2-4
-- **状态**: ⬜ 未开始
+- **功能**: QGraphicsView 容器、Ctrl+滚轮缩放、中键平移、右键菜单、Delete删除、Ctrl+A全选、拖放创建节点、工具栏(运行/停止/缩放/网格)
+- **Python 实现**: `gui/node_editor/editor_widget.py` (270+ 行)
+- **状态**: ✅ 已完成
+
+**P2 验证**: 所有5个模块导入通过。DiagramEditorWidget已集成到MainWindow中心区域(流程编辑标签页)。节点选择→属性面板联动。工具箱双击→画布添加节点。
 
 ---
 
@@ -598,9 +562,10 @@ Phase 2 (P1): 主界面 ✅ 已完成 (2026-06-04)
        gui/main_window.py
   验证: GUI启动/关闭正常，所有面板集成测试通过
 
-Phase 3 (P2): 节点编辑器
-  P2-1 → P2-3 → P2-4 → P2-2 → P2-5
-  预计: 可以在画布上拖拽连接节点
+Phase 3 (P2): 节点编辑器 ✅ 已完成 (2026-06-04)
+  P2-1 ✅ → P2-3 ✅ → P2-4 ✅ → P2-2 ✅ → P2-5 ✅
+  文件: gui/node_editor/scene.py, node_item.py, socket_item.py, edge_item.py, editor_widget.py
+  验证: 所有模块导入通过，DiagramEditorWidget集成到MainWindow
 
 Phase 4 (P3): 视觉节点
   P3-1 → P3-2 → P3-5 → P3-4 → P3-3 → P3-8 → P3-7 → P3-6 → P3-9 → P3-10 → P3-12 → P3-11 → P3-14 → P3-13
@@ -664,4 +629,4 @@ Pillow>=10.0.0
 ---
 
 *最后更新: 2026-06-04*
-*当前阶段: Phase 1-2 (P0+P1) 完成，准备开始 Phase 3 (P2 节点编辑器)*
+*当前阶段: Phase 1-3 (P0+P1+P2) 完成，准备开始 Phase 4 (P3 视觉处理节点)*
