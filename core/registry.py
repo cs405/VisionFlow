@@ -58,6 +58,14 @@ class NodeRegistry:
         import inspect
         return [t for t in self._nodes.values() if not inspect.isabstract(t)]
 
+    def get_node_type(self, type_name: str) -> Type[NodeBase] | None:
+        """Alias for get() — used by services/AppContext."""
+        return self.get(type_name)
+
+    def get_all_node_types(self) -> list[Type[NodeBase]]:
+        """Alias for get_all_instantiable() — used by services/AppContext."""
+        return self.get_all_instantiable()
+
     def clear(self):
         """Clear all registrations."""
         self._nodes.clear()
