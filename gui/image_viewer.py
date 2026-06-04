@@ -13,7 +13,7 @@ from typing import Any
 
 from PyQt5.QtWidgets import (QGraphicsView, QGraphicsScene, QGraphicsPixmapItem,
                               QWidget,
-                              QVBoxLayout, QLabel, QHBoxLayout)
+                              QVBoxLayout, QLabel, QHBoxLayout, QStackedLayout)
 from PyQt5.QtCore import Qt, QRectF, QPointF, pyqtSignal, QPropertyAnimation, QEasingCurve, QVariantAnimation
 from PyQt5.QtGui import (QPixmap, QImage, QPen, QColor, QBrush, QPainter,
                           QWheelEvent, QMouseEvent, QFont)
@@ -750,7 +750,74 @@ class ImageViewerPanel(QWidget):
         layout.setSpacing(0)
 
         self.viewer = ImageViewer()
-        layout.addWidget(self.viewer)
+
+        viewer_host = QWidget()
+        viewer_stack = QStackedLayout(viewer_host)
+        viewer_stack.setContentsMargins(0, 0, 0, 0)
+        viewer_stack.setStackingMode(QStackedLayout.StackAll)
+        viewer_stack.addWidget(self.viewer)
+
+        overlay_layer = QWidget()
+        overlay_layer.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        overlay_layer.setStyleSheet("background: transparent;")
+        overlay_layout = QVBoxLayout(overlay_layer)
+        overlay_layout.setContentsMargins(8, 8, 8, 8)
+        overlay_layout.setSpacing(6)
+
+        top_row = QHBoxLayout()
+        top_row.setContentsMargins(0, 0, 0, 0)
+        top_row.setSpacing(6)
+
+        self._result_badge = QLabel("无结果")
+        self._result_badge.setStyleSheet(
+            "QLabel {"
+            "background: rgba(37, 37, 38, 0.92); color: #dcdcdc;"
+            "border: 1px solid #3f3f46; border-radius: 4px;"
+            "padding: 6px 12px; font-size: 12px; font-weight: 600;"
+            "}"
+        )
+        top_row.addWidget(self._result_badge, 0, Qt.AlignLeft | Qt.AlignTop)
+
+        top_row.addStretch(1)
+
+        self._source_hint = QLabel("")
+        self._source_hint.setStyleSheet(
+            "QLabel {"
+            "background: rgba(0, 0, 0, 0.45); color: #dcdcdc;"
+            "border-radius: 4px; padding: 4px 8px; font-size: 11px;"
+            "}"
+        )
+        self._source_hint.hide()
+        top_row.addWidget(self._source_hint, 0, Qt.AlignRight | Qt.AlignTop)
+        overlay_layout.addLayout(top_row)
+
+        overlay_layout.addStretch(1)
+
+        self._message_banner = QLabel("")
+        self._message_banner.setWordWrap(True)
+        self._message_banner.setStyleSheet(
+            "QLabel {"
+            "background: rgba(0, 0, 0, 0.42); color: #dcdcdc;"
+            "border-radius: 4px; padding: 6px 10px; font-size: 11px;"
+            "}"
+        )
+        self._message_banner.hide()
+        overlay_layout.addWidget(self._message_banner, 0, Qt.AlignLeft | Qt.AlignBottom)
+
+        self._file_info_strip = QLabel("")
+        self._file_info_strip.setWordWrap(False)
+        self._file_info_strip.setStyleSheet(
+            "QLabel {"
+            "background: rgba(0, 0, 0, 0.58); color: #d0d0d0;"
+            "padding: 7px 10px; font-size: 11px;"
+            "border-radius: 2px;"
+            "}"
+        )
+        self._file_info_strip.hide()
+        overlay_layout.addWidget(self._file_info_strip, 0, Qt.AlignBottom)
+
+        viewer_stack.addWidget(overlay_layer)
+        layout.addWidget(viewer_host, 1)
 
         # Info bar
         info_layout = QHBoxLayout()
@@ -787,6 +854,39 @@ class ImageViewerPanel(QWidget):
             self._size_label.setText(f"尺寸: {w} x {h}")
         else:
             self._size_label.setText("尺寸: -")
+
+    def set_result_badge(self, text: str, accent: str | None = None):
+        text = (text or "无结果").strip()
+        self._result_badge.setText(text)
+        border = accent or "#3f3f46"
+        self._result_badge.setStyleSheet(
+            "QLabel {"
+            "background: rgba(37, 37, 38, 0.92); color: #dcdcdc;"
+            f"border: 1px solid {border}; border-radius: 4px;"
+            "padding: 6px 12px; font-size: 12px; font-weight: 600;"
+            "}"
+        )
+
+    def set_source_hint(self, text: str | None):
+        text = (text or "").strip()
+        self._source_hint.setVisible(bool(text))
+        self._source_hint.setText(text)
+
+    def set_message_banner(self, text: str | None):
+        text = (text or "").strip()
+        self._message_banner.setVisible(bool(text))
+        self._message_banner.setText(text)
+
+    def set_file_info(self, text: str | None):
+        text = (text or "").strip()
+        self._file_info_strip.setVisible(bool(text))
+        self._file_info_strip.setText(text)
+
+    def clear_context_info(self):
+        self.set_result_badge("无结果")
+        self.set_source_hint("")
+        self.set_message_banner("")
+        self.set_file_info("")
 
     def set_roi_rect(self, rect: tuple[int, int, int, int] | None, label: str = "ROI"):
         self.viewer.set_roi_rect(rect, label=label)

@@ -16,21 +16,21 @@ from core.node_group import node_data_group_manager
 
 
 GROUP_META = {
-    "图像数据源": {"color": "#4a9eff", "icon": "📷"},
-    "系统数据源": {"color": "#5c6bc0", "icon": "🗂"},
-    "图像预处理模块": {"color": "#ff8c00", "icon": "🎛"},
-    "滤波模块": {"color": "#9c27b0", "icon": "🌊"},
+    "图像数据源": {"color": "#4a9eff", "icon": "◎"},
+    "系统数据源": {"color": "#5c6bc0", "icon": "◫"},
+    "图像预处理模块": {"color": "#ff8c00", "icon": "◌"},
+    "滤波模块": {"color": "#9c27b0", "icon": "≈"},
     "图像分割提取模块": {"color": "#e91e63", "icon": "✂"},
-    "形态学模块": {"color": "#00bcd4", "icon": "⬚"},
-    "逻辑模块": {"color": "#ff5722", "icon": "🔀"},
-    "模板匹配模块": {"color": "#4caf50", "icon": "🎯"},
-    "对象识别模块": {"color": "#f44336", "icon": "🔍"},
-    "特征提取模块": {"color": "#ff9800", "icon": "📐"},
-    "网络通讯模块": {"color": "#795548", "icon": "🌐"},
-    "结果输出模块": {"color": "#607d8b", "icon": "📤"},
-    "Onnx通用模型": {"color": "#c2185b", "icon": "🧠"},
-    "其他模块": {"color": "#607d8b", "icon": "🧩"},
-    "视频处理模块": {"color": "#8d6e63", "icon": "🎬"},
+    "形态学模块": {"color": "#00bcd4", "icon": "⬒"},
+    "逻辑模块": {"color": "#ff5722", "icon": "⇄"},
+    "模板匹配模块": {"color": "#4caf50", "icon": "⌖"},
+    "对象识别模块": {"color": "#f44336", "icon": "◉"},
+    "特征提取模块": {"color": "#ff9800", "icon": "✣"},
+    "网络通讯模块": {"color": "#795548", "icon": "⌁"},
+    "结果输出模块": {"color": "#607d8b", "icon": "↗"},
+    "Onnx通用模型": {"color": "#c2185b", "icon": "AI"},
+    "其他模块": {"color": "#607d8b", "icon": "◇"},
+    "视频处理模块": {"color": "#8d6e63", "icon": "▶"},
     "★ 收藏": {"color": "#d7ba7d", "icon": "★"},
 }
 
@@ -76,7 +76,8 @@ class NodeTileButton(QFrame):
         self._icon_label.setAlignment(Qt.AlignCenter)
         self._icon_label.setFixedSize(28, 28)
         self._icon_label.setStyleSheet(
-            f"background: {self.meta.color}; border-radius: 6px; color: white; font-size: 16px;"
+            f"background: {self.meta.color}; border-radius: 6px; color: white;"
+            "font-size: 14px; font-weight: 700; font-family: 'Segoe UI Symbol', 'Microsoft YaHei UI';"
         )
         top_row.addWidget(self._icon_label)
 

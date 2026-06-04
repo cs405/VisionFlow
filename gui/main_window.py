@@ -2,8 +2,8 @@
 
 重点对齐：
   - 左：流程资源 / 日志
-  - 中：图像 / 模块结果 + 底部历史/当前/帮助
-  - 右：流程图多标签画布
+  - 中：流程图多标签画布
+  - 右：图像 / 模块结果 + 底部历史/当前/帮助
 """
 
 import os
@@ -12,9 +12,9 @@ from datetime import datetime
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QAction,
     QLabel, QTabWidget, QMessageBox, QFileDialog, QApplication,
-    QPushButton, QFrame, QMenuBar, QMenu, QLineEdit, QStackedWidget
+    QPushButton, QFrame, QMenuBar, QMenu, QLineEdit, QStackedWidget, QTabBar
 )
-from PyQt5.QtCore import Qt, QTimer, QSettings
+from PyQt5.QtCore import Qt, QTimer, QSettings, pyqtSignal
 from PyQt5.QtGui import QIcon, QPixmap
 
 from core.node_base import NodeBase, VisionNodeData, SrcFilesVisionNodeData, ROINodeData
@@ -103,6 +103,90 @@ _TAB_STYLE = """
 """
 
 
+class _InlineStatusStrip(QWidget):
+    def __init__(self, accent: str = "#4caf50", parent=None):
+        super().__init__(parent)
+        self._accent = accent
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(10, 4, 10, 4)
+        layout.setSpacing(8)
+        self.setStyleSheet("background: #1f1f1f; border-top: 1px solid #3f3f46;")
+
+        self._icon = QLabel("●")
+        self._icon.setStyleSheet(f"color: {accent}; font-weight: bold;")
+        layout.addWidget(self._icon)
+
+        self._label = QLabel("就绪")
+        self._label.setStyleSheet("color: #d0d0d0; font-size: 11px;")
+        layout.addWidget(self._label, 1)
+
+    def set_status(self, text: str, color: str | None = None):
+        self._label.setText(text)
+        self._icon.setStyleSheet(f"color: {color or self._accent}; font-weight: bold;")
+
+
+class _DiagramTabHeader(QWidget):
+    rename_requested = pyqtSignal(str)
+    run_requested = pyqtSignal()
+    stop_requested = pyqtSignal()
+    reset_requested = pyqtSignal()
+
+    def __init__(self, name: str, parent=None):
+        super().__init__(parent)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(6, 0, 6, 0)
+        layout.setSpacing(4)
+
+        self._icon = QLabel("▣")
+        self._icon.setStyleSheet("color: #4caf50; font-size: 11px; font-weight: bold;")
+        layout.addWidget(self._icon)
+
+        self._name_edit = QLineEdit(name)
+        self._name_edit.setFrame(False)
+        self._name_edit.setFixedHeight(22)
+        self._name_edit.setStyleSheet(
+            "QLineEdit { background: transparent; color: #dcdcdc; border: none; padding: 0 2px; }"
+            "QLineEdit:focus { border-bottom: 1px solid #0078d4; }"
+        )
+        self._name_edit.editingFinished.connect(self._emit_rename)
+        layout.addWidget(self._name_edit, 1)
+
+        self._start_btn = self._make_btn("▶", "启动")
+        self._start_btn.clicked.connect(self.run_requested.emit)
+        layout.addWidget(self._start_btn)
+
+        self._stop_btn = self._make_btn("■", "停止")
+        self._stop_btn.clicked.connect(self.stop_requested.emit)
+        layout.addWidget(self._stop_btn)
+
+        self._reset_btn = self._make_btn("↺", "重置")
+        self._reset_btn.clicked.connect(self.reset_requested.emit)
+        layout.addWidget(self._reset_btn)
+        self.set_active(False)
+
+    def _make_btn(self, text: str, tip: str) -> QPushButton:
+        button = QPushButton(text)
+        button.setToolTip(tip)
+        button.setFixedSize(18, 18)
+        button.setStyleSheet(
+            "QPushButton { background: transparent; border: 1px solid #505050; border-radius: 2px;"
+            "color: #dcdcdc; font-size: 10px; padding: 0; }"
+            "QPushButton:hover { background: #3e3e42; border-color: #0078d4; }"
+        )
+        return button
+
+    def _emit_rename(self):
+        self.rename_requested.emit(self._name_edit.text().strip())
+
+    def set_name(self, name: str):
+        if self._name_edit.text() != name:
+            self._name_edit.setText(name)
+
+    def set_active(self, active: bool):
+        for btn in (self._start_btn, self._stop_btn, self._reset_btn):
+            btn.setVisible(active)
+
+
 class MainWindow(QMainWindow):
     """主窗口：按 WPF `MainWindow.xaml` 的区域语义重构。"""
 
@@ -112,6 +196,7 @@ class MainWindow(QMainWindow):
         self._selected_node: NodeBase | None = None
         self._diagram_editor: DiagramEditorWidget | None = None
         self._diagram_pages: dict[str, QWidget] = {}
+        self._diagram_headers: dict[str, _DiagramTabHeader] = {}
         self._project_loaded = False
         self._left_panel_visible = True
         self._right_panel_visible = True
@@ -300,14 +385,10 @@ class MainWindow(QMainWindow):
         self._center_right_splitter.setHandleWidth(2)
         self._center_right_splitter.setStyleSheet("QSplitter::handle { background: #505050; }")
 
-        self._center_splitter = QSplitter(Qt.Vertical)
-        self._center_splitter.setHandleWidth(2)
-        self._center_splitter.setStyleSheet("QSplitter::handle { background: #505050; }")
-        self._center_splitter.addWidget(self._build_center_panel())
-        self._center_splitter.addWidget(self._build_bottom_panel())
-        self._center_right_splitter.addWidget(self._center_splitter)
+        self._diagram_panel = self._build_diagram_panel()
+        self._center_right_splitter.addWidget(self._diagram_panel)
 
-        self._right_panel = self._build_right_panel()
+        self._right_panel = self._build_side_panel()
         self._center_right_splitter.addWidget(self._right_panel)
 
         self._workspace_splitter.addWidget(self._center_right_splitter)
@@ -318,6 +399,20 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(root)
 
         self._apply_splitter_state()
+
+    def _build_side_panel(self):
+        self._center_splitter = QSplitter(Qt.Vertical)
+        self._center_splitter.setHandleWidth(2)
+        self._center_splitter.setStyleSheet("QSplitter::handle { background: #505050; }")
+        self._center_splitter.addWidget(self._build_center_panel())
+        self._center_splitter.addWidget(self._build_bottom_panel())
+
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self._center_splitter, 1)
+        return panel
 
     def _build_left_panel(self):
         tabs = QTabWidget()
@@ -363,6 +458,10 @@ class MainWindow(QMainWindow):
         self._resource_panel.setFixedHeight(118)
         self._resource_panel.setVisible(False)
         layout.addWidget(self._resource_panel)
+
+        self._side_status_strip = _InlineStatusStrip("#4caf50")
+        self._side_status_strip.set_status("等待选择节点")
+        layout.addWidget(self._side_status_strip)
         return panel
 
     def _build_bottom_panel(self):
@@ -390,7 +489,7 @@ class MainWindow(QMainWindow):
         self._bottom_tabs.setCornerWidget(self._bottom_toggle, Qt.TopLeftCorner)
         return self._bottom_tabs
 
-    def _build_right_panel(self):
+    def _build_diagram_panel(self):
         panel = QWidget()
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -424,6 +523,10 @@ class MainWindow(QMainWindow):
             button.clicked.connect(slot)
             corner_layout.addWidget(button)
         self._diagram_tab_widget.setCornerWidget(corner, Qt.TopRightCorner)
+
+        self._diagram_status_strip = _InlineStatusStrip("#4caf50")
+        self._diagram_status_strip.set_status("流程图就绪")
+        layout.addWidget(self._diagram_status_strip)
         return panel
 
     def _setup_status_bar(self):
@@ -488,7 +591,7 @@ class MainWindow(QMainWindow):
         bottom_height = _ps.get_i("bottom_height", 180)
 
         self._workspace_splitter.setSizes([left_width, max(800, self.width() - left_width)])
-        self._center_right_splitter.setSizes([max(500, self.width() - left_width - right_width), right_width])
+        self._center_right_splitter.setSizes([max(640, self.width() - left_width - right_width), right_width])
         self._center_splitter.setSizes([max(380, self.height() - bottom_height - 140), bottom_height])
 
         self._left_panel_visible = _ps.get_b("left_visible", True)
@@ -553,7 +656,7 @@ class MainWindow(QMainWindow):
         left_toggle = QAction("切换左侧流程资源", self)
         left_toggle.triggered.connect(self.toggle_left_panel)
         system_menu.addAction(left_toggle)
-        right_toggle = QAction("切换右侧流程图", self)
+        right_toggle = QAction("切换右侧图像结果区", self)
         right_toggle.triggered.connect(self.toggle_right_panel)
         system_menu.addAction(right_toggle)
 
@@ -612,6 +715,8 @@ class MainWindow(QMainWindow):
         self._diagram_editor = None
         self._select_node(None)
         self._sync_proj_labels(None)
+        self._diagram_status_strip.set_status("流程图就绪", "#4caf50")
+        self._side_status_strip.set_status("等待选择节点", "#4caf50")
 
     def _show_editor(self):
         self._root_stack.setCurrentWidget(self._editor_surface)
@@ -627,17 +732,80 @@ class MainWindow(QMainWindow):
 
     def _refresh_diagram_tabs(self, project: ProjectItem):
         self._diagram_pages.clear()
+        self._diagram_headers.clear()
         self._diagram_tab_widget.blockSignals(True)
         self._diagram_tab_widget.clear()
         for diagram in project.diagrams:
             page = self._create_diagram_page(diagram)
             self._diagram_pages[diagram.id] = page
-            self._diagram_tab_widget.addTab(page, diagram.name)
+            index = self._diagram_tab_widget.addTab(page, "")
+            self._install_diagram_tab_header(index, diagram)
         target_index = max(0, min(project.selected_diagram_index, self._diagram_tab_widget.count() - 1))
         if self._diagram_tab_widget.count() > 0:
             self._diagram_tab_widget.setCurrentIndex(target_index)
         self._diagram_tab_widget.blockSignals(False)
         self._on_diagram_tab_changed(target_index)
+
+    def _install_diagram_tab_header(self, index: int, diagram: DiagramData):
+        header = _DiagramTabHeader(diagram.name, self._diagram_tab_widget.tabBar())
+        header.rename_requested.connect(lambda text, current=diagram: self._rename_diagram(current, text))
+        header.run_requested.connect(lambda current=diagram: self._run_diagram(current.id))
+        header.stop_requested.connect(lambda current=diagram: self._stop_diagram(current.id))
+        header.reset_requested.connect(lambda current=diagram: self._reset_diagram_view(current.id))
+        self._diagram_tab_widget.setTabToolTip(index, diagram.name)
+        self._diagram_tab_widget.tabBar().setTabButton(index, QTabBar.LeftSide, header)
+        self._diagram_headers[diagram.id] = header
+
+    def _rename_diagram(self, diagram: DiagramData, text: str):
+        name = (text or "").strip() or diagram.name
+        diagram.name = name
+        if diagram.workflow is not None:
+            diagram.workflow.name = name
+        project = project_service.current_project
+        if project is not None:
+            for index, item in enumerate(project.diagrams):
+                if item.id == diagram.id:
+                    self._diagram_tab_widget.setTabToolTip(index, name)
+                    break
+        header = self._diagram_headers.get(diagram.id)
+        if header is not None:
+            header.set_name(name)
+        self._sync_proj_labels(project_service.current_project)
+
+    def _refresh_diagram_tab_headers(self):
+        current_id = getattr(self._current_diagram_page(), "diagram_id", None)
+        for diagram_id, header in self._diagram_headers.items():
+            header.set_active(diagram_id == current_id)
+
+    def _run_diagram(self, diagram_id: str):
+        project = project_service.current_project
+        if project is None:
+            return
+        for index, diagram in enumerate(project.diagrams):
+            if diagram.id == diagram_id:
+                self._diagram_tab_widget.setCurrentIndex(index)
+                self._on_run_workflow()
+                return
+
+    def _stop_diagram(self, diagram_id: str):
+        project = project_service.current_project
+        if project is None:
+            return
+        for index, diagram in enumerate(project.diagrams):
+            if diagram.id == diagram_id:
+                self._diagram_tab_widget.setCurrentIndex(index)
+                self._on_stop_workflow()
+                return
+
+    def _reset_diagram_view(self, diagram_id: str):
+        project = project_service.current_project
+        if project is None:
+            return
+        for index, diagram in enumerate(project.diagrams):
+            if diagram.id == diagram_id:
+                self._diagram_tab_widget.setCurrentIndex(index)
+                self._on_reset_workflow_view()
+                return
 
     def _current_diagram_page(self):
         page = self._diagram_tab_widget.currentWidget()
@@ -682,6 +850,7 @@ class MainWindow(QMainWindow):
         if project is None or not (0 <= index < len(project.diagrams)):
             self._workflow = None
             self._diagram_editor = None
+            self._diagram_status_strip.set_status("流程图就绪", "#4caf50")
             return
         project.selected_diagram_index = index
         diagram = project.selected_diagram
@@ -690,6 +859,8 @@ class MainWindow(QMainWindow):
         self._diagram_editor = getattr(page, "editor", None)
         self._node_cnt_lbl.setText(f"节点: {len(self._workflow.get_all_nodes()) if self._workflow else 0}")
         self._sync_proj_labels(project)
+        self._refresh_diagram_tab_headers()
+        self._diagram_status_strip.set_status(f"当前流程图：{diagram.display_name}", "#4caf50")
 
     def _sync_proj_labels(self, project: ProjectItem | None):
         if project is None:
@@ -723,6 +894,7 @@ class MainWindow(QMainWindow):
         self._help_panel.set_node(node)
         self._module_result_title.setText(f"模块名称 <{node.name}>" if node else "模块名称 <未选择>")
         self._result_panel.show_node_results(node if isinstance(node, VisionNodeData) else None)
+        self._update_image_context(node)
 
         if isinstance(node, SrcFilesVisionNodeData):
             self._resource_panel.set_node(node)
@@ -743,6 +915,11 @@ class MainWindow(QMainWindow):
         else:
             self._img_panel.clear_roi_rect()
 
+        if node is not None:
+            self._side_status_strip.set_status(f"已选择模块：{node.name}", "#0078d4")
+        else:
+            self._side_status_strip.set_status("等待选择节点", "#4caf50")
+
     def _on_node_type_selected(self, type_name: str):
         if not self._workflow:
             return
@@ -758,6 +935,8 @@ class MainWindow(QMainWindow):
 
     def _on_editor_status(self, message: str):
         self._msg_lbl.setText(message)
+        if message:
+            self._diagram_status_strip.set_status(message, "#0078d4")
 
     def _get_group(self, type_name: str) -> str:
         from core.node_group import node_data_group_manager
@@ -785,12 +964,16 @@ class MainWindow(QMainWindow):
         self._state_lbl.setStyleSheet("color: #2196f3; font-weight: bold;")
         self._msg_lbl.setText("流程运行中...")
         self._run_btn.setEnabled(False)
+        self._diagram_status_strip.set_status("流程图运行中...", "#2196f3")
+        self._side_status_strip.set_status("结果区正在等待输出...", "#2196f3")
 
     def _on_wf_done(self, sender, **kwargs):
         self._state_lbl.setText("● 完成")
         self._state_lbl.setStyleSheet("color: #4caf50; font-weight: bold;")
         self._msg_lbl.setText("流程执行完成")
         self._run_btn.setEnabled(True)
+        self._diagram_status_strip.set_status("流程图执行完成", "#4caf50")
+        self._side_status_strip.set_status("结果区已更新", "#4caf50")
 
     def _on_wf_err(self, sender, **kwargs):
         self._state_lbl.setText("● 错误")
@@ -798,6 +981,8 @@ class MainWindow(QMainWindow):
         result = kwargs.get("result")
         self._msg_lbl.setText(str(result) if result else "流程错误")
         self._run_btn.setEnabled(True)
+        self._diagram_status_strip.set_status(f"流程图错误：{self._msg_lbl.text()}", "#f44336")
+        self._side_status_strip.set_status("结果区收到错误消息", "#f44336")
 
     def _on_proj_load(self, sender, **kwargs):
         project = kwargs.get("project")
@@ -870,6 +1055,8 @@ class MainWindow(QMainWindow):
         if self._workflow:
             self._workflow.stop()
             self._log_panel.warning("流程已停止")
+            self._diagram_status_strip.set_status("流程图已停止", "#ff9800")
+            self._side_status_strip.set_status("结果区已停止等待", "#ff9800")
 
     def _jump_to_node(self, node_id: str):
         project = project_service.current_project
@@ -898,6 +1085,7 @@ class MainWindow(QMainWindow):
             image = cv2.imread(path, cv2.IMREAD_COLOR)
             if image is not None:
                 self._img_panel.set_image(image)
+                self._img_panel.set_file_info(self._format_file_info(path))
                 self._center_tabs.setCurrentIndex(0)
         except Exception:
             pass
@@ -929,7 +1117,7 @@ class MainWindow(QMainWindow):
             self._right_panel.setVisible(True)
             total = max(self.width() - (_ps.get_i("left_width", 280) if self._left_panel_visible else 0), 900)
             right = self._saved_right_width or _ps.get_i("right_width", 420)
-            self._center_right_splitter.setSizes([max(500, total - right), right])
+            self._center_right_splitter.setSizes([max(640, total - right), right])
             self._right_panel_visible = True
 
     @property
@@ -962,15 +1150,25 @@ class MainWindow(QMainWindow):
             if 0 <= name_or_index < self._diagram_tab_widget.count():
                 self._diagram_tab_widget.setCurrentIndex(name_or_index)
             return
-        for index in range(self._diagram_tab_widget.count()):
-            if self._diagram_tab_widget.tabText(index) == name_or_index:
+        project = project_service.current_project
+        if project is None:
+            return
+        for index, diagram in enumerate(project.diagrams):
+            if diagram.name == name_or_index:
                 self._diagram_tab_widget.setCurrentIndex(index)
                 return
 
     def _active_visual_target(self):
+        focus = QApplication.focusWidget()
+        editor = self._current_diagram_editor()
+        if editor is not None and focus is not None:
+            current = focus
+            while current is not None:
+                if current is editor or current is editor.view:
+                    return editor.view
+                current = current.parentWidget()
         if self._center_tabs.currentIndex() == 0:
             return self._img_panel.viewer
-        editor = self._current_diagram_editor()
         return editor.view if editor is not None else self._img_panel.viewer
 
     def _on_reset_workflow_view(self):
@@ -1004,6 +1202,69 @@ class MainWindow(QMainWindow):
             self._center_splitter.setSizes([total - height, height])
             self._bottom_toggle.setText("▼")
         self._bottom_visible = not self._bottom_visible
+
+    def _update_image_context(self, node: NodeBase | None):
+        if node is None:
+            self._img_panel.clear_context_info()
+            return
+
+        badge = "无结果"
+        badge_color = "#3f3f46"
+        if isinstance(node, SrcFilesVisionNodeData):
+            badge = "原始图像"
+            badge_color = "#0078d4"
+        elif isinstance(node, VisionNodeData) and (node.mat is not None or node.result_image_source is not None):
+            badge = "模块结果"
+            badge_color = "#4caf50"
+
+        source_path, source_hint = self._find_source_context(node)
+        self._img_panel.set_result_badge(badge, badge_color)
+        self._img_panel.set_source_hint(source_hint)
+        self._img_panel.set_message_banner(getattr(node, "message", ""))
+        self._img_panel.set_file_info(self._format_file_info(source_path) if source_path else "")
+
+    def _find_source_context(self, node: NodeBase | None) -> tuple[str | None, str]:
+        if node is None:
+            return None, ""
+
+        candidates: list[SrcFilesVisionNodeData] = []
+        if isinstance(node, SrcFilesVisionNodeData):
+            candidates.append(node)
+        if hasattr(node, "get_all_from_node_datas"):
+            candidates.extend(
+                upstream for upstream in node.get_all_from_node_datas()
+                if isinstance(upstream, SrcFilesVisionNodeData)
+            )
+
+        seen: set[str] = set()
+        for source_node in candidates:
+            if source_node.node_id in seen:
+                continue
+            seen.add(source_node.node_id)
+            path = getattr(source_node, "src_file_path", "")
+            paths = getattr(source_node, "src_file_paths", []) or []
+            if not path:
+                continue
+            hint = ""
+            if paths:
+                try:
+                    hint = f"图像源 {paths.index(path) + 1}/{len(paths)}"
+                except ValueError:
+                    hint = f"图像源 1/{len(paths)}"
+            return path, hint
+        return None, ""
+
+    def _format_file_info(self, path: str | None) -> str:
+        if not path or not os.path.exists(path):
+            return ""
+        try:
+            size = os.path.getsize(path)
+            modified = datetime.fromtimestamp(os.path.getmtime(path)).strftime("%Y-%m-%d %H:%M:%S")
+            filename = os.path.basename(path)
+            size_text = f"{size / 1024:.1f} KB" if size < 1024 * 1024 else f"{size / 1024 / 1024:.2f} MB"
+            return f"{filename}    |    {size_text}    |    {modified}"
+        except OSError:
+            return os.path.basename(path)
 
     def _on_about(self):
         QMessageBox.about(
