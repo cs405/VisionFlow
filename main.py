@@ -12,28 +12,34 @@ from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt
 
 from core.registry import NodeRegistry
+from core.events import EventBus
 from gui.main_window import MainWindow
 
 
 def main():
     """主函数"""
-    # 启用高DPI支持 - 使用新API避免弃用警告
+    # 启用高DPI支持
     QApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
-    # 注释掉已弃用的API
-    # QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
 
     app = QApplication(sys.argv)
     app.setApplicationName("VisionFlow")
     app.setOrganizationName("VisionFlow")
 
-    # 自动发现所有节点
+    # 先创建事件总线实例（确保单例存在）
+    event_bus = EventBus()
+
+    # 自动发现所有节点（现在可以安全地发送日志了）
     NodeRegistry.discover_nodes("nodes")
+    NodeRegistry.discover_plugins("plugins")
 
     # 打印已注册的节点（调试用）
+    print("\n" + "="*50)
     print("已注册的节点:")
+    print("="*50)
     for category, nodes in NodeRegistry.get_categories().items():
         print(f"  [{category}] {', '.join(nodes)}")
+    print("="*50 + "\n")
 
     # 创建主窗口
     window = MainWindow()
