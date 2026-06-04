@@ -241,6 +241,7 @@ class DiagramEditorWidget(QWidget):
 
     node_selected = pyqtSignal(object)
     node_deselected = pyqtSignal()
+    node_double_clicked = pyqtSignal(object)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -378,6 +379,7 @@ class DiagramEditorWidget(QWidget):
         self.scene.node_item_added.connect(self._on_node_item_added)
 
     def _on_node_item_added(self, node_item: NodeItem):
+        node_item.node_double_clicked.connect(self.node_double_clicked.emit)
         for socket in node_item.sockets:
             socket.connection_started.connect(self._on_socket_drag_start)
             socket.connection_moved.connect(self._on_socket_drag_move)

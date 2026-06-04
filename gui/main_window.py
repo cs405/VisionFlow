@@ -556,6 +556,7 @@ class MainWindow(QMainWindow):
         self._property_panel.set_image_viewer(self._img_panel.viewer)
         self._log_panel.node_jump_requested.connect(self._jump_to_node)
         self._resource_panel.file_selected.connect(self._on_resource_file_selected)
+        self._resource_panel.file_double_clicked.connect(self._on_resource_file_double_clicked)
 
     def _connect_events(self):
         event_system.subscribe(EventType.NODE_SELECTED, self._on_ev_node_sel)
@@ -689,6 +690,7 @@ class MainWindow(QMainWindow):
     def _wire_diagram_editor(self, editor: DiagramEditorWidget):
         editor.node_selected.connect(self._on_editor_node_selected)
         editor.node_deselected.connect(lambda: self._select_node(None))
+        editor.node_double_clicked.connect(self._on_editor_node_double_clicked)
         editor.scene.status_message.connect(self._on_editor_status)
 
     def _create_diagram_page(self, diagram: DiagramData) -> QWidget:
@@ -934,6 +936,23 @@ class MainWindow(QMainWindow):
     def _on_editor_node_selected(self, node_data: NodeBase):
         self._select_node(node_data)
 
+    def _on_editor_node_double_clicked(self, node_data: NodeBase):
+        """Handle node double-click — open settings panel (WPF ShowViewCommand / ShowTabEditCommand).
+
+        Behaviour aligned with WPF:
+          1. Select the node (same as single click).
+          2. Switch right panel to「模块结果」tab and focus the property panel.
+          3. Flash the first property group header to draw attention.
+          4. If the node is a SrcFilesVisionNodeData, also show the resource panel.
+        """
+        self._select_node(node_data)
+        # Switch to module result tab showing the property panel
+        if hasattr(self, '_center_tabs'):
+            self._center_tabs.setCurrentIndex(1)  # index 1 = 模块结果
+        # Flash highlight on the property panel
+        if hasattr(self, '_property_panel'):
+            self._property_panel.flash_highlight()
+
     def _on_editor_status(self, message: str):
         self._msg_lbl.setText(message)
         if message:
@@ -1090,6 +1109,17 @@ class MainWindow(QMainWindow):
                 self._center_tabs.setCurrentIndex(0)
         except Exception:
             pass
+
+    def _on_resource_file_double_clicked(self, path: str):
+        """Open full-size zoom viewer for the image file (WPF ShowZoomViewImageFileCommand)."""
+        if not path or not os.path.exists(path):
+            return
+        # Switch to image tab + load full resolution
+        self._on_resource_file_selected(path)
+        self._center_tabs.setCurrentIndex(0)
+        # Fit image to viewer
+        if hasattr(self._img_panel, 'viewer'):
+            self._img_panel.viewer.fit_to_window()
 
     def toggle_left_panel(self):
         if self._left_panel_visible:

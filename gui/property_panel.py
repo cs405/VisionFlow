@@ -889,6 +889,37 @@ class PropertyPanel(QWidget):
         if force or old_value != current_value:
             self.property_changed.emit(prop_name, old_value, current_value)
 
+    def flash_highlight(self):
+        """Briefly flash the first GroupBox border to draw attention (WPF ShowViewCommand feedback).
+
+        Finds the first QGroupBox in the form layout and cycles its border color
+        from #0078d4 (accent blue) → #ff9800 (alert orange) → #0078d4 over ~500ms.
+        """
+        from PyQt5.QtCore import QPropertyAnimation, QTimer
+        # Find the first group box
+        first_group = None
+        for i in range(self._form_layout.count()):
+            w = self._form_layout.itemAt(i).widget()
+            if isinstance(w, QGroupBox):
+                first_group = w
+                break
+        if first_group is None:
+            return
+
+        original = first_group.styleSheet()
+        # Flash: set bright accent border, then restore after 300ms
+        flash_style = (
+            "QGroupBox {"
+            "color: #ff9800; border: 2px solid #ff9800; border-radius: 3px;"
+            "margin-top: 10px; padding-top: 14px; font-weight: bold; font-size: 11px;"
+            "}"
+            "QGroupBox::title {"
+            "subcontrol-origin: margin; left: 8px; padding: 0 4px; color: #ff9800;"
+            "}"
+        )
+        first_group.setStyleSheet(flash_style)
+        QTimer.singleShot(350, lambda: first_group.setStyleSheet(original))
+
     def refresh(self):
         """Force refresh of the property display."""
         if self._current_node:
