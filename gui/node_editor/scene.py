@@ -72,7 +72,7 @@ class DiagramScene(QGraphicsScene):
         self._connecting = False
 
         # Command stack (undo/redo)
-        self._cmd_stack = CommandStack()
+        self._cmd_stack = CommandStack(scene=self)
 
         # Clipboard for copy/paste
         self._clipboard: list[dict] = []

@@ -88,7 +88,9 @@ def _discover_nodes(ctx):
                     continue
                 if getattr(obj, '__abstract__', False) or inspect.isabstract(obj):
                     continue
+                # Register in both group manager AND type registry
                 ctx.node_groups.register_node(obj, group_name)
+                ctx.node_registry.register(obj, group_name)
         except ImportError:
             pass  # package may not exist
 
