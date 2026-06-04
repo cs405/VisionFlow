@@ -1,11 +1,10 @@
 """
-主入口 - VisionFlow 视觉流程设计器
+VisionFlow 主入口 — WPF VisionMaster风格视觉流程设计器
 """
 
 import sys
 import os
 
-# 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from PySide6.QtWidgets import QApplication
@@ -17,8 +16,6 @@ from gui.main_window import MainWindow
 
 
 def main():
-    """主函数"""
-    # 启用高DPI支持
     QApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
 
@@ -26,22 +23,27 @@ def main():
     app.setApplicationName("VisionFlow")
     app.setOrganizationName("VisionFlow")
 
-    # 先创建事件总线实例（确保单例存在）
+    # 初始化核心组件
     event_bus = EventBus()
+    event_bus.emit_log("INFO", "VisionFlow 启动中...")
 
-    # 自动发现所有节点（现在可以安全地发送日志了）
+    # 自动发现并注册所有节点
     NodeRegistry.discover_nodes("nodes")
     NodeRegistry.discover_plugins("plugins")
 
-    # 打印已注册的节点（调试用）
-    print("\n" + "="*50)
-    print("已注册的节点:")
-    print("="*50)
-    for category, nodes in NodeRegistry.get_categories().items():
-        print(f"  [{category}] {', '.join(nodes)}")
-    print("="*50 + "\n")
+    # 打印注册信息
+    print("\n" + "=" * 50)
+    print("  VisionFlow - 智能视觉流程设计器")
+    print("=" * 50)
+    categories = NodeRegistry.get_categories()
+    total = 0
+    for category, nodes in sorted(categories.items()):
+        print(f"  [{category}] {', '.join(sorted(nodes))}")
+        total += len(nodes)
+    print(f"  共 {total} 个节点已注册")
+    print("=" * 50 + "\n")
 
-    # 创建主窗口
+    # 创建并显示主窗口
     window = MainWindow()
     window.show()
 

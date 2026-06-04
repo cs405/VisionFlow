@@ -92,6 +92,15 @@ class ImageViewer(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
+        # 图像显示区 (必须在工具栏之前创建，因为按钮回调引用 self.view)
+        self.scene = QGraphicsScene()
+        self.view = ZoomboxGraphicsView(self)
+
+        # 设置棋盘格背景
+        self._setup_checkerboard_background()
+
+        self.view.setScene(self.scene)
+
         # 工具栏
         toolbar = QWidget()
         toolbar.setStyleSheet(f"""
@@ -137,15 +146,6 @@ class ImageViewer(QWidget):
             toolbar_layout.addWidget(btn)
 
         layout.addWidget(toolbar)
-
-        # 图像显示区
-        self.scene = QGraphicsScene()
-        self.view = ZoomboxGraphicsView(self)
-
-        # 设置棋盘格背景
-        self._setup_checkerboard_background()
-
-        self.view.setScene(self.scene)
         layout.addWidget(self.view)
 
         self.setLayout(layout)
