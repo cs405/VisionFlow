@@ -190,3 +190,98 @@ class NodeResult:
             "image_items": [it.to_dict() for it in self.image_items],
             "table_items": [it.to_dict() for it in self.table_items],
         }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Result Presenters — ported from WPF H.VisionMaster.ResultPresenter/*
+# ═══════════════════════════════════════════════════════════════════════════
+
+class ValueResultPresenter:
+    """Presents individual value items as key-value pairs.
+
+    Ported from C# ValueResultPresenter.
+    Generates rows suitable for a 2-column table (Property | Value).
+    """
+
+    def __init__(self, node_result: NodeResult = None):
+        self._result = node_result
+
+    def set_result(self, result: NodeResult):
+        self._result = result
+
+    def get_rows(self) -> list[tuple[str, str, ResultItemType]]:
+        """Return rows as (name, value_str, type) for table display."""
+        if self._result is None:
+            return []
+        rows: list[tuple[str, str, ResultItemType]] = []
+        rows.append(("节点名称", self._result.node_name, ResultItemType.VALUE))
+        rows.append(("节点类型", self._result.node_type, ResultItemType.VALUE))
+        rows.append(("执行状态", "成功" if self._result.success else "失败",
+                     ResultItemType.VALUE))
+        rows.append(("消息", self._result.message or "-", ResultItemType.VALUE))
+        if self._result.execution_time_ms > 0:
+            rows.append(("耗时", f"{self._result.execution_time_ms:.1f} ms",
+                         ResultItemType.VALUE))
+        for item in self._result.value_items:
+            rows.append((item.name, str(item.value) if item.value is not None else "-",
+                         item.item_type))
+        return rows
+
+
+class DataGridResultPresenter:
+    """Presents structured result items with geometry data for grid display.
+
+    Ported from C# DataGridResultPresenter.
+    Generates rows with columns: Name | Value | X | Y | Width | Height | Score.
+    Supports image viewer linkage via geometry coordinates.
+    """
+
+    COLUMNS = ("名称", "值", "X", "Y", "宽度", "高度", "分数")
+
+    def __init__(self, node_result: NodeResult = None):
+        self._result = node_result
+        self._selected_rows: set[int] = set()
+
+    def set_result(self, result: NodeResult):
+        self._result = result
+        self._selected_rows.clear()
+
+    def get_rows(self) -> list[dict]:
+        """Return rows as list of dicts with column values."""
+        if self._result is None:
+            return []
+        rows: list[dict] = []
+        for item in self._result.rectangle_items:
+            rows.append({"名称": item.name, "值": str(item.value or ""),
+                         "X": str(item.x), "Y": str(item.y),
+                         "宽度": str(item.width), "高度": str(item.height),
+                         "分数": "", "type": ResultItemType.RECTANGLE,
+                         "geometry": item.rect})
+        for item in self._result.score_rectangle_items:
+            rows.append({"名称": item.name, "值": str(item.value or ""),
+                         "X": str(item.x), "Y": str(item.y),
+                         "宽度": str(item.width), "高度": str(item.height),
+                         "分数": f"{item.score:.3f}", "type": ResultItemType.SCORE_RECTANGLE,
+                         "geometry": item.rect})
+        for item in self._result.line_items:
+            rows.append({"名称": item.name, "值": str(item.value or ""),
+                         "X": f"{item.x1:.1f}", "Y": f"{item.y1:.1f}",
+                         "宽度": f"{item.x2:.1f}", "高度": f"{item.y2:.1f}",
+                         "分数": "", "type": ResultItemType.LINE,
+                         "geometry": item.points})
+        return rows
+
+    def select_row(self, index: int) -> dict | None:
+        """Select a row and return its geometry for image viewer linkage."""
+        rows = self.get_rows()
+        if 0 <= index < len(rows):
+            self._selected_rows.add(index)
+            return rows[index]
+        return None
+
+    def deselect_all(self):
+        self._selected_rows.clear()
+
+    @property
+    def selected_indices(self) -> set[int]:
+        return set(self._selected_rows)

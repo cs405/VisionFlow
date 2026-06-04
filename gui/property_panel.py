@@ -13,6 +13,7 @@ Features:
 """
 
 import cv2
+import os
 import numpy as np
 from enum import Enum
 from typing import Any, Callable
@@ -20,7 +21,7 @@ from typing import Any, Callable
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QScrollArea, QFormLayout,
                               QLineEdit, QSpinBox, QDoubleSpinBox, QCheckBox,
                               QComboBox, QLabel, QPushButton, QGroupBox,
-                              QHBoxLayout, QFileDialog, QSlider)
+                              QHBoxLayout, QFileDialog, QSlider, QListWidget)
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 
 from core.node_base import (
@@ -166,6 +167,105 @@ def _create_color_editor(parent, prop_name, prop_desc, current_value):
         btn.setEnabled(False)
 
     return container, btn
+
+
+@register_editor("file_collection")
+def _create_file_collection_editor(parent, prop_name, prop_desc, current_value):
+    """Multi-file path editor with list display and add/remove buttons."""
+    container = QWidget(parent)
+    lo = QVBoxLayout(container)
+    lo.setContentsMargins(0, 0, 0, 0)
+    lo.setSpacing(4)
+
+    top = QHBoxLayout()
+    top.setContentsMargins(0, 0, 0, 0)
+    top.setSpacing(4)
+
+    label = QLabel(f"{len(current_value) if isinstance(current_value, list) else 0} 个文件")
+    label.setStyleSheet("color: #999; font-size: 11px;")
+    top.addWidget(label, 1)
+
+    add_btn = QPushButton("添加文件")
+    add_btn.setFixedHeight(24)
+    top.addWidget(add_btn)
+
+    add_dir_btn = QPushButton("添加文件夹")
+    add_dir_btn.setFixedHeight(24)
+    top.addWidget(add_dir_btn)
+
+    clr_btn = QPushButton("清空")
+    clr_btn.setFixedHeight(24)
+    top.addWidget(clr_btn)
+
+    lo.addLayout(top)
+
+    list_w = QListWidget()
+    list_w.setMaximumHeight(80)
+    list_w.setStyleSheet("QListWidget { background: #333337; border: 1px solid #3f3f46; color: #dcdcdc; font-size: 11px; }")
+    lo.addWidget(list_w)
+
+    def _refresh():
+        files = getattr(parent._current_node, prop_name, []) if parent._current_node else []
+        if not isinstance(files, list):
+            files = [files] if files else []
+        list_w.clear()
+        for f in files:
+            list_w.addItem(os.path.basename(str(f)) if isinstance(f, str) else str(f))
+        label.setText(f"{len(files)} 个文件")
+
+    def _add():
+        from PyQt5.QtWidgets import QFileDialog
+        paths, _ = QFileDialog.getOpenFileNames(parent, "选择文件", "",
+                                                  "图像文件 (*.png *.jpg *.bmp *.tiff);;所有文件 (*.*)")
+        if paths and parent._current_node:
+            existing = list(getattr(parent._current_node, prop_name, []) or [])
+            for p in paths:
+                if p not in existing:
+                    existing.append(p)
+            parent._set_property_value(prop_name, existing)
+            _refresh()
+
+    def _add_dir():
+        from PyQt5.QtWidgets import QFileDialog
+        import os as _os
+        folder = QFileDialog.getExistingDirectory(parent, "选择文件夹")
+        if folder and parent._current_node:
+            existing = list(getattr(parent._current_node, prop_name, []) or [])
+            for fn in _os.listdir(folder):
+                fp = _os.path.join(folder, fn)
+                if _os.path.isfile(fp) and fp not in existing:
+                    existing.append(fp)
+            parent._set_property_value(prop_name, existing)
+            _refresh()
+
+    def _clear():
+        if parent._current_node:
+            parent._set_property_value(prop_name, [])
+            _refresh()
+
+    add_btn.clicked.connect(_add)
+    add_dir_btn.clicked.connect(_add_dir)
+    clr_btn.clicked.connect(_clear)
+    _refresh()
+
+    if prop_desc.readonly:
+        add_btn.setEnabled(False); add_dir_btn.setEnabled(False); clr_btn.setEnabled(False)
+
+    return container, add_btn
+
+
+@register_editor("image_selector")
+def _create_image_selector_editor(parent, prop_name, prop_desc, current_value):
+    """Dropdown selector for available result images."""
+    combo = QComboBox(parent)
+    combo.addItem("(自动)", None)
+    if parent._current_node and hasattr(parent._current_node, 'result_images'):
+        for img in parent._current_node.result_images:
+            combo.addItem(img.name, img)
+    combo.setStyleSheet("QComboBox { background: #333337; color: #dcdcdc; border: 1px solid #3f3f46; padding: 4px 8px; }")
+    if prop_desc.readonly:
+        combo.setEnabled(False)
+    return combo, combo
 
 
 # ── Property Panel ────────────────────────────────────────────────────────
@@ -464,7 +564,6 @@ class PropertyPanel(QWidget):
     def _wire_control(self, control, container, prop_name, prop_desc, current_value):
         """Wire a custom editor's control to the property system."""
         self._property_widgets[prop_name] = container
-        # Try different common signal types
         if isinstance(control, QSpinBox):
             control.valueChanged.connect(lambda v, n=prop_name: self._set_property_value(n, v))
         elif isinstance(control, QDoubleSpinBox):
@@ -478,6 +577,21 @@ class PropertyPanel(QWidget):
             control.textChanged.connect(lambda v, n=prop_name: self._set_property_value(n, v))
         elif isinstance(control, QSlider):
             control.valueChanged.connect(lambda v, n=prop_name: self._set_property_value(n, v))
+
+        # Validation feedback
+        if prop_desc.validator and isinstance(control, (QLineEdit, QSpinBox, QDoubleSpinBox)):
+            def _validate(val=None, ctrl=control, vfn=prop_desc.validator):
+                ok, msg = vfn(val if val is not None else (
+                    ctrl.value() if hasattr(ctrl, 'value') else ctrl.text()))
+                style = "border: 1px solid #3f3f46;" if ok else "border: 1px solid #f44336;"
+                if isinstance(ctrl, QLineEdit):
+                    ctrl.setStyleSheet(f"background: #333337; color: #dcdcdc; {style} padding: 4px 8px;")
+                if not ok:
+                    ctrl.setToolTip(msg)
+            if isinstance(control, QLineEdit):
+                control.textChanged.connect(_validate)
+            elif isinstance(control, (QSpinBox, QDoubleSpinBox)):
+                control.valueChanged.connect(_validate)
 
     # ── HSV Triplet ───────────────────────────────────────────────────
 

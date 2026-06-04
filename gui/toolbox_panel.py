@@ -6,7 +6,8 @@ Shows nodes grouped by category. Supports favorites, search, and context menu.
 
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QTreeWidget, QTreeWidgetItem,
                               QLineEdit, QHBoxLayout, QLabel, QApplication,
-                              QMenu, QAction, QToolButton)
+                              QMenu, QAction, QToolButton, QListWidget,
+                              QListWidgetItem, QStackedWidget)
 from PyQt5.QtCore import Qt, pyqtSignal, QSettings
 from PyQt5.QtGui import QFont, QColor, QIcon
 
@@ -89,7 +90,16 @@ class ToolboxPanel(QWidget):
         self._tree_btn.setCheckable(True)
         self._tree_btn.setChecked(True)
         self._tree_btn.setStyleSheet(btn_style)
+        self._tree_btn.clicked.connect(lambda: self._switch_view(0))
         h_layout.addWidget(self._tree_btn)
+
+        self._list_btn = QToolButton()
+        self._list_btn.setText("📋")
+        self._list_btn.setToolTip("列表视图")
+        self._list_btn.setCheckable(True)
+        self._list_btn.setStyleSheet(btn_style)
+        self._list_btn.clicked.connect(lambda: self._switch_view(1))
+        h_layout.addWidget(self._list_btn)
 
         refresh_btn = QToolButton()
         refresh_btn.setText("↻")
@@ -113,6 +123,9 @@ class ToolboxPanel(QWidget):
         self.search_box.textChanged.connect(self._on_search)
         layout.addWidget(self.search_box)
 
+        # Stacked widget: tree view (0) + list view (1)
+        self._view_stack = QStackedWidget()
+
         # Tree widget
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
@@ -123,7 +136,21 @@ class ToolboxPanel(QWidget):
         self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self._on_context_menu)
         self.tree.itemDoubleClicked.connect(self._on_item_double_clicked)
-        layout.addWidget(self.tree)
+        self._view_stack.addWidget(self.tree)
+
+        # List widget (flat view)
+        self._list = QListWidget()
+        self._list.setFont(QFont("Segoe UI", 10))
+        self._list.setDragEnabled(True)
+        self._list.setDragDropMode(self._list.DragOnly)
+        self._list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self._list.customContextMenuRequested.connect(self._on_list_context_menu)
+        self._list.itemDoubleClicked.connect(self._on_list_item_double_clicked)
+        self._list.setStyleSheet("QListWidget { background: #252526; color: #dcdcdc; border: none; outline: none; } QListWidget::item { padding: 4px 8px; } QListWidget::item:hover { background: #2a2d2e; } QListWidget::item:selected { background: #094771; }")
+        self._view_stack.addWidget(self._list)
+
+        self._view_stack.setCurrentIndex(0)
+        layout.addWidget(self._view_stack)
 
         # Stats footer
         self._stats_label = QLabel()
@@ -218,6 +245,37 @@ class ToolboxPanel(QWidget):
         self._stats_label.setText(f"  {total_groups} 个分组 · {total_nodes} 个节点"
                                   f"{' · ★ 收藏 ' + str(len(self._favorites)) + ' 个' if self._favorites else ''}")
 
+        # ── Populate flat list view ──
+        self._list.clear()
+        for type_name in self._favorites:
+            node_type = node_registry.get_type(type_name)
+            if node_type:
+                item = QListWidgetItem(f"★  {type_name}")
+                item.setData(Qt.UserRole, type_name)
+                item.setForeground(QColor("#ffd700"))
+                self._list.addItem(item)
+        if self._favorites:
+            sep = QListWidgetItem("──────────────")
+            sep.setFlags(Qt.NoItemFlags)
+            sep.setForeground(QColor("#555"))
+            self._list.addItem(sep)
+
+        for group in node_data_group_manager.get_all_groups():
+            if not group.node_types:
+                continue
+            icon = GROUP_ICONS.get(group.name, "📁")
+            hdr = QListWidgetItem(f"{icon}  {group.name}")
+            hdr.setFlags(Qt.NoItemFlags)
+            hdr.setForeground(QColor(GROUP_COLORS.get(group.name, "#dcdcdc")))
+            font = QFont("Segoe UI", 10, QFont.Bold)
+            hdr.setFont(font)
+            self._list.addItem(hdr)
+            for node_type in group.node_types:
+                item = QListWidgetItem(f"     {node_type.__name__}")
+                item.setData(Qt.UserRole, node_type.__name__)
+                item.setForeground(QColor("#dcdcdc"))
+                self._list.addItem(item)
+
     def _add_node_item(self, parent: QTreeWidgetItem, node_type: type, is_fav: bool = False):
         """Add a single node type entry under a group."""
         dn = node_type.__name__
@@ -232,9 +290,15 @@ class ToolboxPanel(QWidget):
         else:
             item.setForeground(0, QColor("#dcdcdc"))
 
+    def _switch_view(self, index: int):
+        self._view_stack.setCurrentIndex(index)
+        self._tree_btn.setChecked(index == 0)
+        self._list_btn.setChecked(index == 1)
+
     # ── Search ───────────────────────────────────────────────────────
 
     def _on_search(self, text: str):
+        # Tree view search
         for i in range(self.tree.topLevelItemCount()):
             group_item = self.tree.topLevelItem(i)
             group_visible = False
@@ -246,6 +310,37 @@ class ToolboxPanel(QWidget):
                 else:
                     child.setHidden(True)
             group_item.setHidden(not group_visible)
+        # List view search
+        for i in range(self._list.count()):
+            item = self._list.item(i)
+            item.setHidden(bool(text and text.lower() not in item.text().lower()))
+
+    # ── List view context menu & double-click ────────────────────────
+
+    def _on_list_context_menu(self, pos):
+        item = self._list.itemAt(pos)
+        if item is None: return
+        type_name = item.data(Qt.UserRole)
+        if not type_name: return
+        menu = QMenu(self)
+        menu.setStyleSheet("QMenu { background: #2d2d30; color: #dcdcdc; border: 1px solid #505050; } QMenu::item { padding: 6px 20px; } QMenu::item:selected { background: #0078d4; }")
+        create_act = QAction("创建节点", self)
+        create_act.triggered.connect(lambda: self.node_type_selected.emit(type_name))
+        menu.addAction(create_act)
+        menu.addSeparator()
+        if self.is_favorite(type_name):
+            fav_act = QAction("★ 取消收藏", self)
+            fav_act.triggered.connect(lambda: self.remove_favorite(type_name))
+        else:
+            fav_act = QAction("☆ 添加到收藏", self)
+            fav_act.triggered.connect(lambda: self.add_favorite(type_name))
+        menu.addAction(fav_act)
+        menu.exec_(self._list.viewport().mapToGlobal(pos))
+
+    def _on_list_item_double_clicked(self, item: QListWidgetItem):
+        type_name = item.data(Qt.UserRole)
+        if type_name:
+            self.node_type_selected.emit(type_name)
 
     # ── Context Menu ─────────────────────────────────────────────────
 

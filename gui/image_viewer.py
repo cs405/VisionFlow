@@ -686,6 +686,47 @@ class ImageViewer(QGraphicsView):
     def get_all_overlays(self) -> dict[str, OverlayItem]:
         return dict(self._overlays)
 
+    # ── Video frame support ──────────────────────────────────────────
+
+    def show_video_frame(self, frame: np.ndarray, frame_index: int = 0,
+                          total_frames: int = 0, fps: float = 0.0):
+        """Display a video frame with overlay indicator.
+
+        Args:
+            frame: numpy array (BGR)
+            frame_index: current frame number (0-based)
+            total_frames: total frames in video
+            fps: frames per second
+        """
+        self.set_image(frame)
+        if total_frames > 0:
+            info = f"视频帧 {frame_index + 1}/{total_frames}"
+            if fps > 0:
+                info += f" @ {fps:.1f} FPS"
+            self._show_frame_overlay(info)
+
+    def _show_frame_overlay(self, text: str):
+        """Show a semi-transparent overlay with frame info at the top-left."""
+        self._clear_frame_overlay()
+        overlay = self._scene.addRect(0, 0, 300, 28, QPen(Qt.NoPen),
+                                       QBrush(QColor(0, 0, 0, 140)))
+        overlay.setZValue(100)
+        self._frame_overlay_items = [overlay]
+        txt = self._scene.addText(text, QFont("Segoe UI", 10))
+        txt.setDefaultTextColor(QColor("#00ff00"))
+        txt.setPos(6, 4)
+        txt.setZValue(101)
+        self._frame_overlay_items.append(txt)
+
+    def _clear_frame_overlay(self):
+        for item in getattr(self, '_frame_overlay_items', []):
+            self._scene.removeItem(item)
+        self._frame_overlay_items = []
+
+    def clear_video_frame(self):
+        """Remove video frame overlay."""
+        self._clear_frame_overlay()
+
     # ── Resize ────────────────────────────────────────────────────────
 
     def resizeEvent(self, event):

@@ -50,6 +50,7 @@ from gui.toolbox_panel import ToolboxPanel
 from gui.property_panel import PropertyPanel
 from gui.result_panel import ResultPanel
 from gui.image_viewer import ImageViewerPanel
+from gui.dock_manager import DockManager
 from gui.log_panel import LogPanel
 from gui.flow_resource_panel import FlowResourcePanel
 from gui.node_editor.editor_widget import DiagramEditorWidget
@@ -314,55 +315,60 @@ class MainWindow(QMainWindow):
     # ── Central Area ──────────────────────────────────────────────────
 
     def _setup_central_area(self):
-        """Build the full content: left | center (top+bottom) | right."""
-        cw = QWidget(); self.setCentralWidget(cw)
+        """Build content with QDockWidget left/right + center (top+bottom splitter)."""
+        # ── CENTER widget (vertical splitter: top area | bottom result) ──
+        cw = QWidget()
         root = QVBoxLayout(cw); root.setContentsMargins(0, 0, 0, 0); root.setSpacing(0)
 
-        # ── Main vertical splitter: [top area] | [bottom result area] ──
         self._bottom_splitter = QSplitter(Qt.Vertical)
         self._bottom_splitter.setHandleWidth(2)
         self._bottom_splitter.setStyleSheet("QSplitter::handle { background: #505050; }")
 
-        # ── TOP: horizontal splitter: LEFT | CENTER | RIGHT ──
-        self._main_splitter = QSplitter(Qt.Horizontal)
-        self._main_splitter.setHandleWidth(2)
-
-        self._setup_left_panel()      # toolbox + log
         self._setup_center_panel()    # diagram editor / image viewer / module results
-        self._setup_right_panel()     # diagram flow tabs
 
-        lw = _ps.get_i("left_width", 260)
-        rw = _ps.get_i("right_width", 280)
-        cw_w = self.width() - lw - rw - 6
-        self._main_splitter.setSizes([lw, max(400, cw_w), rw])
-        self._main_splitter.splitterMoved.connect(self._save_h_sizes)
+        self._bottom_splitter.addWidget(self._center_widget)
 
-        self._bottom_splitter.addWidget(self._main_splitter)
-
-        # ── BOTTOM: tabbed result area (history | current | help) ──
+        # Bottom: tabbed result area
         self._setup_bottom_panel()
-
         bh = _ps.get_i("bottom_height", 160)
         self._bottom_splitter.setSizes([self.height() - bh - 80, bh])
 
         root.addWidget(self._bottom_splitter, 1)
+        self.setCentralWidget(cw)
 
-    # ── LEFT PANEL ────────────────────────────────────────────────────
+        # ── QDockWidget-based LEFT & RIGHT panels ──
+        self._dock_mgr = DockManager(self)
 
-    def _setup_left_panel(self):
-        tabs = QTabWidget()
-        tabs.setFixedWidth(_ps.get_i("left_width", 260))
-        tabs.setStyleSheet(_TAB_STYLE)
-
+        # Left dock: toolbox + log
+        lw = QTabWidget()
+        lw.setStyleSheet(_TAB_STYLE)
         self._toolbox = ToolboxPanel()
-        tabs.addTab(self._toolbox, "工具箱")
-
+        lw.addTab(self._toolbox, "工具箱")
         self._log_panel = LogPanel()
-        tabs.addTab(self._log_panel, "日志")
+        lw.addTab(self._log_panel, "日志")
+        self._dock_mgr.register("left_toolbox", "工具箱 / 日志", lw,
+                                Qt.LeftDockWidgetArea, True, 260, True, False)
+        self._dock_mgr.attach("left_toolbox")
 
-        self._main_splitter.addWidget(tabs)
-        # save ref for visibility toggling
-        self._left_tabs = tabs
+        # Right dock: diagram flow tabs
+        self._setup_right_panel()
+        self._dock_mgr.register("right_diagram", "流程图标签", self._diagram_right_widget,
+                                Qt.RightDockWidgetArea, True, 280, True, False)
+        self._dock_mgr.attach("right_diagram")
+
+        # Restore saved dock state
+        self._dock_mgr.restore_state()
+
+    def closeEvent(self, ev):
+        self._dock_mgr.save_state()
+        _ps.set_i("window_width", self.width())
+        _ps.set_i("window_height", self.height())
+        if hasattr(self, '_bottom_splitter'):
+            sizes = self._bottom_splitter.sizes()
+            if len(sizes) >= 2:
+                _ps.set_i("bottom_height", sizes[1])
+        self._clock.stop()
+        super().closeEvent(ev)
 
     # ── CENTER PANEL ──────────────────────────────────────────────────
 
@@ -375,56 +381,46 @@ class MainWindow(QMainWindow):
         self._center_tabs = QTabWidget()
         self._center_tabs.setStyleSheet(_TAB_STYLE)
 
-        # Tab 1: Diagram Editor (node canvas)
         self._diagram_editor = DiagramEditorWidget()
         self._center_tabs.addTab(self._diagram_editor, "流程编辑")
 
-        # Tab 2: Image Preview
         self._img_panel = ImageViewerPanel()
         self._center_tabs.addTab(self._img_panel, "图像预览")
 
-        # Tab 3: Module Results → property panel for selected node
         self._property_panel = PropertyPanel()
         self._center_tabs.addTab(self._property_panel, "模块结果")
 
         lo.addWidget(self._center_tabs, 1)
 
-        # Image source file list (hidden by default)
         self._resource_panel = FlowResourcePanel()
         self._resource_panel.setFixedHeight(110)
         self._resource_panel.setVisible(False)
         lo.addWidget(self._resource_panel)
 
-        self._main_splitter.addWidget(w)
+        self._center_widget = w
 
     # ── RIGHT PANEL (Diagram Flow Tabs) ──────────────────────────────
 
     def _setup_right_panel(self):
-        """Right side: diagram flow tab bar with Start/Stop/Reset per tab +
-        a Zoombox-like container showing the diagram overview."""
+        """Right side: diagram flow tab bar with Start/Stop/Reset per tab."""
         w = QWidget()
         lo = QVBoxLayout(w); lo.setContentsMargins(0, 0, 0, 0); lo.setSpacing(0)
 
-        # Diagram flow tabs
         self._diagram_tab_widget = QTabWidget()
         self._diagram_tab_widget.setStyleSheet(_TAB_STYLE)
         self._diagram_tab_widget.setTabsClosable(True)
         self._diagram_tab_widget.tabCloseRequested.connect(self._on_close_diagram_tab)
         self._diagram_tab_widget.currentChanged.connect(self._on_diagram_tab_changed)
 
-        # Add "+" button tab
         add_btn = QPushButton("+")
         add_btn.setFixedSize(24, 24)
         add_btn.setStyleSheet("QPushButton { background: transparent; border: none; color: #0078d4; font-size: 16px; font-weight: bold; } QPushButton:hover { color: #1a8ad4; }")
         add_btn.clicked.connect(self._on_add_diagram)
         self._diagram_tab_widget.setCornerWidget(add_btn, Qt.TopRightCorner)
 
-        # Default "main" diagram tab
         self._diagram_tab_widget.addTab(QLabel("主流程图"), "main")
-
         lo.addWidget(self._diagram_tab_widget, 1)
 
-        # Controls below tabs: Start / Stop / Reset
         ctrl = QWidget()
         ctrl.setFixedHeight(32)
         ctrl.setStyleSheet("background: #2d2d30; border-top: 1px solid #3f3f46;")
@@ -440,10 +436,7 @@ class MainWindow(QMainWindow):
         clo.addStretch()
 
         lo.addWidget(ctrl)
-
-        w.setFixedWidth(_ps.get_i("right_width", 280))
         self._diagram_right_widget = w
-        self._main_splitter.addWidget(w)
 
     def _on_add_diagram(self):
         name = f"流程图{self._diagram_tab_widget.count()}"
@@ -585,12 +578,11 @@ class MainWindow(QMainWindow):
         self._diagram_editor.node_selected.connect(self._on_editor_node_selected)
         self._diagram_editor.node_deselected.connect(lambda: self._select_node(None))
         self._property_panel.set_image_viewer(self._img_panel.viewer)
-
-    def _save_h_sizes(self):
-        sizes = self._main_splitter.sizes()
-        if len(sizes) >= 3:
-            _ps.set_i("left_width", sizes[0])
-            _ps.set_i("right_width", sizes[2])
+        # Log panel: jump to node on entry click
+        self._log_panel.node_jump_requested.connect(self._jump_to_node)
+        # Result panel: also support node jump from history
+        if hasattr(self, '_history_table'):
+            pass  # history click handled in _on_history_double_click
 
     # ── Events ────────────────────────────────────────────────────────
 
@@ -811,16 +803,23 @@ class MainWindow(QMainWindow):
     def _on_stop_workflow(self):
         if self._workflow: self._workflow.stop(); self._log_panel.warning("流程已停止")
 
+    def _jump_to_node(self, node_id: str):
+        """Jump to and select a node by its ID."""
+        if self._workflow:
+            node = self._workflow.get_node(node_id)
+            if node:
+                self._select_node(node)
+                self._center_tabs.setCurrentIndex(0)  # switch to diagram tab
+
     # ── Panel Toggle ──────────────────────────────────────────────────
 
     def toggle_left_panel(self):
-        v = not self._left_tabs.isVisible(); self._left_tabs.setVisible(v)
-        _ps.set_b("left_visible", v)
+        if hasattr(self, '_dock_mgr'):
+            self._dock_mgr.toggle("left_toolbox")
 
     def toggle_right_panel(self):
-        v = not self._diagram_right_widget.isVisible()
-        self._diagram_right_widget.setVisible(v)
-        _ps.set_b("right_visible", v)
+        if hasattr(self, '_dock_mgr'):
+            self._dock_mgr.toggle("right_diagram")
 
     @property
     def active_workflow(self) -> WorkflowEngine | None:
