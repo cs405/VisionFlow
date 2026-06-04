@@ -74,7 +74,7 @@ class ToolboxPanel(QWidget):
         h_layout.setContentsMargins(8, 0, 4, 0)
         h_layout.setSpacing(4)
 
-        title = QLabel("流程功能列表")
+        title = QLabel("流程资源")
         title.setStyleSheet("color: #dcdcdc; font-size: 12px; font-weight: bold;")
         h_layout.addWidget(title, 1)
 

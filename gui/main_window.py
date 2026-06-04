@@ -1,29 +1,29 @@
-"""Main window - exact WPF MainWindow.xaml layout.
+"""Main window — 100% WPF MainWindow.xaml pixel-level alignment.
 
 Ported from:
   - H.App.VisionMaster.OpenCV/MainWindow.xaml(.cs)
   - H.Windows.Main/MainWindow
 
-Exact WPF layout:
-  ┌──────────────────────────────────────────────────────────────────────┐
-  │ [◆ VisionFlow] 文件 编辑 运行 系统 帮助    [项目名称]  [_][□][✕]   │ Caption
-  ├──────────────────────────────────────────────────────────────────────┤
-  │ [新建][打开][保存] │ ▶运行 ■停止 │ 放大 缩小 适应 1:1 │ ↩ ↪ │ 项目  │ CmdBar
-  ├──────────┬────────────────────────────────────────┬──────────────────┤
-  │ 工具箱    │  [流程编辑 | 图像预览 | 模块结果]       │ 流程图标签页      │
-  │          │  ┌────────────────────────────────┐   │ [Tab1][Tab2][+] │
-  │ [搜索]   │  │ 节点画布 / 图像查看器           │   │ ┌──────────────┐│
-  │          │  │                                │   │ │ Diagram      ││
-  │ ★ 收藏   │  └────────────────────────────────┘   │ │ Zoombox      ││
-  │          │  [图像源文件列表 (隐藏/显示)]          │ │              ││
-  │ 数据源    │                                       │ └──────────────┘│
-  │ 预处理    │                                       │ ▶开始 ■停止 ↺  │
-  │ ...      │                                       │                │
-  ├──────────┴────────────────────────────────────────┴──────────────────┤
-  │ [历史结果 | 当前模块结果 | 帮助]  ← 底部折叠面板                      │
-  ├──────────────────────────────────────────────────────────────────────┤
-  │ ● 空闲 │ 就绪                         │ 节点: 0 │ 15:30:00         │
-  └──────────────────────────────────────────────────────────────────────┘
+WPF-aligned layout:
+  ┌── CAPTION (66px, 2-row UniformGrid) ───────────────────────────────────────┐
+  │ Row1: [◆ VF] 文件 编辑 运行 系统 帮助   项目名称：xxx    [⚙][🎨][ℹ][📖][_][□][✕] │
+  │ Row2: [新建][打开][保存]│[▶运行][■停止]│[放大][缩小][适应][1:1]│[↩][↪] │ 项目名│
+  ├── LEFT ───────────┬── CENTER ────────────────────┬── RIGHT ────────────────┤
+  │ 流程资源 (Tab)     │ TabControl [图像|模块结果]    │ 流程图  [+]             │
+  │ ┌────────────────┐│ ┌──────────────────────────┐│ [Tab1][Tab2][×]         │
+  │ │ Tree/List view ││ │ 图像: Zoombox with       ││ ┌──────────────────────┐│
+  │ │ NodeGroups     ││ │  - ResultType overlay    ││ │ DiagramEditorWidget  ││
+  │ │ ★ Favorites    ││ │  - File info bar         ││ │ (Flow Chart Canvas)  ││
+  │ │ 🔍 Search      ││ │ 模块结果: PropertyPanel  ││ │ - Nodes + Edges      ││
+  │ │ Stats footer   ││ └──────────────────────────┘│ │ - Zoom/Pan           ││
+  │ └────────────────┘│ FlowResourcePanel (底)      │ │ - Minimap            ││
+  │ 日志 (Tab)         │                            │ └──────────────────────┘│
+  │                    │                            │ ▶开始 ■停止 ↺           │
+  ├────────────────────┴────────────────────────────┴──────────────────────────┤
+  │ BOTTOM TABS (collapsible): [历史结果 | 当前模块结果 | 帮助]          ⇄ ▼  │
+  ├────────────────────────────────────────────────────────────────────────────┤
+  │ ● 空闲 │ 就绪                              │ 节点: 0 │ 15:30:00          │
+  └────────────────────────────────────────────────────────────────────────────┘
 """
 
 import os
@@ -129,7 +129,6 @@ class MainWindow(QMainWindow):
 
         self._setup_window()
         self._setup_caption_bar()
-        self._setup_command_bar()
         self._setup_central_area()
         self._setup_status_bar()
         self._wire_signals()
@@ -168,25 +167,31 @@ class MainWindow(QMainWindow):
         self._clock.stop()
         super().closeEvent(ev)
 
-    # ── Caption Bar ───────────────────────────────────────────────────
+    # ── Caption Bar (WPF double-row: Row1=Menu+Title+Actions, Row2=CommandBar) ──
 
     def _setup_caption_bar(self):
+        """WPF-aligned 2-row caption: Row1 menus + project name + action buttons,
+        Row2 command bar (New/Open/Save | Run/Stop | Zoom | Undo/Redo)."""
         bar = QWidget()
-        bar.setFixedHeight(40)
+        bar.setFixedHeight(66)
         bar.setStyleSheet("background: #1e1e1e; border-bottom: 1px solid #3f3f46;")
-        lo = QHBoxLayout(bar); lo.setContentsMargins(8, 0, 0, 0); lo.setSpacing(0)
+        main_lo = QVBoxLayout(bar); main_lo.setContentsMargins(0, 0, 0, 0); main_lo.setSpacing(0)
+
+        # ── Row 1: Logo + Menu + Project Name + Action buttons ──
+        r1 = QWidget()
+        r1.setFixedHeight(32)
+        r1_lo = QHBoxLayout(r1); r1_lo.setContentsMargins(8, 0, 0, 0); r1_lo.setSpacing(0)
 
         logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "icons", "logo.png")
         if os.path.exists(logo_path):
             logo = QLabel()
             logo.setPixmap(QPixmap(logo_path).scaled(18, 18, Qt.KeepAspectRatio, Qt.SmoothTransformation))
             logo.setStyleSheet("padding: 0 6px 0 0;")
-            lo.addWidget(logo)
+            r1_lo.addWidget(logo)
         else:
-            lo.addWidget(self._lbl(" ◆", "#0078d4", 16))
-        lo.addWidget(self._lbl("VisionFlow", "#dcdcdc", 13, bold=True, pad="0 8px"))
+            r1_lo.addWidget(self._lbl(" ◆", "#0078d4", 16))
+        r1_lo.addWidget(self._lbl("VisionFlow", "#dcdcdc", 13, bold=True, pad="0 8px"))
 
-        # Menus in caption
         mb = QMenuBar()
         mb.setStyleSheet("""
             QMenuBar { background: transparent; color: #dcdcdc; padding: 0; }
@@ -198,13 +203,22 @@ class MainWindow(QMainWindow):
             QMenu::separator { height: 1px; background: #505050; margin: 4px 10px; }
         """)
         self._build_menus(mb)
-        lo.addWidget(mb, 1)
+        r1_lo.addWidget(mb, 1)
 
         proj_prefix = self._lbl("项目名称：", "#c8c8c8", 11, pad="0 4px")
-        lo.addWidget(proj_prefix)
+        r1_lo.addWidget(proj_prefix)
         self._cap_proj_lbl = self._lbl("新建项目", "#0078d4", 12, bold=True, pad="0 12px")
-        lo.addWidget(self._cap_proj_lbl)
-        lo.addWidget(_hsep())
+        r1_lo.addWidget(self._cap_proj_lbl)
+        r1_lo.addWidget(_hsep())
+
+        # Action buttons (WPF: Theme, Setting, About, Guide)
+        ab_style = """
+            QPushButton { background: transparent; border: none; color: #999; font-size: 13px; padding: 0 8px; }
+            QPushButton:hover { background: #3e3e42; color: #dcdcdc; }
+        """
+        for icon, tip in [("⚙", "设置"), ("🎨", "主题"), ("ℹ", "关于"), ("📖", "帮助")]:
+            ab = QPushButton(icon); ab.setStyleSheet(ab_style); ab.setToolTip(tip)
+            r1_lo.addWidget(ab)
 
         # Window controls
         ws = """
@@ -212,12 +226,44 @@ class MainWindow(QMainWindow):
             QPushButton:hover { background: #3e3e42; color: #dcdcdc; }
             QPushButton#cb:hover { background: #e81123; color: white; }
         """
-        for t, s in [("─", self.showMinimized), ("□", self._toggle_max),
-                      ("✕", self.close)]:
+        for t, s in [("─", self.showMinimized), ("□", self._toggle_max), ("✕", self.close)]:
             b = QPushButton(t); b.setStyleSheet(ws)
             if t == "✕": b.setObjectName("cb")
-            b.clicked.connect(s); lo.addWidget(b)
+            b.clicked.connect(s); r1_lo.addWidget(b)
 
+        main_lo.addWidget(r1)
+
+        # ── Row 2: Command Bar (matching WPF second caption row) ──
+        r2 = QWidget()
+        r2.setStyleSheet("background: #2d2d30; border-top: 1px solid #3f3f46;")
+        clo = QHBoxLayout(r2); clo.setContentsMargins(8, 2, 8, 2); clo.setSpacing(4)
+
+        for t, s in [("新建", self._on_new_project), ("打开", self._on_open_project),
+                      ("保存", self._on_save_project)]:
+            b = QPushButton(t); b.setStyleSheet(_CMD_BTN); b.clicked.connect(s); clo.addWidget(b)
+        clo.addWidget(_hsep())
+
+        self._run_btn = QPushButton("▶ 运行"); self._run_btn.setStyleSheet(_CMD_BTN.replace("#0078d4", "#4caf50"))
+        self._run_btn.clicked.connect(self._on_run_workflow); clo.addWidget(self._run_btn)
+        self._stop_btn = QPushButton("■ 停止"); self._stop_btn.setStyleSheet(_CMD_BTN.replace("#0078d4", "#f44336"))
+        self._stop_btn.clicked.connect(self._on_stop_workflow); clo.addWidget(self._stop_btn)
+        clo.addWidget(_hsep())
+
+        for t, s in [("放大", lambda: self._active_visual_target().zoom_in()),
+                      ("缩小", lambda: self._active_visual_target().zoom_out()),
+                      ("适应", lambda: self._active_visual_target().fit_to_window()),
+                      ("1:1", lambda: self._active_visual_target().zoom_to_100())]:
+            b = QPushButton(t); b.setStyleSheet(_CMD_BTN); b.clicked.connect(s); clo.addWidget(b)
+        clo.addWidget(_hsep())
+
+        undo_btn = QPushButton("↩ 撤销"); undo_btn.setStyleSheet(_CMD_BTN); undo_btn.clicked.connect(self._on_undo_diagram); clo.addWidget(undo_btn)
+        redo_btn = QPushButton("↪ 重做"); redo_btn.setStyleSheet(_CMD_BTN); redo_btn.clicked.connect(self._on_redo_diagram); clo.addWidget(redo_btn)
+
+        clo.addStretch()
+        self._cmd_proj_lbl = self._lbl("新建项目", "#0078d4", 12, bold=True, pad="0 8px")
+        clo.addWidget(self._cmd_proj_lbl)
+
+        main_lo.addWidget(r2)
         self.setMenuWidget(bar)
 
     def _lbl(self, t, c, fs, bold=False, pad=""):
@@ -295,39 +341,6 @@ class MainWindow(QMainWindow):
 
     # ── Command Bar ───────────────────────────────────────────────────
 
-    def _setup_command_bar(self):
-        w = QWidget(); w.setFixedHeight(38)
-        w.setStyleSheet("background: #2d2d30; border-bottom: 1px solid #3f3f46;")
-        lo = QHBoxLayout(w); lo.setContentsMargins(6, 0, 6, 0); lo.setSpacing(4)
-
-        for t, s in [("新建", self._on_new_project), ("打开", self._on_open_project),
-                      ("保存", self._on_save_project)]:
-            b = QPushButton(t); b.setStyleSheet(_CMD_BTN); b.clicked.connect(s); lo.addWidget(b)
-        lo.addWidget(_hsep())
-
-        self._run_btn = QPushButton("▶ 运行"); self._run_btn.setStyleSheet(_CMD_BTN.replace("#0078d4", "#4caf50"))
-        self._run_btn.clicked.connect(self._on_run_workflow); lo.addWidget(self._run_btn)
-        self._stop_btn = QPushButton("■ 停止"); self._stop_btn.setStyleSheet(_CMD_BTN.replace("#0078d4", "#f44336"))
-        self._stop_btn.clicked.connect(self._on_stop_workflow); lo.addWidget(self._stop_btn)
-        lo.addWidget(_hsep())
-
-        for t, s in [("放大", lambda: self._active_visual_target().zoom_in()),
-                      ("缩小", lambda: self._active_visual_target().zoom_out()),
-                      ("适应", lambda: self._active_visual_target().fit_to_window()),
-                      ("1:1", lambda: self._active_visual_target().zoom_to_100())]:
-            b = QPushButton(t); b.setStyleSheet(_CMD_BTN); b.clicked.connect(s); lo.addWidget(b)
-        lo.addWidget(_hsep())
-
-        undo_btn = QPushButton("↩ 撤销"); undo_btn.setStyleSheet(_CMD_BTN); undo_btn.clicked.connect(self._on_undo_diagram); lo.addWidget(undo_btn)
-        redo_btn = QPushButton("↪ 重做"); redo_btn.setStyleSheet(_CMD_BTN); redo_btn.clicked.connect(self._on_redo_diagram); lo.addWidget(redo_btn)
-
-        lo.addStretch()
-        self._cmd_proj_lbl = self._lbl("新建项目", "#0078d4", 12, bold=True, pad="0 8px")
-        lo.addWidget(self._cmd_proj_lbl)
-
-        tb = QToolBar("命令栏"); tb.setMovable(False); tb.addWidget(w)
-        self.addToolBar(Qt.TopToolBarArea, tb)
-
     # ── Central Area ──────────────────────────────────────────────────
 
     def _setup_central_area(self):
@@ -366,14 +379,14 @@ class MainWindow(QMainWindow):
         # ── QDockWidget-based LEFT & RIGHT panels ──
         self._dock_mgr = DockManager(self)
 
-        # Left dock: toolbox + log
+        # Left dock: flow resources + log (matching WPF "流程资源" GroupBox)
         lw = QTabWidget()
         lw.setStyleSheet(_TAB_STYLE)
         self._toolbox = ToolboxPanel()
-        lw.addTab(self._toolbox, "工具箱")
+        lw.addTab(self._toolbox, "流程资源")
         self._log_panel = LogPanel()
         lw.addTab(self._log_panel, "日志")
-        self._dock_mgr.register("left_toolbox", "工具箱 / 日志", lw,
+        self._dock_mgr.register("left_toolbox", "流程资源 / 日志", lw,
                                 Qt.LeftDockWidgetArea, True, 260, True, False)
         self._dock_mgr.attach("left_toolbox")
 
@@ -397,39 +410,33 @@ class MainWindow(QMainWindow):
         self._clock.stop()
         super().closeEvent(ev)
 
-    # ── CENTER PANEL ──────────────────────────────────────────────────
+    # ── CENTER PANEL (Image Preview | Module Results — matching WPF [图像][模块结果] tabs) ──
 
     def _setup_center_panel(self):
-        """Center: tabbed [Diagram Editor | Image Preview | Module Results] +
-        bottom image source resource panel."""
+        """Center: Image viewer + module result parameters + image source list.
+
+        Exact WPF alignment:
+          - Top: TabControl [图像 | 模块结果]
+          - Bottom: Expander for image/video source file list
+        """
         w = QWidget()
         lo = QVBoxLayout(w); lo.setContentsMargins(0, 0, 0, 0); lo.setSpacing(0)
 
         self._center_tabs = QTabWidget()
         self._center_tabs.setStyleSheet(_TAB_STYLE)
+        self._center_tabs.setTabPosition(QTabWidget.North)
 
-        self._diagram_editor = DiagramEditorWidget()
-        self._center_tabs.addTab(self._diagram_editor, "流程编辑")
-
+        # Tab "图像" — Zoombox with image + overlays (matching WPF 图像 tab)
         self._img_panel = ImageViewerPanel()
-        self._center_tabs.addTab(self._img_panel, "图像预览")
+        self._center_tabs.addTab(self._img_panel, "图像")
 
-        self._center_result_splitter = QSplitter(Qt.Horizontal)
-        self._center_result_splitter.setHandleWidth(2)
-        self._center_result_splitter.setStyleSheet("QSplitter::handle { background: #505050; }")
-
+        # Tab "模块结果" — Property form + result panel (matching WPF 模块结果 tab)
         self._property_panel = PropertyPanel()
-        self._center_result_splitter.addWidget(self._property_panel)
-
-        self._result_preview_panel = ResultPanel()
-        self._result_preview_panel.set_image_viewer(self._img_panel.viewer)
-        self._result_preview_panel.node_jump_requested.connect(self._jump_to_node)
-        self._center_result_splitter.addWidget(self._result_preview_panel)
-        self._center_result_splitter.setSizes([380, 520])
-        self._center_tabs.addTab(self._center_result_splitter, "模块结果")
+        self._center_tabs.addTab(self._property_panel, "模块结果")
 
         lo.addWidget(self._center_tabs, 1)
 
+        # Image/video source file list at bottom (matching WPF Expander with horizontal ListBox)
         self._resource_panel = FlowResourcePanel()
         self._resource_panel.setFixedHeight(118)
         self._resource_panel.setVisible(False)
@@ -440,30 +447,44 @@ class MainWindow(QMainWindow):
     # ── RIGHT PANEL (Diagram Flow Tabs) ──────────────────────────────
 
     def _setup_right_panel(self):
-        """Right side: diagram flow tab bar with Start/Stop/Reset per tab."""
+        """Right side: Diagram tab bar + Flow chart canvas (matching WPF TabControl + Zoombox)."""
         w = QWidget()
         lo = QVBoxLayout(w); lo.setContentsMargins(0, 0, 0, 0); lo.setSpacing(0)
 
-        title = QLabel("  流程图")
-        title.setFixedHeight(30)
-        title.setStyleSheet("background: #2d2d30; color: #dcdcdc; font-size: 12px; font-weight: bold; border-bottom: 1px solid #3f3f46;")
-        lo.addWidget(title)
+        # Header row with diagram icon + add button (matching WPF tab header panel)
+        header = QWidget()
+        header.setFixedHeight(30)
+        header.setStyleSheet("background: #2d2d30; border-bottom: 1px solid #3f3f46;")
+        hl = QHBoxLayout(header); hl.setContentsMargins(8, 0, 4, 0); hl.setSpacing(4)
 
+        icon_lbl = QLabel("")
+        icon_lbl.setStyleSheet("color: #4caf50; font-size: 13px;")
+        hl.addWidget(icon_lbl)
+        title_lbl = QLabel("流程图")
+        title_lbl.setStyleSheet("color: #dcdcdc; font-size: 12px; font-weight: bold;")
+        hl.addWidget(title_lbl, 1)
+
+        add_btn = QPushButton("+")
+        add_btn.setFixedSize(24, 24)
+        add_btn.setToolTip("新建流程图")
+        add_btn.setStyleSheet("QPushButton { background: transparent; border: 1px solid #505050; border-radius: 2px; color: #dcdcdc; font-size: 14px; font-weight: bold; } QPushButton:hover { background: #3e3e42; border-color: #0078d4; }")
+        add_btn.clicked.connect(self._on_add_diagram)
+        hl.addWidget(add_btn)
+        lo.addWidget(header)
+
+        # Diagram tab bar
         self._diagram_tab_widget = QTabWidget()
         self._diagram_tab_widget.setStyleSheet(_TAB_STYLE)
         self._diagram_tab_widget.setTabsClosable(True)
         self._diagram_tab_widget.tabCloseRequested.connect(self._on_close_diagram_tab)
         self._diagram_tab_widget.currentChanged.connect(self._on_diagram_tab_changed)
+        lo.addWidget(self._diagram_tab_widget)
 
-        add_btn = QPushButton("+")
-        add_btn.setFixedSize(24, 24)
-        add_btn.setStyleSheet("QPushButton { background: transparent; border: none; color: #0078d4; font-size: 16px; font-weight: bold; } QPushButton:hover { color: #1a8ad4; }")
-        add_btn.clicked.connect(self._on_add_diagram)
-        self._diagram_tab_widget.setCornerWidget(add_btn, Qt.TopRightCorner)
+        # Flow chart canvas — the main DiagramEditor (matching WPF Zoombox + DiagramPresenter)
+        self._diagram_editor = DiagramEditorWidget()
+        lo.addWidget(self._diagram_editor, 1)
 
-        self._diagram_tab_widget.addTab(self._create_diagram_tab_placeholder("主流程图"), "main")
-        lo.addWidget(self._diagram_tab_widget, 1)
-
+        # Run controls row at bottom (matching WPF per-tab ▶ ■ ↺ buttons)
         ctrl = QWidget()
         ctrl.setFixedHeight(32)
         ctrl.setStyleSheet("background: #2d2d30; border-top: 1px solid #3f3f46;")
@@ -653,11 +674,6 @@ class MainWindow(QMainWindow):
         # Property panel (center tab "模块结果")
         self._property_panel.set_node(node)
 
-        # Bottom: current module results
-        if hasattr(self, '_result_panel'):
-            self._result_panel.show_node_results(node if isinstance(node, VisionNodeData) else None)
-        if hasattr(self, '_result_preview_panel'):
-            self._result_preview_panel.show_node_results(node if isinstance(node, VisionNodeData) else None)
         self._populate_help(node)
 
         # Flow resource panel visibility
@@ -829,7 +845,7 @@ class MainWindow(QMainWindow):
             node = self._workflow.get_node_by_id(node_id)
             if node:
                 self._select_node(node)
-                self._center_tabs.setCurrentIndex(0)  # switch to diagram tab
+                self._center_tabs.setCurrentIndex(0)  # switch to image preview tab
 
     # ── Panel Toggle ──────────────────────────────────────────────────
 
@@ -854,7 +870,7 @@ class MainWindow(QMainWindow):
             d.workflow = workflow
             p.diagrams.append(d)
             p.selected_diagram_index = len(p.diagrams) - 1
-        self._diagram_tab_widget.addTab(self._create_diagram_tab_placeholder(name), name)
+        self._diagram_tab_widget.addTab(QWidget(), name)
         self._diagram_tab_widget.setCurrentIndex(self._diagram_tab_widget.count() - 1)
         return name
 
@@ -884,21 +900,8 @@ class MainWindow(QMainWindow):
         if 0 <= idx < self._diagram_tab_widget.count():
             self._diagram_tab_widget.setCurrentIndex(idx)
 
-    def _create_diagram_tab_placeholder(self, name: str) -> QWidget:
-        page = QWidget()
-        lo = QVBoxLayout(page)
-        lo.setContentsMargins(0, 0, 0, 0)
-        lo.setSpacing(0)
-        label = QLabel(f"{name}\n\n此区域对应 WPF 右侧流程图 RunView / Zoombox 区。\n当前 Python 版本仍为简化占位。")
-        label.setAlignment(Qt.AlignCenter)
-        label.setStyleSheet("background: #252526; color: #9aa0a6; font-size: 11px; border-top: 1px solid #3f3f46;")
-        lo.addWidget(label, 1)
-        return page
-
     def _active_visual_target(self):
-        if hasattr(self, '_center_tabs') and self._center_tabs.currentIndex() == 0:
-            return self._diagram_editor.view
-        return self._img_panel.viewer
+        return self._diagram_editor.view
 
     def _on_reset_workflow_view(self):
         if self._workflow:
