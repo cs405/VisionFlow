@@ -419,7 +419,7 @@ class DiagramEditorWidget(QWidget):
         node = node_registry.create(type_name)
         if node:
             from core.commands import AddNodeCommand
-            self.scene.command_stack.execute(AddNodeCommand(self.scene, node, pos))
+            self.scene.command_stack.execute(AddNodeCommand(self.scene, node, (pos.x(), pos.y())))
 
     # ── Workflow integration ──────────────────────────────────────────
 

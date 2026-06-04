@@ -188,10 +188,18 @@ class _DiagramTabHeader(QWidget):
 
 
 class MainWindow(QMainWindow):
-    """主窗口：按 WPF `MainWindow.xaml` 的区域语义重构。"""
+    """主窗口：按 WPF `MainWindow.xaml` 的区域语义重构。
 
-    def __init__(self):
+    Args:
+        ctx: AppContext DI container. If None, uses get_app_context() fallback.
+    """
+
+    def __init__(self, ctx=None):
         super().__init__()
+        if ctx is None:
+            from services.app_context import get_app_context
+            ctx = get_app_context()
+        self._ctx = ctx
         self._workflow: WorkflowEngine | None = None
         self._selected_node: NodeBase | None = None
         self._diagram_editor: DiagramEditorWidget | None = None
@@ -940,7 +948,7 @@ class MainWindow(QMainWindow):
     def _on_node_type_selected(self, type_name: str):
         if not self._workflow:
             return
-        node = node_registry.create(type_name)
+        node = self._ctx.node_registry.create(type_name) if self._ctx.node_registry else None
         editor = self._current_diagram_editor()
         if node is not None and editor is not None:
             editor.add_node(node, group_name=self._get_group(type_name))

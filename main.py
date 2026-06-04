@@ -1,8 +1,15 @@
 #!/usr/bin/env python3
-"""VisionFlow - Python port of WPF-VisionMaster.
+"""VisionFlow — Python port of WPF-VisionMaster.
 
 A visual workflow editor for computer vision, inspired by VisionMaster.
 Uses PyQt5 for the GUI and OpenCV for image processing.
+
+Architecture:
+  main.py          → bootstrap: creates AppContext, discovers nodes, starts GUI
+  core/            → domain logic (no GUI imports): interfaces, node_base, workflow, events
+  services/        → application layer: bridges core ↔ gui (DI container, node/project/theme services)
+  gui/             → pure UI: panels, editors, controllers (depends on core.interfaces + services)
+  nodes/           → vision processing implementations
 
 Usage:
     python main.py                          # Launch the application
@@ -23,15 +30,71 @@ def setup_logging():
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-        ],
+        handlers=[logging.StreamHandler(sys.stdout)],
     )
+
+
+def bootstrap_app_context():
+    """Create and initialize the application DI container.
+
+    This is the SINGLE place where all services are wired together.
+    No other module should create global singletons.
+    """
+    from services.app_context import AppContext, set_app_context
+
+    ctx = AppContext()
+    ctx.init_defaults()
+
+    # ── Discover and register all node types ──
+    _discover_nodes(ctx)
+
+    set_app_context(ctx)
+    return ctx
+
+
+def _discover_nodes(ctx):
+    """Explicitly discover and register all node types.
+
+    Replaces the old plugin_manager.discover_nodes_package() which
+    relied on import-time side effects.
+    """
+    import importlib
+    import inspect
+    from core.node_base import NodeBase
+
+    # Standard node packages (matching WPF group structure)
+    packages = [
+        ("nodes.sources",          "图像数据源"),
+        ("nodes.preprocessings",   "图像预处理模块"),
+        ("nodes.blurs",            "滤波模块"),
+        ("nodes.takeoffs",         "图像分割提取模块"),
+        ("nodes.morphology",       "形态学模块"),
+        ("nodes.conditions",       "逻辑模块"),
+        ("nodes.template_matchings", "模板匹配模块"),
+        ("nodes.detectors",         "对象识别模块"),
+        ("nodes.features",          "特征提取模块"),
+        ("nodes.others",            "其他模块"),
+        ("nodes.video",             "视频处理模块"),
+        ("nodes.outputs",           "结果输出模块"),
+        ("nodes.onnx",              "Onnx通用模型"),
+        ("nodes.network",           "网络通讯模块"),
+    ]
+
+    for module_name, group_name in packages:
+        try:
+            module = importlib.import_module(module_name)
+            for name, obj in inspect.getmembers(module, inspect.isclass):
+                if not issubclass(obj, NodeBase) or obj is NodeBase:
+                    continue
+                if getattr(obj, '__abstract__', False) or inspect.isabstract(obj):
+                    continue
+                ctx.node_groups.register_node(obj, group_name)
+        except ImportError:
+            pass  # package may not exist
 
 
 def run_cli(project_path: str):
     """Run a project in CLI mode (headless, no GUI)."""
-    import json
     from core.project import ProjectService
     from core.workflow import WorkflowState
 
@@ -55,11 +118,10 @@ def run_cli(project_path: str):
         sys.exit(1)
 
 
-def run_gui(project_path: str = None):
-    """Run the application in GUI mode."""
+def run_gui(ctx, project_path: str = None):
+    """Run the application in GUI mode with dependency injection."""
     setup_logging()
 
-    # Check PyQt availability
     try:
         from PyQt5.QtWidgets import QApplication
         from PyQt5.QtCore import Qt
@@ -74,21 +136,20 @@ def run_gui(project_path: str = None):
     app.setOrganizationName("VisionFlow")
     app.setApplicationVersion("2.0.0")
 
-    icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "icons", "logo.ico")
+    icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "assets", "icons", "logo.ico")
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
 
-    # Apply dark theme
+    # Apply theme via ThemeManager (single source of truth)
+    from gui.theme import theme_manager
     app.setStyle("Fusion")
-    _apply_dark_theme(app)
+    app.setPalette(theme_manager.colors.to_palette())
+    app.setStyleSheet(theme_manager.get_stylesheet())
 
-    # Bootstrap: auto-discover and register all nodes
-    from core.plugin_manager import plugin_manager
-    plugin_manager.discover_nodes_package()
-
-    # Create and show main window
+    # Create and show main window with injected context
     from gui.main_window import MainWindow
-    window = MainWindow()
+    window = MainWindow(ctx=ctx)
     if os.path.exists(icon_path):
         window.setWindowIcon(QIcon(icon_path))
     window.show()
@@ -100,64 +161,24 @@ def run_gui(project_path: str = None):
     sys.exit(app.exec_())
 
 
-def _apply_dark_theme(app):
-    """Apply a dark color palette - ported from H.Themes.Colors.Dark."""
-    from PyQt5.QtGui import QPalette, QColor
-    from PyQt5.QtCore import Qt
-
-    palette = QPalette()
-    palette.setColor(QPalette.Window, QColor(45, 45, 48))
-    palette.setColor(QPalette.WindowText, QColor(220, 220, 220))
-    palette.setColor(QPalette.Base, QColor(30, 30, 30))
-    palette.setColor(QPalette.AlternateBase, QColor(45, 45, 48))
-    palette.setColor(QPalette.ToolTipBase, QColor(60, 60, 60))
-    palette.setColor(QPalette.ToolTipText, QColor(220, 220, 220))
-    palette.setColor(QPalette.Text, QColor(220, 220, 220))
-    palette.setColor(QPalette.Button, QColor(45, 45, 48))
-    palette.setColor(QPalette.ButtonText, QColor(220, 220, 220))
-    palette.setColor(QPalette.BrightText, Qt.red)
-    palette.setColor(QPalette.Link, QColor(42, 130, 218))
-    palette.setColor(QPalette.Highlight, QColor(42, 130, 218))
-    palette.setColor(QPalette.HighlightedText, QColor(0, 0, 0))
-    palette.setColor(QPalette.Disabled, QPalette.Text, QColor(128, 128, 128))
-    palette.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(128, 128, 128))
-    app.setPalette(palette)
-
-    # Dark theme stylesheet
-    app.setStyleSheet("""
-        QToolTip { color: #dcdcdc; background-color: #3c3c3c; border: 1px solid #505050; }
-        QDockWidget { color: #dcdcdc; }
-        QDockWidget::title { background: #2d2d30; padding: 6px; }
-        QMenuBar { background: #2d2d30; color: #dcdcdc; }
-        QMenuBar::item:selected { background: #3e3e42; }
-        QMenu { background: #2d2d30; color: #dcdcdc; border: 1px solid #505050; }
-        QMenu::item:selected { background: #0078d4; }
-        QStatusBar { background: #007acc; color: white; }
-        QStatusBar::item { border: none; }
-        QScrollBar:vertical { background: #1e1e1e; width: 12px; }
-        QScrollBar::handle:vertical { background: #505050; min-height: 20px; }
-        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-        QScrollBar:horizontal { background: #1e1e1e; height: 12px; }
-        QScrollBar::handle:horizontal { background: #505050; min-width: 20px; }
-        QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
-    """)
-
-
 def main():
-    """Main entry point."""
+    """Main entry point — explicit bootstrap, no hidden side effects."""
     import argparse
 
     parser = argparse.ArgumentParser(
         description="VisionFlow - Visual Workflow Editor for Computer Vision"
     )
-    parser.add_argument("--project", "-p", type=str, help="Project file to open (.json)")
-    parser.add_argument("--cli", "-c", type=str, help="Run project in CLI mode (headless)")
+    parser.add_argument("--project", "-p", type=str,
+                        help="Project file to open (.json)")
+    parser.add_argument("--cli", "-c", type=str,
+                        help="Run project in CLI mode (headless)")
     args = parser.parse_args()
 
     if args.cli:
         run_cli(args.cli)
     else:
-        run_gui(args.project)
+        ctx = bootstrap_app_context()
+        run_gui(ctx, args.project)
 
 
 if __name__ == "__main__":

@@ -347,7 +347,7 @@ class DiagramScene(QGraphicsScene):
                 if "data" in clip and clip["data"]:
                     node.from_dict(clip["data"]) if hasattr(node, 'from_dict') else None
                 pos = QPointF(clip.get("x", 0) + offset, clip.get("y", 0) + offset)
-                batch.add(AddNodeCommand(self, node, pos))
+                batch.add(AddNodeCommand(self, node, (pos.x(), pos.y()) if hasattr(pos, 'x') else pos))
         self._cmd_stack.execute(batch)
         self.status_message.emit(f"已粘贴 {len(self._clipboard)} 个节点")
         self._clipboard.clear()
@@ -366,37 +366,37 @@ class DiagramScene(QGraphicsScene):
             for n in nodes:
                 old = n.pos()
                 new = QPointF(x_min + n._node_w / 2, old.y())
-                batch.add(MoveNodeCommand(self, n.node_data.node_id, old, new))
+                batch.add(MoveNodeCommand(self, n.node_data.node_id, (old.x(), old.y()), (new.x(), new.y())))
         elif mode == "right":
             x_max = max(n.pos().x() + n._node_w / 2 for n in nodes)
             for n in nodes:
                 old = n.pos()
                 new = QPointF(x_max - n._node_w / 2, old.y())
-                batch.add(MoveNodeCommand(self, n.node_data.node_id, old, new))
+                batch.add(MoveNodeCommand(self, n.node_data.node_id, (old.x(), old.y()), (new.x(), new.y())))
         elif mode == "top":
             y_min = min(n.pos().y() - n._node_h / 2 for n in nodes)
             for n in nodes:
                 old = n.pos()
                 new = QPointF(old.x(), y_min + n._node_h / 2)
-                batch.add(MoveNodeCommand(self, n.node_data.node_id, old, new))
+                batch.add(MoveNodeCommand(self, n.node_data.node_id, (old.x(), old.y()), (new.x(), new.y())))
         elif mode == "bottom":
             y_max = max(n.pos().y() + n._node_h / 2 for n in nodes)
             for n in nodes:
                 old = n.pos()
                 new = QPointF(old.x(), y_max - n._node_h / 2)
-                batch.add(MoveNodeCommand(self, n.node_data.node_id, old, new))
+                batch.add(MoveNodeCommand(self, n.node_data.node_id, (old.x(), old.y()), (new.x(), new.y())))
         elif mode == "center_h":
             avg_y = sum(n.pos().y() for n in nodes) / len(nodes)
             for n in nodes:
                 old = n.pos()
                 new = QPointF(old.x(), avg_y)
-                batch.add(MoveNodeCommand(self, n.node_data.node_id, old, new))
+                batch.add(MoveNodeCommand(self, n.node_data.node_id, (old.x(), old.y()), (new.x(), new.y())))
         elif mode == "center_v":
             avg_x = sum(n.pos().x() for n in nodes) / len(nodes)
             for n in nodes:
                 old = n.pos()
                 new = QPointF(avg_x, old.y())
-                batch.add(MoveNodeCommand(self, n.node_data.node_id, old, new))
+                batch.add(MoveNodeCommand(self, n.node_data.node_id, (old.x(), old.y()), (new.x(), new.y())))
 
         self._cmd_stack.execute(batch)
 
@@ -415,7 +415,7 @@ class DiagramScene(QGraphicsScene):
             for i, n in enumerate(nodes):
                 old = n.pos()
                 new = QPointF(x_min + i * spacing, old.y())
-                batch.add(MoveNodeCommand(self, n.node_data.node_id, old, new))
+                batch.add(MoveNodeCommand(self, n.node_data.node_id, (old.x(), old.y()), (new.x(), new.y())))
         elif mode == "vertical":
             nodes.sort(key=lambda n: n.pos().y())
             y_min = nodes[0].pos().y()
@@ -424,7 +424,7 @@ class DiagramScene(QGraphicsScene):
             for i, n in enumerate(nodes):
                 old = n.pos()
                 new = QPointF(old.x(), y_min + i * spacing)
-                batch.add(MoveNodeCommand(self, n.node_data.node_id, old, new))
+                batch.add(MoveNodeCommand(self, n.node_data.node_id, (old.x(), old.y()), (new.x(), new.y())))
 
         self._cmd_stack.execute(batch)
 

@@ -22,33 +22,7 @@ from PyQt5.QtGui import QDrag, QColor
 from core.node_group import node_data_group_manager
 from gui.font_icons import FontIcons, FontIconToggleButton
 from gui.widgets.grid_splitter_box import GridSplitterBox, WIDTH_THRESHOLD
-
-
-# ── Group metadata matching WPF ────────────────────────────────────────────
-
-GROUP_META = {
-    "图像数据源":   {"color": "#4a9eff", "icon": FontIcons.Photo2},
-    "系统数据源":   {"color": "#5c6bc0", "icon": FontIcons.Folder},
-    "图像预处理模块": {"color": "#ff8c00", "icon": FontIcons.Color},
-    "滤波模块":     {"color": "#9c27b0", "icon": FontIcons.Filter},
-    "图像分割提取模块": {"color": "#e91e63", "icon": FontIcons.Cut},
-    "形态学模块":   {"color": "#00bcd4", "icon": "⬒"},
-    "逻辑模块":     {"color": "#ff5722", "icon": "⇄"},
-    "模板匹配模块": {"color": "#4caf50", "icon": "⌖"},
-    "对象识别模块": {"color": "#f44336", "icon": "◉"},
-    "特征提取模块": {"color": "#ff9800", "icon": "✣"},
-    "网络通讯模块": {"color": "#795548", "icon": "⌁"},
-    "结果输出模块": {"color": "#607d8b", "icon": "↗"},
-    "Onnx通用模型": {"color": "#c2185b", "icon": "AI"},
-    "其他模块":     {"color": "#607d8b", "icon": "◇"},
-    "视频处理模块": {"color": "#8d6e63", "icon": FontIcons.Video},
-    "★ 收藏":      {"color": "#d7ba7d", "icon": FontIcons.FavoriteStar},
-    "🕐 最近使用":  {"color": "#d7ba7d", "icon": "🕐"},
-}
-
-
-def _group_meta(group_name: str):
-    return GROUP_META.get(group_name, {"color": "#607d8b", "icon": "🧩"})
+from core.constants import get_group_meta as _group_meta
 
 
 # ── Node tile button (grid view) ───────────────────────────────────────────

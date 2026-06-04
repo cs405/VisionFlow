@@ -103,40 +103,10 @@ STATE_COLORS = {
 
 
 # Group → flag color (used when bar is visible in idle state for SOURCE template)
-GROUP_COLORS = {
-    "图像数据源": QColor("#4a9eff"),
-    "系统数据源": QColor("#4a9eff"),
-    "图像预处理模块": QColor("#ff8c00"),
-    "滤波模块": QColor("#9c27b0"),
-    "图像分割提取模块": QColor("#00bcd4"),
-    "形态学模块": QColor("#00bcd4"),
-    "逻辑模块": QColor("#ff9800"),
-    "模板匹配模块": QColor("#4caf50"),
-    "对象识别模块": QColor("#f44336"),
-    "网络通讯模块": QColor("#795548"),
-    "其他模块": QColor("#607d8b"),
-    "结果输出模块": QColor("#607d8b"),
-    "Onnx通用模型": QColor("#e91e63"),
-    "特征提取模块": QColor("#e91e63"),
-    "视频处理模块": QColor("#9c27b0"),
-    "数据源": QColor("#4a9eff"),
-    "图像预处理": QColor("#ff8c00"),
-    "滤波模糊": QColor("#9c27b0"),
-    "图像分割": QColor("#00bcd4"),
-    "形态学": QColor("#00bcd4"),
-    "条件": QColor("#ff9800"),
-    "模板匹配": QColor("#4caf50"),
-    "检测": QColor("#f44336"),
-    "特征提取": QColor("#ff9800"),
-    "视频": QColor("#9c27b0"),
-    "输出": QColor("#607d8b"),
-    "ONNX": QColor("#e91e63"),
-    "网络通讯": QColor("#795548"),
-}
-
+from core.constants import get_group_color, get_group_icon
 
 # Node icon mapping (matching WPF FontIcons per node category)
-NODE_ICONS = {
+_NODE_ICONS = {
     "SrcFilesVisionNodeData": FontIcons.Photo2,
     "ImageFileSource": FontIcons.Photo2,
     "CameraCapture": FontIcons.Camera,
@@ -156,36 +126,14 @@ NODE_ICONS = {
 }
 
 
-def _resolve_node_icon(node_data: NodeBase) -> str:
-    """Resolve the FontIcon for a node, falling back through type hierarchy."""
+def _resolve_node_icon(node_data) -> str:
+    """Resolve FontIcon for a node by type hierarchy → group fallback."""
     cls = type(node_data)
     for base in cls.__mro__:
-        if base.__name__ in NODE_ICONS:
-            return NODE_ICONS[base.__name__]
-    # Check group-based icon
+        if base.__name__ in _NODE_ICONS:
+            return _NODE_ICONS[base.__name__]
     group_name = getattr(node_data, '__group__', '')
-    if group_name in GROUP_META_ICONS:
-        return GROUP_META_ICONS[group_name]
-    return "◇"
-
-
-# Group icon mapping
-GROUP_META_ICONS = {k: v["icon"] if isinstance(v, dict) else v for k, v in {
-    "图像数据源": FontIcons.Photo2,
-    "滤波模块": FontIcons.Filter,
-    "图像预处理模块": FontIcons.Color,
-    "图像分割提取模块": FontIcons.Cut,
-    "形态学模块": "⬒",
-    "逻辑模块": "⇄",
-    "模板匹配模块": "⌖",
-    "对象识别模块": "◉",
-    "特征提取模块": "✣",
-    "网络通讯模块": "⌁",
-    "结果输出模块": "↗",
-    "Onnx通用模型": "AI",
-    "其他模块": "◇",
-    "视频处理模块": FontIcons.Video,
-}.items()}
+    return get_group_icon(group_name)
 
 
 PORT_OFFSETS = {
@@ -234,7 +182,7 @@ class NodeItem(QGraphicsObject):
         self._hovered = False
         self._state = NodeState.IDLE
         self._template = self._detect_template()
-        self._flag_color = GROUP_COLORS.get(group_name, QColor("#888888"))
+        self._flag_color = QColor(get_group_color(group_name))
         self._icon_text = _resolve_node_icon(node_data)
         self._port_positions: dict[str, QPointF] = {}
         self._pulse_val = 0.0

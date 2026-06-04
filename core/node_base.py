@@ -788,10 +788,13 @@ class VisionNodeData(DemoNodeDataBase):
         """
         ...
 
-    @abstractmethod
     def _update_result_image_source(self):
-        """Update the result image source for GUI display. Override in subclasses."""
-        ...
+        """Update the result image source for GUI display.
+
+        Default implementation stores the current Mat as result_image_source.
+        Override only if custom serialization/format is needed.
+        """
+        self._result_image_source = self._mat if self._mat is not None else None
 
     # -- Flow control helpers (ported from C#) --
 
