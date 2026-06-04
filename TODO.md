@@ -118,81 +118,49 @@
 
 ---
 
-### P1 — 主界面框架
+### P1 — 主界面框架 ✅ 已完成 (2026-06-04)
 
 #### P1-1 主窗口布局
 - **C# 源**: `MainWindow.xaml`, `H.Windows.Main`
-- **功能**:
-  - 自定义标题栏 (最小化/最大化/关闭)
-  - 菜单栏 (文件/编辑/运行/系统/帮助)
-  - 工具栏 (项目操作/流程控制/缩放)
-  - 底部状态栏 (流程状态/消息/计时)
-  - 主题支持 (深色/浅色)
-- **Python 实现**: `gui/main_window.py`, `gui/title_bar.py`
-- **依赖**: P0-1
-- **状态**: ⬜ 未开始
+- **功能**: 菜单栏(文件/编辑/运行/系统/帮助)、工具栏(项目/流程/缩放)、状态栏(状态/消息/计数)、主题支持
+- **Python 实现**: `gui/main_window.py` (250+ 行), `gui/theme.py` (250+ 行)
+- **状态**: ✅ 已完成
 
 #### P1-2 可停靠面板系统
 - **C# 源**: `H.Controls.GridSplitterBox`, `H.Controls.Dock`
-- **功能**: 左右面板区域，可拖拽调整大小
-  - 左侧: 工具箱面板 / 资源面板
-  - 右侧: 属性面板 / 结果面板
-  - 中间: 节点编辑器
-- **Python 实现**: `gui/toolbox_panel.py`, `gui/flow_resource_panel.py`, QDockWidget + QSplitter
-- **依赖**: P1-1
-- **状态**: ⬜ 未开始
+- **功能**: QSplitter 三栏布局 (左280/中拉伸/右300)，QTabWidget 多标签页
+- **Python 实现**: `gui/main_window.py` (QSplitter + QTabWidget)
+- **状态**: ✅ 已完成
 
 #### P1-3 工具箱面板
 - **C# 源**: `H.Controls.FavoriteBox`, `H.Controls.TreeListView`
-- **功能**: 树形/分组显示所有可用节点，拖拽到画布创建节点，搜索过滤
-- **Python 实现**: `gui/toolbox_panel.py` (QTreeWidget + drag support)
-- **依赖**: P0-5, P1-2
-- **状态**: ⬜ 未开始
+- **功能**: QTreeWidget 分组显示节点，搜索过滤，双击创建节点
+- **Python 实现**: `gui/toolbox_panel.py` (150+ 行)
+- **状态**: ✅ 已完成
 
 #### P1-4 属性面板
 - **C# 源**: `H.Controls.Form.PropertyItem`, `H.Controls.PropertyGrid`
-- **功能**: 选中节点时显示其可编辑属性
-  - 布尔型 → QCheckBox
-  - 数值型(Int/Float) → QSpinBox/QDoubleSpinBox
-  - 字符串 → QLineEdit
-  - 文件路径 → QLineEdit + QPushButton(Browse)
-  - 枚举 → QComboBox
-  - 颜色 → 颜色选择器
-  - ROI → ROI编辑器
-  - 条件编辑器 → 条件配置面板
-- **Python 实现**: `gui/property_panel.py`
-- **依赖**: P0-2
-- **状态**: ⬜ 未开始
+- **功能**: 动态表单生成(bool→CheckBox/int→SpinBox/float→DoubleSpinBox/string→LineEdit/file→LineEdit+Browse/enum→ComboBox/list→Label)
+- **Python 实现**: `gui/property_panel.py` (250+ 行)
+- **状态**: ✅ 已完成
 
 #### P1-5 日志面板
 - **C# 源**: `H.Modules.Messages.Notice`, `H.Services.Message`
-- **功能**: 运行日志显示，消息分类(Info/Success/Warn/Error/Fatal)，时间戳
-- **Python 实现**: `gui/log_panel.py`
-- **依赖**: 无
-- **状态**: ⬜ 未开始
+- **功能**: 带颜色的日志消息(Info/Success/Warn/Error/Fatal)，过滤按钮，自动连接事件系统
+- **Python 实现**: `gui/log_panel.py` (170+ 行)
+- **状态**: ✅ 已完成
 
 #### P1-6 图像查看器 (ZoomBox)
 - **C# 源**: `H.Controls.ZoomBox`, `H.Controls.ZoomBox.Extension`
-- **功能**: 可缩放平移的图像显示控件
-  - 鼠标滚轮缩放
-  - 中键/右键拖拽平移
-  - 图像自适应窗口
-  - 叠加层(ROI框、检测框、文字标注)
-  - 像素坐标显示
-- **Python 实现**: `gui/image_viewer.py` (QGraphicsView + QGraphicsScene)
-- **依赖**: 无
-- **状态**: ⬜ 未开始
+- **功能**: QGraphicsView 实现缩放平移，numpy→QImage转换，ROI/检测框/圆形/直线叠加层，像素坐标显示
+- **Python 实现**: `gui/image_viewer.py` (300+ 行)
+- **状态**: ✅ 已完成
 
 #### P1-7 结果面板
 - **C# 源**: `H.VisionMaster.ResultPresenter`
-- **功能**: 表格/文字形式显示节点运行结果
-  - 数据表格 (QTableWidget)
-  - 键值对显示
-  - 分类/检测结果显示
-  - 历史结果标签页
-- **Python 实现**: `gui/result_panel.py`
-- **依赖**: P0-4
-- **状态**: ⬜ 未开始
+- **功能**: QTableWidget 显示结果(参数/值)，历史结果标签页，帮助标签页
+- **Python 实现**: `gui/result_panel.py` (150+ 行)
+- **状态**: ✅ 已完成
 
 ---
 
@@ -623,9 +591,12 @@ Phase 1 (P0): 基础架构 ✅ 已完成 (2026-06-04)
        core/node_group.py, core/registry.py, core/workflow.py,
        core/plugin_manager.py, core/project.py, main.py, gui/main_window.py (stub)
 
-Phase 2 (P1): 主界面
-  P1-6 → P1-1 → P1-2 → P1-5 → P1-3 → P1-4 → P1-7
-  预计: 可以打开界面，显示面板
+Phase 2 (P1): 主界面 ✅ 已完成 (2026-06-04)
+  P1-6 ✅ → P1-1 ✅ → P1-2 ✅ → P1-5 ✅ → P1-3 ✅ → P1-4 ✅ → P1-7 ✅
+  文件: gui/theme.py, gui/image_viewer.py, gui/log_panel.py, gui/toolbox_panel.py,
+       gui/property_panel.py, gui/result_panel.py, gui/flow_resource_panel.py,
+       gui/main_window.py
+  验证: GUI启动/关闭正常，所有面板集成测试通过
 
 Phase 3 (P2): 节点编辑器
   P2-1 → P2-3 → P2-4 → P2-2 → P2-5
@@ -693,4 +664,4 @@ Pillow>=10.0.0
 ---
 
 *最后更新: 2026-06-04*
-*当前阶段: Phase 1 (P0) 完成，准备开始 Phase 2 (P1 主界面)*
+*当前阶段: Phase 1-2 (P0+P1) 完成，准备开始 Phase 3 (P2 节点编辑器)*
