@@ -55,6 +55,7 @@ from gui.log_panel import LogPanel
 from gui.flow_resource_panel import FlowResourcePanel
 from gui.node_editor.editor_widget import DiagramEditorWidget
 from gui.start_page import StartPage
+from gui.help_panel import HelpPanel
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -507,11 +508,8 @@ class MainWindow(QMainWindow):
         self._bottom_tabs.addTab(self._current_result_view, "当前模块结果")
 
         # Help
-        self._help_view = QTextEdit()
-        self._help_view.setReadOnly(True)
-        self._help_view.setStyleSheet("background: #252526; color: #dcdcdc; border: none; padding: 8px; font-size: 12px;")
-        self._help_view.setPlaceholderText("选择节点查看帮助信息")
-        self._bottom_tabs.addTab(self._help_view, "帮助")
+        self._help_panel = HelpPanel()
+        self._bottom_tabs.addTab(self._help_panel, "帮助")
 
         # Toggle button to collapse bottom panel
         self._bottom_visible = True
@@ -725,20 +723,7 @@ class MainWindow(QMainWindow):
             vi = QTableWidgetItem(str(v)); vi.setForeground(QColor("#dcdcdc")); t.setItem(r, 1, vi)
 
     def _populate_help(self, node):
-        if node is None:
-            self._help_view.setHtml('<p style="color: #666;">选择节点查看帮助信息</p>'); return
-        if hasattr(node, 'create_help_presenter'):
-            hi = node.create_help_presenter()
-            if isinstance(hi, dict):
-                html = f"""<h3 style="color: #0078d4;">{node.name}</h3>
-                <p style="color: #999;">类型: {type(node).__name__}</p><hr style="border-color: #3f3f46;">
-                <p style="color: #dcdcdc;">{hi.get('description', '暂无描述')}</p>
-                <p style="color: #999; font-size: 11px;">帮助: {hi.get('url', '暂无帮助链接')}</p>"""
-            else:
-                html = f"""<h3 style="color: #0078d4;">{node.name}</h3>
-                <p style="color: #999;">类型: {type(node).__name__}</p><hr style="border-color: #3f3f46;">
-                <p style="color: #dcdcdc;">暂无详细帮助信息</p>"""
-            self._help_view.setHtml(html)
+        self._help_panel.set_node(node)
 
     def _add_history_entry(self, node):
         """Add to the bottom '历史结果' table."""

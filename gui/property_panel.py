@@ -39,6 +39,7 @@ from core.node_base import (
 from gui.color_picker import ColorPickerDialog
 from gui.condition_editor import ConditionEditorDialog
 from gui.roi_editor import RoiEditorDialog
+from gui.crop_dialog import CropDialog
 
 
 # ── Editor Registry ───────────────────────────────────────────────────────
@@ -150,6 +151,22 @@ def _create_color_editor(parent, prop_name, prop_desc, current_value):
             pass
 
     def _pick():
+        # Try custom ColorPickerDialog first (RGB/HSV sync + image sampling)
+        try:
+            from gui.color_picker import ColorPickerDialog
+            initial = current_value or "#FFFFFF"
+            if isinstance(initial, str) and initial.startswith("#"):
+                r, g, b = int(initial[1:3], 16), int(initial[3:5], 16), int(initial[5:7], 16)
+            else:
+                r, g, b = 255, 255, 255
+            result = ColorPickerDialog.get_color(rgb=(r, g, b), parent=parent)
+            if result:
+                hex_val = result.get("hex", initial)
+                _update_preview(hex_val)
+                return
+        except Exception:
+            pass
+        # Fallback: system color dialog
         from PyQt5.QtWidgets import QColorDialog
         from PyQt5.QtGui import QColor
         color = QColorDialog.getColor(parent=parent)
@@ -166,6 +183,53 @@ def _create_color_editor(parent, prop_name, prop_desc, current_value):
     if prop_desc.readonly:
         btn.setEnabled(False)
 
+    return container, btn
+
+
+@register_editor("crop")
+def _create_crop_editor(parent, prop_name, prop_desc, current_value):
+    """Template crop button that opens CropDialog and sets Base64 result."""
+    container = QWidget(parent)
+    layout = QHBoxLayout(container)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(4)
+
+    preview = QLabel("(未设置)")
+    preview.setStyleSheet("color: #999; font-size: 11px;")
+
+    btn = QPushButton("裁剪模板...")
+    btn.setFixedHeight(24)
+
+    def _crop():
+        # Try to get source image from the node or its upstream
+        import numpy as np
+        from PyQt5.QtWidgets import QApplication
+        image = None
+        parent_node = getattr(parent, '_current_node', None)
+        if parent_node:
+            if hasattr(parent_node, 'mat') and parent_node.mat is not None:
+                image = parent_node.mat
+            elif hasattr(parent_node, 'get_template_image'):
+                image = parent_node.get_template_image()
+        if image is None:
+            # Create a blank placeholder
+            image = np.zeros((480, 640, 3), dtype=np.uint8)
+
+        result = CropDialog.crop_image(image, parent=parent)
+        if result and result.get("base64"):
+            b64 = result["base64"]
+            preview.setText(f"✓ {result['rect'][2]}x{result['rect'][3]} px, {len(b64)} chars")
+            # Set the base64 value on the node
+            if parent_node and hasattr(parent_node, 'base64_string'):
+                parent_node.base64_string = b64
+                parent_node.set_template_from_image(result["image"])
+
+    btn.clicked.connect(_crop)
+
+    layout.addWidget(preview)
+    layout.addWidget(btn)
+    if prop_desc.readonly:
+        btn.setEnabled(False)
     return container, btn
 
 

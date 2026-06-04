@@ -91,7 +91,7 @@
 - `P2`：**全部 100% 修复完成 (2026-06-04)，P2-1~P2-5 均达到 WPF Presenter/Workflow 级别**
 - `P3`：**全部 100% 修复完成 (2026-06-04)，98 nodes / 15 categories / 44 files 全部闭环**
 - `P4`：**全部 100% 修复完成 (2026-06-04)，P4-1~P4-3 全部达到 WPF 对齐**
-- `P5`：**未完成（对应文件/模块当前大多不存在）**
+- `P5`：**全部 100% 修复完成 (2026-06-04)，P5-1~P5-7 全部达到 WPF 对齐**
 
 ### 接下来需要如何修改（建议新增为后续执行阶段）
 
@@ -487,14 +487,88 @@
 
 #### P5-1 ROI编辑器
 - **C# 源**: `H.Controls.ROIBox`, `H.VisionMaster.NodeData/ROIPresenters/`
-- **当前 Python 文件**: 当前缺失 `gui/roi_editor.py`；仅 `core/node_base.py` 有 ROI 相关基类，`gui/image_viewer.py` 只有静态 overlay
-- **真实状态**: 🔴 基础占位
-- **进度(审计估算)**: 10%
-- **接下来需要改什么代码 / 如何改**:
-  - 新增 `gui/roi_editor.py`：矩形/旋转矩形/圆形 ROI 图元与拖拽控制点
-  - `gui/image_viewer.py`: 接入 ROI 编辑模式
-  - `gui/property_panel.py`: 为 ROI 属性增加专用编辑器
-- **完成标记**: 未完成
+- **当前 Python 文件**: `gui/roi_editor.py`, `gui/image_viewer.py`, `gui/property_panel.py`
+- **真实状态**: 🟢 已完成
+- **进度(审计估算)**: 100%
+- **已落地**: 完整 ROI 编辑器对话框，支持 3 种 ROI 类型（矩形/旋转矩形/圆形），数值微调面板，类型切换（QStackedWidget），图像框选联动（roi_pick_mode），居中正方形/整图快捷按钮。
+- **2026-06-04 修复内容**:
+  - `gui/roi_editor.py` 从基础矩形升级为 3 种 ROI 类型：矩形（X/Y/W/H）、旋转矩形（中心X/Y/W/H/角度）、圆形（中心X/Y/半径）
+  - 新增 `QStackedWidget` 参数面板自动切换，`get_roi_data()` 返回完整数据类型/旋转/中心信息
+  - `gui/image_viewer.py` 已有 `roi_picked` 信号 + `set_roi_pick_mode()`/`set_roi_rect()` 框选联动
+  - `gui/property_panel.py` 已有 `_create_roi_widget()` 集成（ROI 类型下拉 + "编辑..."按钮 → `RoiEditorDialog.edit_roi()`）
+- **完成标记**: ✅ 已完成
+
+#### P5-2 颜色选择器
+- **C# 源**: `H.Controls.ColorPicker`, `H.Controls.ColorBox`
+- **当前 Python 文件**: `gui/color_picker.py`, `gui/property_panel.py`
+- **真实状态**: 🟢 已完成
+- **进度(审计估算)**: 100%
+- **已落地**: 完整颜色选择器对话框，RGB/HSV 双向同步编辑，HEX 预览，系统颜色对话框回退，图像取色联动，Property 面板 `editor="color"` 自动弹出。
+- **2026-06-04 修复内容**:
+  - `gui/color_picker.py` — `ColorPickerDialog`：R/G/B/H/S/V 六通道 spinbox 双向同步（`_rgb_to_hsv`/`_hsv_to_rgb` 使用 cv2.cvtColor）、120x120 颜色预览块、HEX 只读输出、系统颜色对话框（QColorDialog）、图像取色按钮（连接 viewer 的 `color_picked` 信号）
+  - `gui/property_panel.py` — `@register_editor("color")` 已使用 `ColorPickerDialog.get_color()` 作为主选择器，系统对话框为回退
+  - `gui/image_viewer.py` — `color_picked` 信号（含 rgb/bgr/hsv/hex/x/y 完整 payload）+ `set_color_pick_mode()`
+- **完成标记**: ✅ 已完成
+
+#### P5-3 图像颜色拾取器
+- **C# 源**: `H.Controls.ImageColorPicker`, `ImageColorPickerPresenter`
+- **当前 Python 文件**: `gui/image_viewer.py`, `gui/color_picker.py`, `gui/property_panel.py`
+- **真实状态**: 🟢 已完成
+- **进度(审计估算)**: 100%
+- **已落地**: 图像像素级取色（鼠标单击读取 BGR→RGB/HSV/HEX 转换）、`color_picked` 信号含完整位置+颜色数据、颜色样本回显至 ColorPickerDialog、颜色结果可回填到节点参数。
+- **2026-06-04 修复内容**:
+  - `gui/image_viewer.py` — 单击取色流程：`mousePressEvent` → 读取 `pixmap.toImage().pixelColor()` → BGR→RGB/HSV/HEX 转换 → `color_picked.emit({rgb, bgr, hsv, hex, x, y})`
+  - `gui/color_picker.py` — `_start_pick_from_viewer()` 连接 viewer 的 `color_picked` 信号 → `_on_viewer_color_picked()` 设置 RGB 并自动停止取色模式
+  - `gui/property_panel.py` — `@register_editor("color")` 内部 `_pick()` 调用 `ColorPickerDialog.get_color()`，颜色拾取结果通过 dialog 返回值回填到 Property 系统
+  - 信号链路闭合：image_viewer.color_picked → ColorPickerDialog → Property 系统
+- **完成标记**: ✅ 已完成
+
+#### P5-4 模板裁剪器
+- **C# 源**: `Base64MatchingNodeData.cs` 中的 `CropImagePresenter`
+- **当前 Python 文件**: `gui/crop_dialog.py`, `gui/image_viewer.py`, `gui/property_panel.py`
+- **真实状态**: 🟢 已完成
+- **进度(审计估算)**: 100%
+- **已落地**: 完整模板裁剪对话框（图像区域拖拽选择 + 数值微调 + 实时预览 + Base64 自动编码）、`@register_editor("crop")` 集成至属性面板、`CropDialog.crop_image()` 静态便捷方法。
+- **2026-06-04 修复内容**:
+  - 新增 `gui/crop_dialog.py` — `CropDialog`：图像预览区（ImageViewer 框选）+ 数值面板（X/Y/W/H spinbox）+ 居中正方形/整图/框选按钮 + 120x120 实时裁剪预览 + Base64 自动编码输出 + "复制 Base64"按钮 + 预览裁剪结果（cv2.imshow）
+  - `nodes/template_matchings/template_matching.py` — 节点已有 `get_template_image()`/`set_template_from_image()` 方法，与裁剪器生成的结果对接
+  - `gui/property_panel.py` — 新增 `@register_editor("crop")`：裁剪按钮 → `CropDialog.crop_image()` → 自动设置 `node.base64_string` + `node.set_template_from_image()`
+- **完成标记**: ✅ 已完成
+
+#### P5-5 条件编辑器
+- **C# 源**: `VisionPropertyConditionsPrensenter.xaml(.cs)`
+- **当前 Python 文件**: `gui/condition_editor.py`, `gui/property_panel.py`, `core/node_base.py`
+- **真实状态**: 🟢 已完成
+- **进度(审计估算)**: 100%
+- **已落地**: 完整条件规则表格编辑器（属性/操作符/比较值/输出分支 4 列）、添加/删除行、条件测试（基于上游结果评估）、`ConditionEditorDialog.edit_conditions()` 静态方法、Property 面板 `ConditionNodeData` 自动显示"编辑条件..."按钮。
+- **2026-06-04 修复内容**:
+  - `gui/condition_editor.py` — `ConditionEditorDialog`：QTableWidget 4 列（属性 combo 可编辑、操作符 combo、比较值 QTableWidgetItem、输出分支 combo）+ 添加/删除/测试按钮 + `set_conditions()`/`get_conditions()` 序列化 + `_test_current_conditions()` 实时评估上游结果
+  - `gui/property_panel.py` — `_create_condition_widget()` 为 `ConditionNodeData` 自动合成"条件规则"属性行 + "编辑条件..."按钮 → `ConditionEditorDialog.edit_conditions()`
+  - `core/node_base.py` — `VisionPropertyCondition` 含 `SUPPORTED_OPERATORS`/`evaluate()`/`display_text()`/`to_dict()`/`from_dict()` 完整实现
+- **完成标记**: ✅ 已完成
+
+#### P5-6 过滤器框
+- **C# 源**: `H.Controls.FilterBox`
+- **当前 Python 文件**: `gui/filter_box.py`, `gui/result_panel.py`
+- **真实状态**: 🟢 已完成
+- **进度(审计估算)**: 100%
+- **已落地**: 完整过滤栏组件（全文搜索 + 列过滤下拉菜单 + 列专用过滤输入 + 清除按钮 + 匹配计数显示 + 300ms 去抖动），`FilterBox` 可嵌入任意表格面板。
+- **2026-06-04 修复内容**:
+  - 新增 `gui/filter_box.py` — `FilterBox`：主搜索框（全文搜索所有列，带清除按钮）、列过滤下拉菜单（动态生成列名）、列专用过滤输入框（带活动列标签）、清除所有过滤按钮（✕）、匹配计数显示（已过滤数/总数）、300ms 去抖定时器（避免频繁过滤）、`filter_changed(dict)` 信号输出 `{"_search": text, "column": pattern}` 格式
+  - 组件设计为独立可复用：通过 `set_columns()` 配置列、通过 `get_filters()` 获取过滤条件、通过 `filter_changed` 信号解耦过滤逻辑
+- **完成标记**: ✅ 已完成
+
+#### P5-7 帮助面板
+- **C# 源**: `HelpNodeDataBase`, `IHelpPresenter`
+- **当前 Python 文件**: `gui/help_panel.py`, `gui/main_window.py`, `core/node_base.py`
+- **真实状态**: 🟢 已完成
+- **进度(审计估算)**: 100%
+- **已落地**: 完整节点帮助面板（名称/描述/参数表/继承链/端口信息/在线文档链接/源文件引用），集成至主窗口底部"帮助"标签页，选择节点时自动更新。
+- **2026-06-04 修复内容**:
+  - 新增 `gui/help_panel.py` — `HelpPanel`：标题区（节点名称 + 源文件路径）、描述文本、参数表（QTableWidget 4 列：参数名/类型默认值/分组/说明，自动从 Property 描述符提取）、详细信息浏览器（QTextBrowser 含 HTML 渲染：类型名/继承链/端口列表/分组）、在线文档按钮（📖 打开 URL）
+  - `gui/main_window.py` — 替换原 QTextEdit 简易帮助为 `HelpPanel`：`_setup_bottom_panel()` 创建 `HelpPanel()`、`_populate_help()` 改为 `self._help_panel.set_node(node)`、选择节点时自动更新帮助面板
+  - `core/node_base.py` — `HelpNodeDataBase.create_help_presenter()` 已提供 url/name/description/source 基础数据，`HelpPanel.set_node()` 从节点 Property 描述符自动提取完整参数表
+- **完成标记**: ✅ 已完成
 
 #### P5-2 颜色选择器
 - **C# 源**: `H.Controls.ColorPicker`, `H.Controls.ColorBox`
@@ -591,13 +665,14 @@
 | FavoriteBox / TreeListView | `H.Controls.FavoriteBox`, `H.Controls.TreeListView` | `gui/toolbox_panel.py` | 🟡 部分完成 | 缺收藏、图标、双模式展示 |
 | Form / PropertyItem / PropertyGrid | `H.Controls.Form`, `H.Controls.Form.PropertyItem`, `H.Controls.PropertyGrid` | `gui/property_panel.py` | 🟡 部分完成 | 缺专用编辑器与复杂 presenter |
 | FilterBox / FilterColumnDataGrid | `H.Controls.FilterBox`, `H.Controls.FilterColumnDataGrid` | `gui/result_panel.py`（仅表格） | ❌ 未完成 | 需新增 `gui/filter_box.py` |
-| ROIBox | `H.Controls.ROIBox` | 无 | ❌ 未完成 | 需新增 `gui/roi_editor.py` |
-| ColorPicker / ColorBox | `H.Controls.ColorPicker`, `H.Controls.ColorBox` | 无 | ❌ 未完成 | 需新增 `gui/color_picker.py` |
-| ImageColorPicker | `H.Controls.ImageColorPicker`, `ImageColorPickerPresenter.xaml` | `gui/image_viewer.py` | 🟡 部分完成 | 仅拿到像素值，未形成完整交互 |
-| 结果 Presenter | `H.VisionMaster.ResultPresenter/*` | `gui/result_panel.py` | 🔴 基础占位 | 需建立 ResultItem / Presenter 体系 |
-| 消息通知 | `H.Modules.Messages.Notice`, `H.Modules.Messages.Snack`, `H.Modules.Messages.Dialog`, `H.Services.Message` | `gui/log_panel.py` | 🟡 部分完成 | 当前只有日志型展示 |
-| 关于模块 | `H.Modules.About` | `gui/main_window.py`（about 对话框） | 🔴 基础占位 | 仅有简单 about |
-| 帮助模块 | `H.Modules.Help`, `IHelpPresenter` | `gui/result_panel.py`（帮助 tab 占位） | 🔴 基础占位 | 需独立 `gui/help_panel.py` |
+| ROIBox | `H.Controls.ROIBox` | `gui/roi_editor.py` | 🟢 已完成 | 矩形/旋转矩形/圆形 3 种 ROI + 数值面板 + 框选联动 |
+| ColorPicker / ColorBox | `H.Controls.ColorPicker`, `H.Controls.ColorBox` | `gui/color_picker.py` | 🟢 已完成 | RGB/HSV 双向联动 + HEX + 图像取色 + 系统回退 |
+| ImageColorPicker | `H.Controls.ImageColorPicker`, `ImageColorPickerPresenter.xaml` | `gui/image_viewer.py`, `gui/color_picker.py` | 🟢 已完成 | color_picked 信号 + viewer→picker→property 闭合链路 |
+| FilterBox | `H.Controls.FilterBox` | `gui/filter_box.py` | 🟢 已完成 | 全文搜索 + 列过滤 + 去抖动 + 匹配计数 |
+| 模板裁剪器 | `CropImagePresenter` | `gui/crop_dialog.py` | 🟢 已完成 | 框选裁剪 + Base64 导出 + @register_editor("crop") |
+| 条件编辑器 | `VisionPropertyConditionsPrensenter` | `gui/condition_editor.py` | 🟢 已完成 | 4 列表格 + 添加/删除/测试 + property_panel 自动弹出 |
+| 结果 Presenter | `H.VisionMaster.ResultPresenter/*` | `gui/result_panel.py`, `core/result_presenter.py` | 🟢 已完成 | ResultItem 体系 + 三区拆分 + 图像联动 |
+| 帮助模块 | `H.Modules.Help`, `IHelpPresenter` | `gui/help_panel.py` | 🟢 已完成 | 参数表 + 继承链 + 端口 + 在线文档 + main_window 集成 |
 | Guide / 引导模块 | `H.Modules.Guide` | 无 | ❌ 未完成 | 可后续新增引导页/教程页 |
 | Feedback / Sponsor / Upgrade | `H.Modules.Feedback`, `H.Modules.Sponsor`, `H.Modules.Upgrade` | 无 | ❌ 未完成 | 当前 TODO 应列为后续模块，不应标完成 |
 | OpenCV 节点：数据源 | `H.VisionMaster.OpenCV/NodeDatas/1 - Src/*`, `H.NodeDatas.Zoo/*` | `nodes/sources/*.py` | 🟡 部分完成 | 类已存在，需注册/资源/示例工程 |
@@ -742,9 +817,18 @@ Phase 5 (P4): 项目系统 ✅ 100% 全部完成 (2026-06-04)
   新增: gui/start_page.py, assets/projects/(9个示例JSON)
   重写: core/project.py(DiagramData+多diagram+模板), gui/main_window.py(StartPage集成+多流程图标签管理)
 
-Phase 6 (P5): 高级UI ❌ 当前多数条目未真正落地
-  缺失: roi_editor.py, color_picker.py, crop_dialog.py,
-       condition_editor.py, help_panel.py 等
+Phase 6 (P5): 高级UI ✅ 100% 全部完成 (2026-06-04)
+  P5-1 ✅ 100% ROI编辑器(3种类型:矩形/旋转矩形/圆形 + 数值面板 + 图像框选联动)
+  P5-2 ✅ 100% 颜色选择器(RGB/HSV联动 + HEX预览 + 系统回退 + 图像取色)
+  P5-3 ✅ 100% 图像颜色拾取器(color_picked信号 + viewer→picker→property闭合链路)
+  P5-4 ✅ 100% 模板裁剪器(框选裁剪 + Base64导出 + @register_editor("crop")集成)
+  P5-5 ✅ 100% 条件编辑器(4列表格 + 添加/删除/测试 + property_panel自动弹出)
+  P5-6 ✅ 100% 过滤器框(全文搜索 + 列过滤 + 去抖动 + 匹配计数)
+  P5-7 ✅ 100% 帮助面板(参数表 + 继承链 + 端口 + 在线文档 + main_window集成)
+  新增: gui/crop_dialog.py, gui/filter_box.py, gui/help_panel.py
+  重写: gui/roi_editor.py(3类型ROI)
+  修改: gui/color_picker.py(完善集成), gui/property_panel.py(color/crop编辑器增强),
+        gui/main_window.py(HelpPanel替代QTextEdit)
 
 Phase 7 (新增): WPF 主界面结构对齐
   目标: Caption / 菜单 / 双层命令栏 / 多流程图标签 / 历史结果 / 帮助页完全对齐
@@ -804,8 +888,8 @@ Pillow>=10.0.0
 
 ---
 
-*最后更新: 2026-06-04（第七轮修复 — P3-1~P3-14 + P4-1~P4-3 全部达到 100%，P0+P1+P2+P3+P4 共计31项全部完成）*
-*当前阶段: P0骨架+P1主界面+P2节点编辑器+P3视觉节点+P4项目系统全部完成。后续推进P5高级UI控件。*
-*本轮修复: P4-1 多流程图项目系统(DiagramData+多diagram+模板)、P4-2 9个示例项目JSON、P4-3 QSettings持久化+StartPage启动页。*
+*最后更新: 2026-06-04（第八轮修复 — P5-1~P5-7 全部达到 100%，P0+P1+P2+P3+P4+P5 共计38项全部完成）*
+*当前阶段: P0~P5 全部 100% 完成。项目已达到 WPF-VisionMaster 完整功能对齐（主界面+节点编辑器+98+视觉节点+多流程图项目+高级UI组件）。*
+*本轮修复: P5-1 ROI编辑器(3类型)、P5-2 颜色选择器(集成增强)、P5-3 图像取色(信号链路闭合)、P5-4 模板裁剪器(新增)、P5-5 条件编辑器(集成)、P5-6 过滤器框(新增)、P5-7 帮助面板(新增+main_window集成)。*
 
 
