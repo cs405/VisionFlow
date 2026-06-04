@@ -22,6 +22,7 @@ from core.workflow import WorkflowEngine
 from core.project import project_service, DiagramData, ProjectItem
 from core.events import EventType, event_system
 from core.registry import node_registry
+from gui.font_icons import FontIcons, FontIconButton, FontIconTextBlock
 
 from gui.theme import theme_manager
 from gui.toolbox_panel import ToolboxPanel

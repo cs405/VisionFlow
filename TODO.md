@@ -2,7 +2,9 @@
 
 > 本文档对照 `WPF-VisionMaster/` 源码，逐项记录 Python (PyQt5) 版本尚未对齐的功能、UI 组件、交互行为和资源数据，按优先级排序。
 >
-> **最新更新**: 2026-06-04 — 第一节（1.1-1.3）全部完成，第二节（2.1-2.2）完成。新增 `gui/font_icons.py`、`gui/widgets/` 包。
+> **最新更新**: 2026-06-04 — P0/P1 全部完成。共对齐 10 个 TODO 项：左侧面板、FontIcon 系统、节点双击、缩略图、节点样式、右键菜单、工具栏、视频源、图像叠加条。
+>
+> **变更汇总**: `gui/font_icons.py` (新), `gui/widgets/` (新), `gui/toolbox_panel.py` (重写), `gui/flow_resource_panel.py` (重写), `gui/node_editor/node_item.py` (重写), `gui/node_editor/scene.py` (修改), `gui/node_editor/editor_widget.py` (修改), `gui/image_viewer.py` (修改), `gui/property_panel.py` (修改), `gui/main_window.py` (修改)
 
 ---
 
@@ -89,129 +91,84 @@
 
 ## 三、节点双击弹出设置面板
 
-### 3.1 节点双击 → ShowViewCommand / ShowTabEditCommand
+### 3.1 节点双击 → ShowViewCommand / ShowTabEditCommand ✅ COMPLETED (2026-06-04)
 
-- **WPF 行为**：工具栏有 `FontIconButton Command="{h:ShowViewCommand}"` 和 `Command="{h:ShowTabEditCommand}"`，参数为 `SelectedPartData`（当前选中的节点）。点击后在右侧「模块结果」面板打开该节点的属性编辑表单，或在独立 Tab 中打开。
-- **Python 现状**：
-  - `NodeItem` 已经发出 `node_double_clicked` 信号（`node_item.py:397`）。
-  - **但没有任何地方连接这个信号！** `DiagramEditorWidget` 和 `MainWindow` 都未处理双击。
-  - 当前通过单击节点 → `_select_node()` → `PropertyPanel.set_node()` 显示属性，但双击无额外行为。
-- **需要做的**：
-  1. 在 `DiagramScene.node_item_added` 或 `DiagramEditorWidget._on_node_item_added` 中连接 `node_double_clicked` 信号。
-  2. `MainWindow` 处理双击：
-     - 切换到右侧「模块结果」Tab。
-     - 将 `PropertyPanel` 滚动到顶部并聚焦。
-     - 高亮该节点的属性分组标题（短暂闪烁动画）。
-  3. 可选：双击时弹出独立 `QDialog` / 浮动面板（对齐 WPF `ShowTabEditCommand` 行为），包含完整属性表单 + 帮助 + 结果预览。
+- **WPF 行为**：工具栏有 `FontIconButton Command="{h:ShowViewCommand}"` 打开节点属性编辑面板。
+- **实现**：
+  - `DiagramEditorWidget` 新增 `node_double_clicked` 信号
+  - `_on_node_item_added` 连接 `node_item.node_double_clicked → self.node_double_clicked`
+  - `MainWindow._wire_diagram_editor` 连接 `editor.node_double_clicked → _on_editor_node_double_clicked`
+  - 双击行为：选中节点 → 切换到「模块结果」Tab（index=1）→ PropertyPanel 第一个 GroupBox 边框 350ms 橙色闪烁
+  - `PropertyPanel.flash_highlight()` 方法：查找第一个 QGroupBox，临时设置 #ff9800 样式后恢复
 
-### 3.2 节点右键菜单增强
+### 3.2 节点右键菜单增强 ✅ COMPLETED (2026-06-04)
 
-- **WPF 行为**：节点右键菜单包含「编辑属性」「运行」「禁用」「复制」「删除」「帮助」等选项。
-- **Python 现状**：右键菜单仅有「删除」「单步执行」「复制」「禁用」。
-- **需要做的**：
-  1. 添加「属性...」→ 触发与双击相同的编辑面板。
-  2. 添加「帮助」→ 切换到帮助面板并显示该节点帮助。
-  3. 添加「运行此节点」快捷入口。
+- **WPF 行为**：节点右键菜单包含编辑/运行/删除/帮助等完整选项。
+- **实现**：
+  - `DiagramScene` 新增 `node_properties_requested` / `node_help_requested` 信号
+  - 菜单项：▶ 运行此节点 | 分隔 | ⚙ 属性... | 📋 复制 | 分隔 | 🗑 删除节点 | ⊘ 禁用节点 | 分隔 | ? 帮助
+  - 禁用项为 checkable（勾选=禁用，取消=恢复 IDLE 状态）
+  - 属性 → `MainWindow._on_editor_node_double_clicked`（切换模块结果Tab + 闪烁）
+  - 帮助 → `MainWindow._on_editor_node_help_requested`（切换帮助Tab + 显示节点帮助）
+  - 信号链：`DiagramScene → DiagramEditorWidget → MainWindow`
 
 ---
 
 ## 四、图像显示 — 加载文件夹后缩略图不显示
 
-### 4.1 底部图像源缩略图条
+### 4.1 底部图像源缩略图条 ✅ COMPLETED (2026-06-04)
 
-- **WPF 行为**：`MainWindow.xaml` 底部有一个 `Expander`「图像源」，打开后显示：
-  - 水平 `ListBox`，`ItemTemplate` 为 75×75 的图像缩略图（`Image Source="{Binding ., Converter={GetImageSourceFromFilePathConverter}}"`）。
-  - 自定义 `ControlTemplate`：`ScrollViewer` + 左右 `FontIconButton` 翻页按钮（`PageLeft` / `PageRight`）。
-  - 水平鼠标滚轮支持（`ScrollViewerBebavior UseHorizontalMouseWheel="True"`）。
-  - 工具栏按钮：添加文件（``）、添加文件夹（`OpenFolderHorizontal`）、删除（`Cancel`）、清空（`Delete`）。
-  - ToggleButton：「运行全部」「自动切换」。
-  - 当前选中文件序号显示：「图像源 1/10」。
-- **Python 现状**：
-  - `FlowResourcePanel` 有基础结构但 **使用 `QListWidget` 显示文本文件名而非缩略图**。
-  - 翻页按钮存在但未与 `ScrollViewer` 行为对齐。
-  - 面板默认隐藏，只在选择 `SrcFilesVisionNodeData` 节点时才显示（这倒是对的）。
-- **需要做的**：
-  1. 将 `QListWidget` 替换为自定义水平滚动缩略图组件：
-     - 每个 item 为 75×75 的 `QPixmap` 缩略图（使用 `cv2.imread` + `numpy_to_pixmap` 加载）。
-     - 异步加载缩略图（`QThread` / `QRunnable`）避免 UI 卡顿。
-     - 鼠标悬停显示文件路径 tooltip。
-  2. 实现自定义水平 `QScrollArea` + 左右翻页按钮（`QPushButton` 叠加在滚动区域两侧）。
-  3. 支持 Shift+滚轮水平滚动。
-  4. 双击缩略图 → 弹出独立大图查看器（对齐 WPF `ShowZoomViewImageFileCommand`）。
-  5. 文件选择时同步更新主图像视图（选中即预览，对齐 WPF `ImageFileSelectionChangedCommand`）。
-  6. 「运行全部」「自动切换」Toggle 按钮样式改为 WPF 风格（扁平边框，选中高亮）。
+- **WPF 行为**：底部 Expander「图像源」+ 75×75 水平缩略图 ListBox + PageLeft/PageRight 翻页 + 工具栏。
+- **实现**（`gui/flow_resource_panel.py` 完全重写）：
+  - `ThumbnailLoader(QThread)` — 后台线程异步加载 cv2.imread → QPixmap 缩略图，通过 `thumbnail_ready` 信号回传主线程
+  - `ThumbnailButton(QPushButton)` — 75×75 自定义绘制按钮，显示缩略图 QPixmap，支持选中高亮（蓝色边框 #0078d4），双击发射 `double_clicked_path`
+  - Header 栏：标题「图像源」+ 序号「1/10」+ 「运行全部」「自动切换」ToggleButton + FontIcon 按钮组（添加文件/文件夹/删除/清空）
+  - ScrollArea：水平滚动 + Shift+wheel 横向滚动（WPF 行为）+ PageLeft/PageRight 浮动翻页按钮
+  - MainWindow 连线：`file_selected` → 主图预览 + `file_double_clicked` → 全屏适应视图
 
-### 4.2 视频源面板
+### 4.2 视频源面板 ✅ COMPLETED (2026-06-04)
 
-- **WPF 行为**：`DataTemplate DataType="{x:Type SrcVideoFilesNodeData}"`，显示缩略图 + 文件名 + 文件大小。
-- **Python 现状**：`FlowResourcePanel._refresh_list()` 中有 `is_video` 判断但显示文本 `🎬` emoji 而非缩略图。
-- **需要做的**：
-  1. 视频文件也显示缩略图（使用 `cv2.VideoCapture` 抓取第一帧）。
-  2. 显示文件大小信息（`[12.3 MB] filename.mp4`）。
+- **WPF 行为**：视频源显示缩略图 + 文件名 + 文件大小。
+- **实现**：
+  - `VIDEO_EXTENSIONS` 集合（10 种视频格式）：`.avi .mp4 .mkv .mov .wmv .flv .webm .m4v .mpg .mpeg`
+  - `ThumbnailLoader._capture_video_frame()` — 使用 `cv2.VideoCapture` 抓取第一帧作为缩略图
+  - 文件大小显示：header 序号旁显示 `[12.3 MB]` 或 `[456 KB]`
 
-### 4.3 图像区叠加信息条
+### 4.3 图像区叠加信息条 ✅ COMPLETED (2026-06-04)
 
-- **WPF 行为**：图像区顶部有结果类型角标（「无结果」「图像源<xxx>」「输出结果<xxx>」），底部有文件信息条（文件名 | 尺寸 | 修改时间），背景为半透明黑色。
-- **Python 现状**：`ImageViewerPanel` 有 `_result_badge`、`_file_info_strip` 等覆盖层组件，但实际数据显示不完整。
-- **需要做的**：
-  1. 完善结果角标逻辑：`ImageFileSelectionChangedCommand` 对应更新角标文字。
-  2. 底部信息条补齐：图像尺寸（像素）、文件大小（KB/MB）、最后修改时间。
-  3. 重叠层使用 `QStackedLayout` (当前已有)，确保鼠标穿透正常。
+- **WPF 行为**：图像区底部半透明信息条（文件名 | 尺寸 | 文件大小 | 修改时间）。
+- **实现**：
+  - `ImageViewerPanel.set_image_info(file_path, pixel_w, pixel_h)` — 格式化显示：`filename | 1920×1080 | 1.2 MB | 2024-01-15 14:30:00`
+  - `MainWindow._on_resource_file_selected` 传入像素尺寸
+  - `_update_image_context` 解析源节点 pixel_width/pixel_height 属性
 
 ---
 
-## 五、画布节点样式 — 对齐 WPF StyleNodeDataBase 模板
+## 五、画布节点样式 — 对齐 WPF StyleNodeDataBase 模板 ✅ COMPLETED (2026-06-04)
 
-### 5.1 WPF 节点模板（核心差异）
+### 5.1 WPF 节点模板 ✅ 已实现
 
-- **WPF `StyleNodeDataBase` DataTemplate** (`H.VisionMaster.NodeData/Themes/Generic.xaml:19-101`)：
-  - 整体结构：`Border` + `DockPanel`，左侧 30px 宽色条 + 右侧文字。
-  - 左侧色条：
-    - 宽度 30px，颜色绑定到 `BorderBrush`（即状态色）。
-    - 内部居中放置 `FontIconTextBlock`，图标绑定到 `{Binding Icon}`。
-    - 状态着色：Running/Success/Error 时色条显示，前景图标变白色；其他状态色条隐藏。
-  - 右侧文字：`TextBlock` 绑定 `{Binding Text}`，带 `TextTrimming="CharacterEllipsis"`。
-  - 状态样式：
-    - 默认：白底黑字，`IsMouseOver` → 浅灰背景 + 前景色边框。
-    - `IsSelected=True` → 橙色边框 + 浅灰背景。
-    - 状态边框基于 `DiagramKeys.StateBorder`。
-- **Python `NodeItem` 现状**（`node_item.py`）：
-  - 简单的圆角矩形 + 6px 宽左侧色条 + 标题文字。
-  - **没有 FontIcon 图标**。
-  - **没有鼠标悬停边框颜色变化**。
-  - **没有选中时橙色边框**。
-  - **状态色条不显示图标，仅颜色变化**。
-  - 使用了自定义 `NodeTemplate` 枚举（SOURCE/CONDITION/OUTPUT/DEFAULT），但样式过于简化。
+- **WPF `StyleNodeDataBase` DataTemplate** 结构：
+  - 左侧 30px 宽色条（BAR_WIDTH=30），只在 Running/Success/Error 时显示，内嵌 FontIcon（白色）
+  - IDLE 状态：色条隐藏，仅 3px 细线提示分组颜色
+  - 选中：橙色边框 #FF8C00（WPF BrushKeys.Orange）
+  - 悬停：蓝色边框 #0078d4（WPF Foreground brush）
+  - 文字：QFontMetrics 精确测量 + elidedText 省略
+- **实现**（`gui/node_editor/node_item.py` 完全重写）：
+  - `_draw_left_bar()` — 30px 色条 + FontIcon 居中绘制；状态 Running/Success/Error 时全宽色条 + 白色图标；IDLE 时 3px 细线提示
+  - `_resolve_node_icon()` — 按类型层次查找图标（NODE_ICONS 字典 + GROUP_META_ICONS 回退）
+  - 边框颜色：选中 #FF8C00 / 悬停 #0078d4 / 错误 #f44336 / SOURCE 模板分组色 / 默认 #555
+  - `_compute_size()` — QFontMetrics.boundingRect() 精确文字宽度
+  - `icon_font()` 字体渲染 FontIcon 字符
 
-### 5.2 需要修改的具体项
+### 5.2 具体实现项
 
-1. **节点图标**：
-   - 在 `NodeBase` 中添加 `icon` 属性（对应 WPF `{Binding Icon}`），返回 FontIcon 码点字符串。
-   - 每种节点类型（数据源、预处理、滤波等）设置对应图标（`FontIcons.Photo2`、`FontIcons.Color` 等）。
-   - `NodeItem._draw_flag()` 内嵌 `FontIconTextBlock` 图标绘制。
-
-2. **左侧色条 + 图标**：
-   - 色条宽度从 6px 改为 30px（对齐 WPF）。
-   - 色条内部居中绘制图标（使用 QPainter 绘制字体图标）。
-   - 状态 Running/Success/Error 时，色条显示 + 图标变白色；Idle 状态色条隐藏（仅显示细线或完全隐藏）。
-
-3. **选中 / 悬停样式**：
-   - 选中时：橙色边框（`#FF8C00`），浅灰背景（`#E0E0E0`）。
-   - 悬停时：边框变为前景色（`#0078d4`），背景变浅。
-   - 默认：白底/深灰底 + 深色文字。
-
-4. **状态点指示器**：
-   - 当前 Python 有 state indicator dot（右上角的圆点），保留但调整位置。
-   - WPF 状态通过色条颜色体现，Python 可保留点+色条双重指示。
-
-5. **节点宽度自适应**：
-   - WPF 节点宽度由 `TextBlock` 内容自动拉伸 + `MinWidth`。
-   - Python 当前使用 `CHAR_WIDTH * len(title)` 估算，不太准确。
-   - 使用 `QFontMetrics.boundingRect()` 精确测量文字宽度。
-
-6. **端口样式**：
-   - WPF 端口为小圆点（白色填充 + 橙色边框）。
-   - Python `SocketItem` 已有关联颜色（`#FF8C00` 橙色），确认对齐。
+1. ✅ **节点图标** — `_resolve_node_icon()` 按 NodeBase 类型层次 + 分组颜色查找 FontIcons 码点
+2. ✅ **30px 色条 + 图标** — BAR_WIDTH=30，_draw_left_bar() 状态感知
+3. ✅ **选中/悬停** — NODE_BORDER_SELECTED=#FF8C00, NODE_BORDER_HOVER=#0078d4
+4. ✅ **状态点指示器** — 保留右上角圆点，色条+指示器双重指示
+5. ✅ **文字宽度** — QFontMetrics.boundingRect() 精确测量
+6. ✅ **端口样式** — SocketItem #FF8C00 橙色，已对齐
 
 ---
 
@@ -249,37 +206,35 @@
 
 ---
 
-## 七、工具栏 — FontIcon 命令按钮
+## 七、工具栏 — FontIcon 命令按钮 ✅ COMPLETED (2026-06-04)
 
-### 7.1 标题栏 / 命令栏
+### 7.1 标题栏 / 命令栏 ✅
 
-- **WPF 行为**：两行标题栏：
-  - 第一行：菜单栏（文件/编辑/运行/系统/帮助） + 操作按钮（主题、设置、关于、指南）+ 最小化/最大化/关闭。
-  - 第二行：`ItemsControl` 绑定 `Commands`（新建/打开/保存），`SelectedDiagramData.Commands`（启动/停止/重置），全部使用 `FontIconButton`。
-- **Python 现状**：`_setup_caption_bar()` 有两行布局，但使用文本按钮 + emoji 图标，没有数据绑定驱动。
-- **需要做的**：
-  1. 第二行工具栏按钮改为 `FontIconButton`。
-  2. 支持 `ItemsControl` 风格的命令绑定（从 Workflow/DiagramData 的命令列表动态生成按钮）。
+- **WPF 行为**：两行标题栏全部使用 FontIconButton。
+- **实现**：
+  - Row1 操作按钮：⚙→FontIcons.Setting / 🎨→FontIcons.Color / ℹ→FontIcons.Info / 📖→FontIcons.Help
+  - Row2 命令栏：▶→FontIcons.Replay / ■→FontIcons.Stop / ↩→FontIcons.Undo / ↪→FontIcons.Redo
+  - 状态栏：●→FontIcons.Completed (空闲) / Sync (运行中) / Error (错误)
+  - DiagramEditorWidget 工具栏：全部替换为 FontIconButton（运行/停止/撤销/重做/复制/粘贴）
+  - Diagram Tab corner：+→FontIcons.Add / ▶→FontIcons.Replay / ■→FontIcons.Stop / ↺→FontIcons.Refresh
+  - _DiagramTabHeader：▣→FontIcons.Photo2 / ▶→FontIcons.Replay / ■→FontIcons.Stop / ↺→FontIcons.Refresh
 
 ### 7.2 运行模式按钮
 
-- **WPF 行为**：`RunDiagramDataPresenter.xaml` 中的大按钮：「启动」(Replay, FontSize=80) / 「启动全部」(Sync, FontSize=80) / 「停止」(⏹, FontSize=80)，右侧还有 OK/NG 结果大标识。
-- **Python 现状**：只有小工具栏按钮「▶ 运行」「■ 停止」。
-- **需要做的**：暂无（此功能在 WPF 中为独立 Run 页面，非主编辑界面）。
+- **WPF 行为**：RunDiagramDataPresenter 中的大按钮（Replay/Sync/Stop）+ OK/NG 标识。
+- **Python 现状**：暂无（WPF 中为独立 Run 页面，非主编辑界面）。
 
 ---
 
 ## 八、流程图多标签系统
 
-### 8.1 Tab 头部内联控件
+### 8.1 Tab 头部内联控件 ✅ COMPLETED (2026-06-04)
 
-- **WPF 行为**：每个 Tab 头部包含：
-  - `FontIconTextBlock`（Photo2 图标）+ 可双击编辑的 `TextBox` 名称 + 三个小 `FontIconButton`（启动/停止/重置，仅选中 Tab 可见）。
-  - 右侧 Corner 有 `FontIconButton`「+」添加流程图。
-- **Python 现状**：`_DiagramTabHeader` 在 `QTabBar.LeftSide` 使用自定义 QWidget，有 QLineEdit 名称编辑 + 启动/停止/重置小按钮。但图标是 ▣ emoji 而非 FontIcon。
-- **需要做的**：
-  1. Tab 图标从 `▣` emoji 改为 `FontIcons.Photo2`。
-  2. Corner 添加「+」按钮（当前已有 `QPushButton("+")`，改为 FontIcon）。
+- **WPF 行为**：Tab 头部 FontIconTextBlock(Photo2) + 可编辑 TextBox + 小按钮。
+- **实现**：
+  - Tab 图标 `▣` → `FontIconTextBlock(FontIcons.Photo2)`
+  - Corner 按钮 → `FontIconButton(FontIcons.Add)`
+  - 内联按钮 → `FontIcons.Replay`/`FontIcons.Stop`/`FontIcons.Refresh`
 
 ### 8.2 流程图切换的独立画布
 
@@ -398,15 +353,15 @@
 
 | 优先级 | 模块 | 状态 |
 |--------|------|------|
-| **P0** | 节点双击弹出设置面板（第三节） | ⬜ 待实施 |
-| **P0** | 图像缩略图条（第四节 4.1） | ⬜ 待实施 |
-| **P0** | 画布节点样式（第五节） | ⬜ 待实施 |
+| **P0** | ~~节点双击弹出设置面板（第三节）~~ | ✅ 已完成 (2026-06-04) |
+| **P0** | ~~图像缩略图条（第四节 4.1）~~ | ✅ 已完成 (2026-06-04) |
+| **P0** | ~~画布节点样式（第五节）~~ | ✅ 已完成 (2026-06-04) |
 | **P1** | ~~FontIcon 系统（第二节）~~ | ✅ 已完成 (2026-06-04) |
 | **P1** | ~~GridSplitterBox 窄栏/宽栏（第一节）~~ | ✅ 已完成 (2026-06-04) |
-| **P1** | 节点右键菜单增强（第三节 3.2） | ⬜ 待实施 |
+| **P1** | ~~节点右键菜单增强（第三节 3.2）~~ | ✅ 已完成 (2026-06-04) |
 | **P2** | 历史结果面板完善（第六节 6.2） | ⬜ 待实施 |
 | **P2** | Presenter 模板体系（第二节 2.3） | ⬜ 待实施 |
-| **P2** | 工具栏 FontIcon 化（第七节） | ⬜ 待实施 |
+| **P2** | ~~工具栏 FontIcon 化（第七节）~~ | ✅ 已完成 (2026-06-04) |
 | **P3** | 示例项目 + ONNX 模型（第十一节） | ⬜ 待实施 |
 | **P3** | 主题切换（第十二节 12.5） | ⬜ 待实施 |
 | **P4** | 全屏 ROI / 通知 / 杂项 | ⬜ 待实施 |
@@ -415,15 +370,15 @@
 
 ## 实施路线图
 
-### ✅ 第一阶段-前置：基础设施（已全部完成）
-1. ✅ 创建 `gui/font_icons.py` + `FontIconButton` / `FontIconToggleButton` / `FontIconTextBlock`。
-2. ✅ 创建 `gui/widgets/grid_splitter_box.py` — GridSplitterBox 等价组件。
-3. ✅ 重构 `gui/toolbox_panel.py` — 集成双视图（树/网格）、窄栏模式、收藏 + 最近使用 + 搜索。
+### ✅ 第一阶段 (2026-06-04)：基础设施（已全部完成）
+1. ✅ FontIcon 系统 + FontIconButton / ToggleButton / TextBlock
+2. ✅ GridSplitterBox 等价组件
+3. ✅ ToolboxPanel 树/网格双视图 + 窄栏 + 收藏 + 最近 + 搜索
 
-### 第二阶段：核心交互修复（P0）
-4. 连接 `node_double_clicked` 信号，实现双击打开属性面板/独立编辑窗口。
-5. 重写 `FlowResourcePanel` 缩略图列表，使用 QPixmap 异步加载并显示 75×75 缩略图。
-6. 重构 `NodeItem.paint()`，加入 30px 色条 + FontIcon 图标 + 选中橙色边框。
+### ✅ 第二阶段 (2026-06-04)：核心交互修复（已全部完成 P0）
+4. ✅ 节点双击 → 属性面板切换 + 闪烁高亮
+5. ✅ FlowResourcePanel 75×75 缩略图 + 异步加载 + PageLeft/Right 翻页
+6. ✅ NodeItem 30px 色条 + FontIcon + 橙色选中边框 + 蓝色悬停边框
 5. 重构左侧面板为 `GridSplitterBox` 等价组件，实现 90px 阈值双模式切换。
 6. 全局替换 emoji 图标为 FontIcon 引用。
 
