@@ -63,7 +63,7 @@ class CropDialog(QDialog):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(8)
 
-        tip = QLabel("在图像上拖拽选择模板区域，使用"框选"按钮激活选区模式，或用右侧数值微调。")
+        tip = QLabel("在图像上拖拽选择模板区域，使用「框选」按钮激活选区模式，或用右侧数值微调。")
         tip.setStyleSheet("color: #999; font-size: 12px;")
         layout.addWidget(tip)
 

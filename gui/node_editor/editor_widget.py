@@ -250,6 +250,19 @@ class DiagramEditorWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
+        # ── Scene + View (create first — toolbar buttons reference them) ──
+        body = QWidget()
+        body_lo = QVBoxLayout(body); body_lo.setContentsMargins(0, 0, 0, 0); body_lo.setSpacing(0)
+
+        self.scene = DiagramScene()
+        self.view = DiagramEditorView(self.scene)
+
+        self.scene.node_selected.connect(self.node_selected.emit)
+        self.scene.node_deselected.connect(self.node_deselected.emit)
+        self.scene.selectionChanged.connect(self._update_toolbar_state)
+        self.view.node_dropped.connect(self._on_node_dropped)
+        self._connect_socket_signals()
+
         # ── Toolbar ──
         toolbar = QHBoxLayout()
         toolbar.setContentsMargins(4, 2, 4, 2)
@@ -302,6 +315,7 @@ class DiagramEditorWidget(QWidget):
         self._zoom_lbl = QPushButton("100%")
         self._zoom_lbl.setStyleSheet(bs + "QPushButton { background: transparent; border: none; color: #999; }")
         self._zoom_lbl.setFixedWidth(50)
+        self.view.zoom_changed.connect(lambda z: self._zoom_lbl.setText(f"{z*100:.0f}%"))
         toolbar.addWidget(self._zoom_lbl)
         toolbar.addStretch()
 
@@ -320,23 +334,6 @@ class DiagramEditorWidget(QWidget):
         tw = QWidget(); tw.setLayout(toolbar)
         tw.setStyleSheet("background: #2d2d30; border-bottom: 1px solid #3f3f46;")
         layout.addWidget(tw)
-
-        # ── Scene + View + Mini-map ──
-        body = QWidget()
-        body_lo = QVBoxLayout(body); body_lo.setContentsMargins(0, 0, 0, 0); body_lo.setSpacing(0)
-
-        self.scene = DiagramScene()
-        self.view = DiagramEditorView(self.scene)
-
-        self.scene.node_selected.connect(self.node_selected.emit)
-        self.scene.node_deselected.connect(self.node_deselected.emit)
-        self.view.zoom_changed.connect(lambda z: self._zoom_lbl.setText(f"{z*100:.0f}%"))
-        self.view.node_dropped.connect(self._on_node_dropped)
-
-        # Update undo/redo button states
-        self.scene.selectionChanged.connect(self._update_toolbar_state)
-
-        self._connect_socket_signals()
 
         body_lo.addWidget(self.view)
         layout.addWidget(body, 1)

@@ -41,7 +41,7 @@ class ConditionEditorDialog(QDialog):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(8)
 
-        tip = QLabel("条件表达式按“上游节点名.结果属性”评估；比较值支持数字、文本、布尔文本。")
+        tip = QLabel('条件表达式按「上游节点名.结果属性」评估；比较值支持数字、文本、布尔文本。')
         tip.setWordWrap(True)
         tip.setStyleSheet("color: #999; font-size: 12px;")
         layout.addWidget(tip)
