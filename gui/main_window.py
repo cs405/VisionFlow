@@ -41,7 +41,7 @@ from PyQt5.QtGui import QFont, QKeySequence, QColor
 
 from core.node_base import NodeBase, VisionNodeData, SrcFilesVisionNodeData, ROINodeData
 from core.workflow import WorkflowEngine
-from core.project import project_service
+from core.project import project_service, DiagramData, ProjectItem
 from core.events import EventType, event_system
 from core.registry import node_registry
 
@@ -54,6 +54,7 @@ from gui.dock_manager import DockManager
 from gui.log_panel import LogPanel
 from gui.flow_resource_panel import FlowResourcePanel
 from gui.node_editor.editor_widget import DiagramEditorWidget
+from gui.start_page import StartPage
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -123,6 +124,7 @@ class MainWindow(QMainWindow):
         self._workflow: WorkflowEngine | None = None
         self._selected_node: NodeBase | None = None
         self._diagram_tabs: dict[str, WorkflowEngine] = {}
+        self._project_loaded: bool = False
 
         self._setup_window()
         self._setup_caption_bar()
@@ -136,7 +138,8 @@ class MainWindow(QMainWindow):
         self._clock.timeout.connect(self._update_clock)
         self._clock.start(1000)
 
-        self._on_new_project()
+        # Show start page initially (no project auto-created)
+        self._show_start_page()
 
     # ── Window ────────────────────────────────────────────────────────
 
@@ -316,6 +319,7 @@ class MainWindow(QMainWindow):
 
     def _setup_central_area(self):
         """Build content with QDockWidget left/right + center (top+bottom splitter)."""
+        from PyQt5.QtWidgets import QStackedWidget
         # ── CENTER widget (vertical splitter: top area | bottom result) ──
         cw = QWidget()
         root = QVBoxLayout(cw); root.setContentsMargins(0, 0, 0, 0); root.setSpacing(0)
@@ -326,7 +330,17 @@ class MainWindow(QMainWindow):
 
         self._setup_center_panel()    # diagram editor / image viewer / module results
 
-        self._bottom_splitter.addWidget(self._center_widget)
+        # Stacked widget to switch between start page and editor
+        self._center_stack = QStackedWidget()
+        self._start_page = StartPage()
+        self._start_page.new_project_requested.connect(self._on_new_project)
+        self._start_page.open_project_requested.connect(self._on_open_project)
+        self._start_page.project_open_requested.connect(self._open_project)
+        self._center_stack.addWidget(self._start_page)
+        self._center_stack.addWidget(self._center_widget)
+        self._center_stack.setCurrentIndex(0)  # start page visible initially
+
+        self._bottom_splitter.addWidget(self._center_stack)
 
         # Bottom: tabbed result area
         self._setup_bottom_panel()
@@ -439,16 +453,42 @@ class MainWindow(QMainWindow):
         self._diagram_right_widget = w
 
     def _on_add_diagram(self):
-        name = f"流程图{self._diagram_tab_widget.count()}"
-        self._diagram_tab_widget.addTab(QLabel(name), name)
-        self._diagram_tab_widget.setCurrentIndex(self._diagram_tab_widget.count() - 1)
+        """Add a new diagram to the project (mirrors WPF AddDiagramCommand)."""
+        p = project_service.current_project
+        if p:
+            self._sync_workflow_to_project()
+            d = p.add_diagram()
+            self._bind_project_diagram(p)
+            self._log_panel.info(f"新建流程图: {d.name}")
+        else:
+            name = f"流程图{self._diagram_tab_widget.count()+1}"
+            self._diagram_tab_widget.addTab(QLabel(name), name)
 
     def _on_close_diagram_tab(self, idx):
-        if self._diagram_tab_widget.count() > 1:
-            self._diagram_tab_widget.removeTab(idx)
+        """Remove a diagram from the project (mirrors WPF DeleteDiagramCommand)."""
+        p = project_service.current_project
+        if p:
+            self._sync_workflow_to_project()
+            if 0 <= idx < len(p.diagrams):
+                d = p.diagrams[idx]
+                if p.delete_diagram(d):
+                    self._bind_project_diagram(p)
+                    self._log_panel.info(f"已删除流程图: {d.name}")
+        else:
+            if self._diagram_tab_widget.count() > 1:
+                self._diagram_tab_widget.removeTab(idx)
 
     def _on_diagram_tab_changed(self, idx):
-        pass  # Future: switch workflow
+        """Switch selected diagram when tab changes."""
+        p = project_service.current_project
+        if p and 0 <= idx < len(p.diagrams):
+            self._sync_workflow_to_project()
+            p.selected_diagram_index = idx
+            d = p.selected_diagram
+            if d and d.workflow:
+                self._workflow = d.workflow
+                self._diagram_editor.bind_workflow(self._workflow)
+            self._sync_proj_labels(p)
 
     # ── BOTTOM PANEL (History | Current Results | Help) ──────────────
 
@@ -755,11 +795,47 @@ class MainWindow(QMainWindow):
 
     # ── Project Ops ───────────────────────────────────────────────────
 
+    def _show_start_page(self):
+        """Show the welcome/start page, hide editor."""
+        if hasattr(self, '_center_stack'):
+            self._center_stack.setCurrentIndex(0)
+        self._start_page.refresh_recent(project_service)
+        self._project_loaded = False
+        self._sync_proj_labels(None)
+
+    def _show_editor(self):
+        """Switch from start page to editor view."""
+        if hasattr(self, '_center_stack'):
+            self._center_stack.setCurrentIndex(1)
+        self._project_loaded = True
+
+    def _bind_project_diagram(self, project: ProjectItem):
+        """Bind the selected diagram's workflow to the editor."""
+        d = project.selected_diagram
+        if d and d.workflow:
+            self._workflow = d.workflow
+            self._diagram_editor.bind_workflow(self._workflow)
+            self._refresh_diagram_tabs(project)
+        self._show_editor()
+        self._sync_proj_labels(project)
+
+    def _refresh_diagram_tabs(self, project: ProjectItem):
+        """Sync the right-side tab widget with project diagrams."""
+        tw = self._diagram_tab_widget
+        tw.blockSignals(True)
+        while tw.count() > 1:
+            tw.removeTab(0)
+        if tw.count() == 1:
+            tw.removeTab(0)
+        for i, d in enumerate(project.diagrams):
+            tw.addTab(QWidget(), d.name)
+            if i == project.selected_diagram_index:
+                tw.setCurrentIndex(i)
+        tw.blockSignals(False)
+
     def _on_new_project(self):
         p = project_service.new_project()
-        self._workflow = p.workflow
-        self._diagram_editor.bind_workflow(self._workflow)
-        self._sync_proj_labels(p)
+        self._bind_project_diagram(p)
         self._select_node(None)
         self._log_panel.info("新建项目")
 
@@ -773,8 +849,9 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "打开失败", f"文件不存在: {path}"); return
         p = project_service.load(path)
         if p:
-            self._workflow = p.workflow; self._sync_proj_labels(p)
-            self._select_node(None); self._log_panel.success(f"已打开: {path}")
+            self._bind_project_diagram(p)
+            self._select_node(None)
+            self._log_panel.success(f"已打开: {path}")
 
     def open_project(self, fp: str): self._open_project(fp)
 
@@ -788,8 +865,30 @@ class MainWindow(QMainWindow):
         p = project_service.current_project or project_service.new_project()
         path, _ = QFileDialog.getSaveFileName(self, "另存为...", f"{p.display_name}.json", project_service.FILE_FILTER)
         if path:
-            if p.workflow is None: p.workflow = self._workflow
+            self._sync_workflow_to_project()
             project_service.save_as(p, path); self._log_panel.success(f"已保存至: {path}")
+
+    def _sync_workflow_to_project(self):
+        """Save editor state back to the current project diagram."""
+        p = project_service.current_project
+        if p and p.selected_diagram and self._workflow:
+            self._diagram_editor.save_to_workflow()
+            p.selected_diagram.workflow = self._workflow
+
+    def _sync_proj_labels(self, project: ProjectItem | None):
+        """Update caption and command bar project labels."""
+        if project is None:
+            name = "VisionFlow"
+            dname = "无项目"
+        else:
+            name = project.display_name
+            sd = project.selected_diagram
+            dname = sd.name if sd else name
+        self.setWindowTitle(f"{name} — VisionFlow")
+        if hasattr(self, '_cap_proj_lbl'):
+            self._cap_proj_lbl.setText(dname)
+        if hasattr(self, '_cmd_proj_lbl'):
+            self._cmd_proj_lbl.setText(dname)
 
     # ── Workflow Ops ──────────────────────────────────────────────────
 
@@ -826,7 +925,43 @@ class MainWindow(QMainWindow):
         return self._workflow
 
     def add_diagram_tab(self, name: str, workflow: WorkflowEngine):
+        """Add a diagram tab manually (public API for backward compat)."""
         self._diagram_tabs[name] = workflow
+        p = project_service.current_project
+        if p:
+            d = DiagramData(name=name)
+            d.workflow = workflow
+            p.diagrams.append(d)
+            p.selected_diagram_index = len(p.diagrams) - 1
+        self._diagram_tab_widget.addTab(QWidget(), name)
+        self._diagram_tab_widget.setCurrentIndex(self._diagram_tab_widget.count() - 1)
+        return name
+
+    def remove_diagram_tab(self, name: str):
+        """Remove a diagram tab by name."""
+        p = project_service.current_project
+        if p:
+            for i, d in enumerate(p.diagrams):
+                if d.name == name:
+                    p.delete_diagram(d)
+                    break
+        for i in range(self._diagram_tab_widget.count()):
+            if self._diagram_tab_widget.tabText(i) == name:
+                self._diagram_tab_widget.removeTab(i)
+                break
+
+    def switch_to_diagram(self, name_or_index: str | int):
+        """Switch to diagram by name or index."""
+        if isinstance(name_or_index, int):
+            idx = name_or_index
+        else:
+            idx = -1
+            for i in range(self._diagram_tab_widget.count()):
+                if self._diagram_tab_widget.tabText(i) == name_or_index:
+                    idx = i
+                    break
+        if 0 <= idx < self._diagram_tab_widget.count():
+            self._diagram_tab_widget.setCurrentIndex(idx)
         self._diagram_tab_widget.addTab(QLabel(name), name)
 
     def remove_diagram_tab(self, name: str):

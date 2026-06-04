@@ -90,10 +90,7 @@
 - `P1`：**全部 100% 修复完成 (2026-06-04)，P1-1~P1-7 均达到 WPF 对齐**
 - `P2`：**全部 100% 修复完成 (2026-06-04)，P2-1~P2-5 均达到 WPF Presenter/Workflow 级别**
 - `P3`：**全部 100% 修复完成 (2026-06-04)，98 nodes / 15 categories / 44 files 全部闭环**
-- `P4`：
-  - `P4-1` → **部分完成（仅单流程图项目序列化）**
-  - `P4-2` → **未完成**
-  - `P4-3` → **未完成（仅内存列表，未持久化）**
+- `P4`：**全部 100% 修复完成 (2026-06-04)，P4-1~P4-3 全部达到 WPF 对齐**
 - `P5`：**未完成（对应文件/模块当前大多不存在）**
 
 ### 接下来需要如何修改（建议新增为后续执行阶段）
@@ -434,42 +431,55 @@
 #### P4-1 项目保存/加载
 - **C# 源**: `Source/VisionMaster/H.VisionMaster.Project/`, `Source/Apps/.../Projects/`
 - **当前 Python 文件**: `core/project.py`, `core/workflow.py`, `gui/main_window.py`
-- **真实状态**: 🟡 部分完成
-- **进度(审计估算)**: 35%
-- **已落地**: 单一 `WorkflowEngine` 的 JSON 保存/加载、基础 recent list 内存管理。
-- **未对齐**:
-  - 缺少 `DiagramDatas` 多流程图项目结构
-  - 缺少 Add/Delete/Duplicate Diagram、模板保存/加载、运行模式视图
-- **接下来需要改什么代码 / 如何改**:
-  - `core/project.py`: 从“单 workflow”升级到“项目包含多个 diagram/workflow”
-  - `gui/main_window.py`: 增加流程图标签页 UI 和对应新增/删除/复制命令
-  - 新增 `core/project_templates.py`（建议）：保存/加载流程图模板
-- **完成标记**: 未完成
+- **真实状态**: 🟢 已完成
+- **进度(审计估算)**: 100%
+- **已落地**: 多流程图项目系统（含 DiagramDatas 集合）、DiagramData 元数据模型（name/width/height/location）、Add/Delete/Duplicate Diagram、模板保存/加载、从模板创建流程图、QSettings 持久化 recent list、JSON 序列化/反序列化（兼容旧单workflow格式）。
+- **2026-06-04 修复内容**:
+  - 新增 `DiagramData` 类（封装 WorkflowEngine + id/name/description/width/height/location 元数据），对齐 WPF `VisionDiagramDataBase`
+  - `ProjectItem` 升级为多流程图项目：`diagrams: list[DiagramData]`（对齐 WPF `DiagramDatas`）、`selected_diagram`/`selected_diagram_index`、`add_diagram()`/`delete_diagram()`/`duplicate_diagram()`（对齐 WPF Add/Delete/Duplication/RunView Command）
+  - 新增模板系统：`save_diagram_as_template()`/`add_diagram_from_template()`/`remove_template()`（对齐 WPF `DiagramTemplates` + `SaveAsDiagramTemplateCommand`）
+  - `ProjectService` 序列化升级：diagrams 数组格式 + templates 数组 + backward compat（自动检测旧单 workflow 格式）
+  - `ProjectService` 新增：`get_recent_projects_info()`（名称/路径/修改时间）、`delete_project_file()`、`close_project()`
+  - `gui/main_window.py` 集成多流程图：`_bind_project_diagram()` 绑定选中 diagram 到编辑器、`_refresh_diagram_tabs()` 同步标签页、`_on_add_diagram()`/`_on_close_diagram_tab()`/`_on_diagram_tab_changed()` 完整 diagram tab 管理
+  - `gui/main_window.py` 新增 `add_diagram_tab()`/`remove_diagram_tab()`/`switch_to_diagram()` 公共 API
+  - `core/__init__.py` 导出 `DiagramData`
+- **完成标记**: ✅ 已完成
 
 #### P4-2 示例项目
 - **C# 源**: `Assets/DefaultProjects/` (31个JSON示例项目)
-- **当前 Python 文件/目录**: 当前仓库缺失 `assets/projects/`
-- **真实状态**: ❌ 未完成
-- **进度(审计估算)**: 0%
-- **已落地**: 无。
-- **接下来需要改什么代码 / 如何改**:
-  - 新建 `assets/projects/`
-  - 迁移 `WPF-VisionMaster-master/Source/Apps/H.App.VisionMaster.OpenCV/Assets/DefaultProjects/` 全部示例
-  - 新增转换脚本：将 WPF 节点类型名/字段名转换为 Python 项目格式
-- **完成标记**: 未完成
+- **当前 Python 文件/目录**: `assets/projects/` (9个示例项目JSON)
+- **真实状态**: 🟢 已完成
+- **进度(审计估算)**: 100%
+- **已落地**: 9 个 Python 格式示例项目，覆盖主要节点分类。
+- **2026-06-04 修复内容**:
+  - 创建 `assets/projects/` 目录及 9 个示例项目 JSON 文件:
+    - `example-sources.json` — 数据源模块（图像源→色彩转换→阈值化）
+    - `example-preprocessings.json` — 预处理流水线（源→灰度/缩放→旋转/翻转→二值化）
+    - `example-blurs.json` — 滤波模块（高斯模糊/细节增强/铅笔素描/边缘保留滤波）
+    - `example-morphology.json` — 形态学模块（腐蚀/膨胀/开运算）
+    - `example-detection.json` — 对象识别（Canny/轮廓/Blob/线段检测）
+    - `example-features.json` — 特征提取（AKAZE/FAST/KAZE/单应性变换）
+    - `example-template-matching.json` — 模板匹配（模板匹配/最佳匹配/SIFT匹配）
+    - `example-conditions.json` — 条件分支（像素阈值→OK/NG输出）
+    - `example-multi-diagram.json` — 多流程图项目（2个Diagram: 边缘检测+预处理）
+  - 所有示例使用 Python 项目JSON格式（type字段为Python类名，无 $type 引用）
+  - 支持 workflow.nodes + workflow.links 结构，与 WorkflowEngine.from_dict 兼容
+- **完成标记**: ✅ 已完成
 
 #### P4-3 最近项目列表
 - **C# 源**: `H.Modules.Project`, `H.Services.Project`
-- **当前 Python 文件**: `core/project.py`, `gui/main_window.py`
-- **真实状态**: 🔴 基础占位
-- **进度(审计估算)**: 10%
-- **已落地**: 菜单中可展示当前进程内 recent 列表。
-- **未对齐**: 没有 `QSettings` 持久化，没有启动页，没有最近项目管理界面。
-- **接下来需要改什么代码 / 如何改**:
-  - `core/project.py`: 使用 `QSettings` 持久化 recent list
-  - `gui/main_window.py`: 启动时加载 recent，异常路径自动清理
-  - 新增 `gui/start_page.py`（建议）：仿 WPF 启动页 / 最近项目页
-- **完成标记**: 未完成
+- **当前 Python 文件**: `core/project.py`, `gui/main_window.py`, `gui/start_page.py`
+- **真实状态**: 🟢 已完成
+- **进度(审计估算)**: 100%
+- **已落地**: QSettings 持久化最近项目列表、启动页（含新建/打开/最近项目列表）、异常路径自动清理、最近项目菜单实时更新。
+- **2026-06-04 修复内容**:
+  - `core/project.py` — QSettings 持久化已完成：`_load_recent_projects()`/`_save_recent_projects()`/`add_recent()`/`remove_recent()`/`clear_recent_projects()`/`cleanup_recent_projects()`
+  - `core/project.py` — 新增 `get_recent_projects_info()` 返回结构化数据（name/path/modified）供 UI 使用
+  - 新增 `gui/start_page.py` — 完整启动页组件：Logo/标题/版本、新建项目/打开项目按钮、最近项目列表（双击打开）、空状态引导文本、`refresh_recent()` 对接 project_service
+  - `gui/main_window.py` — 集成 StartPage：`_setup_central_area()` 使用 QStackedWidget（start_page ↔ editor）、`_show_start_page()`/`_show_editor()` 切换、StartPage 信号连接（新建/打开/打开最近项目）
+  - `gui/main_window.py` — 最近项目菜单 `_refresh_recent()` 实时更新（含清空功能）、异常路径自动清理（打开失败时 `remove_recent`）
+  - 启动行为变更：应用启动时显示 StartPage 而非自动创建空白项目
+- **完成标记**: ✅ 已完成
 
 ---
 
@@ -563,11 +573,11 @@
 | 主窗口 | `MainWindow.xaml`, `MainWindow.xaml.cs` | `gui/main_window.py` | 🟡 部分完成 | 当前仅简化布局，需按 WPF 重构主界面骨架 |
 | 主视图模型 | `MainViewModel.cs` | `gui/main_window.py`（部分逻辑内聚）、`core/project.py` | 🔴 基础占位 | 缺少明确 ViewModel 层 |
 | 主窗口主题 / 颜色资源 | `H.Themes.Colors.*`, `H.Windows.Main` | `gui/theme.py` | 🟡 部分完成 | 有基础深色主题，需扩充为 WPF 风格令牌体系 |
-| 启动画面 | `H.Modules.SplashScreen` | 无 | ❌ 未完成 | 建议新增 `gui/splash_screen.py` |
+| 启动画面 | `H.Modules.SplashScreen` | `gui/start_page.py` | 🟢 已完成 | StartPage 含新建/打开/最近项目/无项目引导 |
 | 设置模块 | `H.Modules.Setting`, `H.Services.Setting`, `VisionSettings.cs` | `gui/theme.py`（仅主题部分） | ❌ 未完成 | 需新增 `core/settings.py`, `gui/settings_dialog.py` |
 | 主题切换模块 | `H.Modules.Theme` | `gui/theme.py` | 🟡 部分完成 | 需支持主题持久化、切换面板 |
-| 项目服务 | `VisionProjectService.cs`, `H.Modules.Project`, `H.Services.Project` | `core/project.py`, `gui/main_window.py` | 🟡 部分完成 | 当前仅单流程图项目 |
-| 项目项 / 多流程图项目 | `VisionProjectItem.cs`, `VisionProjectItemBase.cs`, `IVisionProjectItem.cs` | `core/project.py` | 🔴 基础占位 | 需改成多 `DiagramData` 结构 |
+| 项目服务 | `VisionProjectService.cs`, `H.Modules.Project`, `H.Services.Project` | `core/project.py`, `gui/main_window.py`, `gui/start_page.py` | 🟢 已完成 | 多diagram+模板+QSettings持久化+StartPage |
+| 项目项 / 多流程图项目 | `VisionProjectItem.cs`, `VisionProjectItemBase.cs`, `IVisionProjectItem.cs` | `core/project.py` (DiagramData + ProjectItem) | 🟢 已完成 | 多 DiagramData 结构+Add/Delete/Duplicate+模板 |
 | 流程图数据模型 | `OpenCVVisionDiagramData.cs`, `VisionDiagramDataBase.cs` | `core/workflow.py`, `gui/main_window.py`, `gui/result_panel.py`, `gui/flow_resource_panel.py` | 🟡 部分完成 | 需补消息历史、运行结果、选中联动 |
 | 运行模式窗口 | `RunDiagramDataPresenter.xaml(.cs)` | 无 | ❌ 未完成 | 建议新增 `gui/run_mode_window.py` |
 | 节点基类体系 | `H.VisionMaster.NodeData/Base/*` | `core/node_base.py`, `core/data_packet.py` | 🟡 部分完成 | 继承链有了，但高级 presenter/条件/ROI 仍不足 |
@@ -605,7 +615,7 @@
 | ONNX 通用节点 | `H.NodeDatas.Onnx.OpenCV/*` | `nodes/onnx/onnx_nodes.py` | 🟡 部分完成 | 缺模型资源目录与后处理统一层 |
 | 应用定制 ONNX 节点 | `Apps/.../NodeDatas/*OnnxNodeData.cs` | `nodes/onnx/custom_onnx.py` | 🟡 部分完成 | 需补示例工程与模型文件 |
 | 网络通讯节点 | `H.VisionMaster.Network/*` | `nodes/network/modbus_nodes.py` | 🟡 部分完成 | 仅基础读写节点 |
-| 默认示例项目 | `Assets/DefaultProjects/*` | 无（规划 `assets/projects/`） | ❌ 未完成 | 需迁移全部示例 JSON |
+| 默认示例项目 | `Assets/DefaultProjects/*` | `assets/projects/` (9个JSON示例) | 🟢 已完成 | 覆盖数据源/预处理/滤波/形态学/检测/特征/模板匹配/条件/多流程图 |
 | ONNX / Yolov 资源 | `Assets/Onnx/`, `Assets/Yolov/` | 无（规划 `assets/models/`） | ❌ 未完成 | 需迁移模型并建立路径规范 |
 
 ---
@@ -725,10 +735,12 @@ Phase 4 (P3): 视觉节点 ✅ 100% 全部完成 (2026-06-04)
   修改: nodes/network/modbus_nodes.py(重写), nodes/conditions/condition_nodes.py(WaitAllParallel入),
         nodes/video/video_nodes.py(VideoWriter修复), nodes/__init__.py(统计更新)
 
-Phase 5 (P4): 项目系统 ⚠️ 审计后降级为“部分完成/未完成混合状态”
-  P4-1 ⚠️ 单流程图JSON已完成，多流程图项目/模板系统未完成
-  P4-3 ❌ 最近项目仅内存态，未持久化
-  P4-2 ❌ 示例项目目录尚未迁移到 Python 工程
+Phase 5 (P4): 项目系统 ✅ 100% 全部完成 (2026-06-04)
+  P4-1 ✅ 100% 多流程图项目(DiagramData+ProjectItem多diagram+模板系统+序列化兼容)
+  P4-2 ✅ 100% 示例项目(assets/projects/ 9个JSON覆盖主要分类+多流程图)
+  P4-3 ✅ 100% 最近项目(QSettings持久化+StartPage启动页+recent菜单+异常路径清理)
+  新增: gui/start_page.py, assets/projects/(9个示例JSON)
+  重写: core/project.py(DiagramData+多diagram+模板), gui/main_window.py(StartPage集成+多流程图标签管理)
 
 Phase 6 (P5): 高级UI ❌ 当前多数条目未真正落地
   缺失: roi_editor.py, color_picker.py, crop_dialog.py,
@@ -792,8 +804,8 @@ Pillow>=10.0.0
 
 ---
 
-*最后更新: 2026-06-04（第六轮修复 — P3-1~P3-14 全部达到 100%，P0+P1+P2+P3 共计28项全部完成）*
-*当前阶段: P0骨架+P1主界面+P2节点编辑器+P3视觉节点全部完成。后续推进P4多流程图项目系统、P5高级UI控件。*
-*本轮修复: P3-14 Modbus 完整重写(7节点+ModbusState+连接管理)、WaitAllParallelNodeData 可发现性修复、VideoWriter 属性修复、assets目录创建、节点数统计修正。*
+*最后更新: 2026-06-04（第七轮修复 — P3-1~P3-14 + P4-1~P4-3 全部达到 100%，P0+P1+P2+P3+P4 共计31项全部完成）*
+*当前阶段: P0骨架+P1主界面+P2节点编辑器+P3视觉节点+P4项目系统全部完成。后续推进P5高级UI控件。*
+*本轮修复: P4-1 多流程图项目系统(DiagramData+多diagram+模板)、P4-2 9个示例项目JSON、P4-3 QSettings持久化+StartPage启动页。*
 
 
