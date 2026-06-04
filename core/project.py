@@ -152,8 +152,12 @@ class ProjectItem:
 
     def add_diagram(self, name: str = None) -> DiagramData:
         """Add a new empty diagram (mirrors WPF AddDiagramCommand)."""
+        from core.workflow import WorkflowEngine
+
         idx = len(self.diagrams) + 1
-        d = DiagramData(name=name or f"流程图 {idx}")
+        diagram_name = name or f"流程图 {idx}"
+        d = DiagramData(name=diagram_name)
+        d.workflow = WorkflowEngine(name=diagram_name)
         self.diagrams.append(d)
         self._selected_diagram_index = len(self.diagrams) - 1
         return d

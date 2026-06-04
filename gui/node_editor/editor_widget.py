@@ -408,6 +408,11 @@ class DiagramEditorWidget(QWidget):
         self.scene.load_from_workflow(workflow)
         self._subscribe_workflow_events()
 
+    def save_to_workflow(self):
+        """Persist current scene positions/links back into the bound workflow."""
+        if self._workflow:
+            self.scene.save_to_workflow(self._workflow)
+
     def _on_run(self):
         if self._workflow:
             for item in self.scene.get_all_node_items():
