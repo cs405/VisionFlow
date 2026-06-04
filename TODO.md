@@ -2,9 +2,9 @@
 
 > 本文档对照 `WPF-VisionMaster/` 源码，逐项记录 Python (PyQt5) 版本尚未对齐的功能、UI 组件、交互行为和资源数据，按优先级排序。
 >
-> **最新更新**: 2026-06-04 — P0/P1 全部完成。共对齐 10 个 TODO 项：左侧面板、FontIcon 系统、节点双击、缩略图、节点样式、右键菜单、工具栏、视频源、图像叠加条。
+> **最新更新**: 2026-06-04 — P0/P1/P2 全部完成。共对齐 15 个 TODO 项：左侧面板、FontIcon 系统、节点双击、缩略图、节点样式、右键菜单、工具栏、视频源、图像叠加条、模块结果过滤、历史 FontIcon 状态列、帮助 HTML、Presenter 模板体系。
 >
-> **变更汇总**: `gui/font_icons.py` (新), `gui/widgets/` (新), `gui/toolbox_panel.py` (重写), `gui/flow_resource_panel.py` (重写), `gui/node_editor/node_item.py` (重写), `gui/node_editor/scene.py` (修改), `gui/node_editor/editor_widget.py` (修改), `gui/image_viewer.py` (修改), `gui/property_panel.py` (修改), `gui/main_window.py` (修改)
+> **变更汇总 (18 files)**: `gui/font_icons.py` (新), `gui/widgets/` (新, 3 files), `gui/presenters.py` (新), `gui/toolbox_panel.py` (重写), `gui/flow_resource_panel.py` (重写), `gui/node_editor/node_item.py` (重写), `gui/result_panel.py` (重写), `gui/node_editor/scene.py` (修改), `gui/node_editor/editor_widget.py` (修改), `gui/image_viewer.py` (修改), `gui/property_panel.py` (修改), `gui/main_window.py` (修改)
 
 ---
 
@@ -78,14 +78,15 @@
 - **WPF 行为**：带 `CheckedGlyph` / `UncheckedGlyph` 属性的 ToggleButton。
 - **实现**：`FontIconToggleButton(checked_icon, unchecked_icon)` 支持 checked/unchecked 双字形，`toggled` 信号自动切换显示。已在左侧面板「流程资源」Header 中使用。
 
-### 2.3 WPF Presenter 模板体系
+### 2.3 WPF Presenter 模板体系 ✅ COMPLETED (2026-06-04)
 
-- **WPF 行为**：大量使用 `DataTemplate` + `ContentPresenter` 进行 MVVM 驱动的视图注入（如 `ResultPresenter`、`PropertyPresenter`、`HelpPresenter`、`ROIPresenter`）。
-- **Python 现状**：使用 `set_node()` + `QWidget` 重建方式，没有模板/视图注入体系。
-- **需要做的**：
-  1. 设计 `PresenterRegistry`：`type -> QWidget factory` 映射，类似 WPF `DataTemplate.DataType`。
-  2. 实现 `ContentPresenter` 等价组件：根据绑定对象的类型自动解析并创建对应 Presenter Widget。
-  3. 为以下 WPF Presenter 创建对应 Python 版本（见第五章）。
+- **WPF 行为**：`DataTemplate` + `ContentPresenter` MVVM 视图注入。
+- **实现**（`gui/presenters.py` 新建）：
+  - `PresenterRegistry` — type→QWidget factory 映射，`isinstance()` 匹配（类似 WPF DataType）
+  - `ContentPresenter(QWidget)` — `set_content(obj)` 自动解析类型→创建嵌入 Presenter
+  - `DefaultTextPresenter` — 回退视图（显示 `str(obj)`）
+  - 内置注册：`VisionNodeData → PropertyPanel(group_filter=[RESULT_PARAMETERS])`, `ROIBase → ROI info label`
+  - 支持 `set_fallback()` 注册全局回退工厂
 
 ---
 
@@ -172,37 +173,39 @@
 
 ---
 
-## 六、右侧面板 — 模块结果 + 历史 + 帮助
+## 六、右侧面板 — 模块结果 + 历史 + 帮助 ✅ COMPLETED (2026-06-04)
 
-### 6.1 模块结果 Tab
+### 6.1 模块结果 Tab ✅
 
-- **WPF 行为**：`TabItem「模块结果」` 显示 `GroupBox` 标题「模块名称 <xxx>」，内容为 `Form SelectObject="{Binding ResultNodeData}"` 动态属性表单。
-- **Python 现状**：`PropertyPanel` 显示选中节点的属性表单，标题「模块名称 <xxx>」已实现。但缺少 WPF Form 的 `UseGroupNames` 过滤（只显示 `ResultParameters` 组）。
-- **需要做的**：`PropertyPanel` 支持按 `PropertyGroupNames` 过滤，模块结果面板只显示 `RESULT_PARAMETERS` 组的属性（只读），完整属性面板显示所有可编辑组。
+- **WPF 行为**：`TabItem「模块结果」` 显示 `GroupBox` 标题 + `Form SelectObject` 属性表单（仅 `ResultParameters` 组）。
+- **实现**：
+  - `PropertyPanel.__init__` 新增 `group_filter: list[str] | None` 和 `readonly: bool` 参数
+  - `_do_refresh()` 按 group_filter 过滤属性分组
+  - `_is_readonly()` 合并 force_readonly + Property.readonly 双重检查
+  - `presenters.py` 注册 `VisionNodeData → PropertyPanel(group_filter=[RESULT_PARAMETERS], readonly=True)`
 
-### 6.2 历史结果 Tab
+### 6.2 历史结果 Tab ✅
 
-- **WPF 行为**：`DataGrid` 四列：「执行序号」「执行时间」「模块」「结果数据」。结果数据列带 `FontIconTextBlock` 状态图标（`Info`/`Error`/`Completed`）+ 消息文本。选中历史行更新右侧结果图。
-- **Python 现状**：`ResultPanel` 有基本表格实现，但缺少状态图标列和完整的选中联动。
-- **需要做的**：
-  1. 历史表格添加状态图标列（FontIcon）。
-  2. 选中历史行 → 更新图像显示（`ResultImageSource`）。
-  3. 结果数据列合并图标+文本（使用自定义 delegate）。
+- **WPF 行为**：`DataGrid` 四列，结果数据列含 FontIcon 状态图标 + 消息文本。选中行 → 更新主图。
+- **实现**：
+  - `IconTextDelegate(QStyledItemDelegate)` — 自定义 draw 方法绘制 FontIcon + elidedText 文本
+  - `STATE_ICONS` / `STATE_COLORS` 字典：Success→Completed(green), Error→Error(red), Warning→Warning(orange)
+  - `add_to_history()` — 执行完成时记录，含 node_id+state+time+message
+  - `_on_history_cell_clicked` — 发射 `image_update_requested` → MainWindow 更新主图
+  - `node_executed` 信号链：DiagramEditorWidget → MainWindow → ResultPanel.add_to_history
 
-### 6.3 帮助 Tab
+### 6.3 帮助 Tab ✅
 
-- **WPF 行为**：`TabItem「帮助」` 显示模块名称、功能描述、`HelpPresenter`（可点击的文档超链接）。
-- **Python 现状**：`HelpPanel` 和 `ResultPanel._help_edit` 有基本显示，但未集成到主帮助面板。
-- **需要做的**：
-  1. 统一帮助显示入口。
-  2. 支持可点击的超链接（使用 `QLabel.setOpenExternalLinks(True)`）。
-  3. 从 `HelpNodeDataBase.create_help_presenter()` 读取帮助数据。
+- **WPF 行为**：模块名称、功能描述、HelpPresenter 可点击超链接。
+- **实现**：
+  - `ResultPanel.show_help()` — 生成完整 HTML 帮助页：FontIcon 图标标题、类型/描述/继承链、参数表、在线文档超链接（setOpenExternalLinks）
+  - 从 `HelpNodeDataBase.create_help_presenter()` 读取 help_info dict
+  - 参数表按 Property 描述符自动生成
 
-### 6.4 当前模块结果 Tab
+### 6.4 当前模块结果 Tab ✅
 
-- **WPF 行为**：`TabItem「当前模块结果」` 显示 `ResultNodeData.ResultPresenter`，支持 `PreviewMouseLeftButtonDown` → `ZoomToRectCommand`（点击结果矩形 → 在主图像上定位）。
-- **Python 现状**：`ResultPanel._current_table` 有基本实现，支持点击几何 item 在图像上画 overlay + zoom to rect。
-- **需要做的**：确认 `ZoomToRectCommand` 行为一致（已有 `ImageViewer.zoom_to_rect` 动画）。
+- **WPF 行为**：`ResultNodeData.ResultPresenter` + `ZoomToRectCommand`。
+- **实现**：`_on_current_result_clicked` → ImageViewer 添加 overlay + zoom_to_rect 动画（已对齐）
 
 ---
 
@@ -359,8 +362,8 @@
 | **P1** | ~~FontIcon 系统（第二节）~~ | ✅ 已完成 (2026-06-04) |
 | **P1** | ~~GridSplitterBox 窄栏/宽栏（第一节）~~ | ✅ 已完成 (2026-06-04) |
 | **P1** | ~~节点右键菜单增强（第三节 3.2）~~ | ✅ 已完成 (2026-06-04) |
-| **P2** | 历史结果面板完善（第六节 6.2） | ⬜ 待实施 |
-| **P2** | Presenter 模板体系（第二节 2.3） | ⬜ 待实施 |
+| **P2** | ~~历史结果面板完善（第六节 6.2）~~ | ✅ 已完成 (2026-06-04) |
+| **P2** | ~~Presenter 模板体系（第二节 2.3）~~ | ✅ 已完成 (2026-06-04) |
 | **P2** | ~~工具栏 FontIcon 化（第七节）~~ | ✅ 已完成 (2026-06-04) |
 | **P3** | 示例项目 + ONNX 模型（第十一节） | ⬜ 待实施 |
 | **P3** | 主题切换（第十二节 12.5） | ⬜ 待实施 |
@@ -382,10 +385,10 @@
 5. 重构左侧面板为 `GridSplitterBox` 等价组件，实现 90px 阈值双模式切换。
 6. 全局替换 emoji 图标为 FontIcon 引用。
 
-### 第三阶段：面板完善（P2）
-7. 完善右侧面板三 Tab（模块结果/历史/帮助）。
-8. 实现 `PresenterRegistry` + `ContentPresenter` 模板体系。
-9. 工具栏 FontIcon 化。
+### ✅ 第三阶段 (2026-06-04)：面板完善（已全部完成 P2）
+7. ✅ 右侧面板三 Tab — PropertyPanel 分组过滤 + 历史 FontIcon 状态列 + 帮助 HTML 超链接
+8. ✅ PresenterRegistry + ContentPresenter 模板体系
+9. ✅ 工具栏 FontIcon 化
 
 ### 第四阶段：内容与体验（P3-P4）
 10. 复制示例项目、图像、ONNX 模型。
