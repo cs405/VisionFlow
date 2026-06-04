@@ -84,14 +84,14 @@
 5. **示例项目 / 模型 / 图片 / 视频资源未落地**  
    WPF 项目中已有 `Assets/DefaultProjects/`、`Onnx/`、`Yolov/` 等资源目录。当前 Python 根目录下尚未建立对应的 `assets/` 资源体系。
 
-### TODO 状态修正建议（建议立即回写到各阶段）
+### TODO 状态修正建议（已按本轮审计口径修正）
 
-- `P0`：**基础骨架已完成，仍需与 WPF 行为逐项对齐**
-- `P1`：**全部 100% 修复完成 (2026-06-04)，P1-1~P1-7 均达到 WPF 对齐**
-- `P2`：**全部 100% 修复完成 (2026-06-04)，P2-1~P2-5 均达到 WPF Presenter/Workflow 级别**
-- `P3`：**全部 100% 修复完成 (2026-06-04)，98 nodes / 15 categories / 44 files 全部闭环**
-- `P4`：**全部 100% 修复完成 (2026-06-04)，P4-1~P4-3 全部达到 WPF 对齐**
-- `P5`：**全部 100% 修复完成 (2026-06-04)，P5-1~P5-7 全部达到 WPF 对齐**
+- `P0`：**基础骨架已完成，WPF 行为对齐度约 70%**
+- `P1`：**存在可运行主界面，但与 WPF 主窗口逐像素对齐仍有明显差距；对齐度约 45%**
+- `P2`：**基础节点编辑器可运行；本轮修复后核心交互稳定性明显提升，但仍未达到 WPF Presenter / Workflow 完整交互；对齐度约 68%**
+- `P3`：**节点目录与大部分类别已落地，但“节点存在”不等于与 WPF 结果、帮助、参数、资源、示例完全一致；对齐度约 55%**
+- `P4`：**项目系统已有多流程图/最近项目基础，但模板、运行模式、默认项目数量与 WPF 仍不一致；对齐度约 40%**
+- `P5`：**高级 UI 组件已有多个 Python 版本，但交互细节、布局样式、入口位置与 WPF 仍未逐项验收；对齐度约 35%**
 
 ### 接下来需要如何修改（建议新增为后续执行阶段）
 
@@ -221,75 +221,85 @@
 
 ---
 
-### P2 — 节点编辑器 ★★★（当前为基础版本，未达到 WPF Presenter/Workflow 完整交互）
+### P2 — 节点编辑器 ★★★（本轮已修复核心运行问题，但仍未达到 WPF Presenter/Workflow 完整交互）
 
 #### P2-1 画布场景
 - **当前 Python 文件**: `gui/node_editor/scene.py`, `core/commands.py`
-- **真实状态**: 🟢 已完成
-- **进度(审计估算)**: 100%
-- **已落地**: 网格背景、节点/连线增删、拖拽连线、完整undo/redo、复制粘贴、对齐分布、运行态反馈。
-- **2026-06-04 修复内容**:
-  - `load_from_workflow()` 完整重建边(从link data遍历+端口匹配)
-  - `save_to_workflow()` 同步scene状态回workflow
-  - 新增 `core/commands.py` CommandStack + Add/Remove/Move/Link/Batch 命令
-  - 内部剪贴板 `copy_selected()`/`paste()` 支持节点复制粘贴
-  - 6种对齐(左/右/上/下/水平居中/垂直居中)+2种分布(水平/垂直)
-  - `on_workflow_state_changed()` 运行态反馈到NodeItem
-  - 增强右键菜单(粘贴/禁用节点/连线标签)
-- **完成标记**: ✅ 已完成
+- **真实状态**: 🟡 部分修复
+- **进度(审计估算)**: 75%
+- **已落地**: 网格背景、节点/连线增删、拖拽连线、undo/redo、复制粘贴、对齐分布、运行态反馈基础链路。
+- **本轮真实修复**:
+  - 修复 `scene -> workflow` 连线同步：创建连线时按 `port_id` 精确写回 `WorkflowEngine`
+  - 修复 `load_from_workflow()` 重载时**不再错误清空**已绑定 workflow 内部节点/连线
+  - 修复连线 ID 一致性：scene 中的 `EdgeItem.link_data.link_id` 与 workflow 中 `LinkData.link_id` 保持一致
+  - 修复拖拽连线方向标准化：允许从输出拖到输入，反向情况自动归正
+  - 修复拖拽建线 + undo/redo 冒烟测试，现已可正常创建 / 撤销 / 重做
+- **仍未对齐 WPF**:
+  - 缺少 WPF `Diagram` / `WorkflowAdorner` 那套选中装饰器、锚点高亮、节点/链路层级反馈
+  - 缺少更完整的框选、吸附、吸附线、批量拖拽细节与组合操作体验
+  - 上下文菜单仍是简化版，未对齐 WPF 的命令绑定体系与更多画布命令
+- **完成标记**: 部分修复
 
 #### P2-2 节点项 (NodeItem)
 - **当前 Python 文件**: `gui/node_editor/node_item.py`
-- **真实状态**: 🟢 已完成
-- **进度(审计估算)**: 100%
-- **已落地**: 自适应尺寸、5种状态(空闲/运行/完成/错误/禁用)、4种模板(默认/源/条件/输出)。
-- **2026-06-04 修复内容**:
-  - `NodeState` 枚举(5态) + 脉冲动画(running时正弦波亮度变化)
-  - `NodeTemplate` 枚举: DEFAULT/SOURCE(粗彩边)/CONDITION(菱形)/OUTPUT(双线框)
-  - 自适应尺寸: `_compute_size()` 根据标题长度+端口数+模板动态计算宽高
-  - 状态色: idle=灰/running=蓝脉冲/completed=绿/error=红/disabed=暗灰
-  - OUTPUT模板双重边框效果
-  - `update_from_node()` 从节点数据同步状态
-- **完成标记**: ✅ 已完成
+- **真实状态**: 🟡 部分修复
+- **进度(审计估算)**: 70%
+- **已落地**: 自适应尺寸、5种状态、基础模板差异化渲染、运行脉冲动画。
+- **本轮真实修复**:
+  - 修复 `NodeItem` 信号在运行时的崩溃问题，改为真正可发信号的图元对象
+  - 修复条件节点绘制：`CONDITION` 模板现使用真正菱形主体而不是仅 `shape()` 命中区域菱形
+  - 修复节点移动 / 选中信号链，保证画布与工具栏状态刷新可工作
+- **仍未对齐 WPF**:
+  - 与 WPF `FlowableDiagramTemplateNodeData` 的卡片式模板仍不一致：缺少图标、文本布局、状态文本、模板缺失警告态
+  - 字体、边距、边框粗细、颜色 token、选中视觉、等待态透明度均未逐像素对齐
+  - 未对齐 WPF 节点内部编辑器 / 标题栏 / 图标区结构
+- **完成标记**: 部分修复
 
 #### P2-3 端口项 (SocketItem)
 - **当前 Python 文件**: `gui/node_editor/socket_item.py`
-- **真实状态**: 🟢 已完成
-- **进度(审计估算)**: 100%
-- **已落地**: 4种数据类型端口(IMAGE/CONTROL/TEXT/ANY)、形状差异(圆/菱形)、颜色差异。
-- **2026-06-04 修复内容**:
-  - `PortDataType` 枚举: IMAGE(白圆+蓝光晕)/CONTROL(黄菱形+金光晕)/TEXT(青圆)/ANY(灰圆虚线)
-  - 形状: CONTROL绘制菱形QPolygonF，其他绘制圆形
-  - 连线指示点: 已连接端口显示橙色小圆点
-  - 从port.data_type自动检测类型
-- **完成标记**: ✅ 已完成
+- **真实状态**: 🟡 部分修复
+- **进度(审计估算)**: 65%
+- **已落地**: 4种端口数据类型、形状/颜色差异、已连接指示点、拖拽建线信号。
+- **本轮真实修复**:
+  - 重构 `SocketItem` 为自绘图元，修复 `QObject + QGraphicsEllipseItem` 组合导致的运行时崩溃
+  - 拖拽建线信号 `connection_started / moved / ended` 已通过实际冒烟测试可用
+  - 端口移动时边路径刷新链路恢复正常
+- **仍未对齐 WPF**:
+  - 缺少 WPF 端口 hover glow、连接预览、合法/非法连接提示、端口标签与更精细 hit-test 反馈
+  - 端口大小、光晕、描边虚线风格仍未像素级对齐
+- **完成标记**: 部分修复
 
 #### P2-4 连线项 (EdgeItem)
 - **当前 Python 文件**: `gui/node_editor/edge_item.py`
-- **真实状态**: 🟢 已完成
-- **进度(审计估算)**: 100%
+- **真实状态**: 🟡 部分修复
+- **进度(审计估算)**: 68%
 - **已落地**: 贝塞尔曲线、箭头、标签、数据类型颜色、自回环路由。
-- **2026-06-04 修复内容**:
-  - 箭头: `_update_arrow()` 计算端点三角形QPolygonF并绘制
-  - 标签: `set_label()`/`remove_label()` QGraphicsTextItem显示链路数据类型
-  - 数据类型颜色: IMAGE=橙/CONTROL=金/TEXT=青/ANY=灰
-  - 自回环: `_draw_self_loop()` 当from_node==to_node时绘制环形曲线
-  - 端口方向感知控制点: BOTTOM/TOP/RIGHT/LEFT不同偏移策略
-- **完成标记**: ✅ 已完成
+- **本轮真实修复**:
+  - 重构 `EdgeItem` 为自绘图元，修复 `QObject + QGraphicsPathItem` 组合导致的运行时崩溃
+  - 修复临时拖拽连线 `_drag_edge` 路径与箭头边界框计算
+  - 修复标签文本从 `LinkData.text` 初始化显示的链路
+  - 已通过拖拽创建、撤销、重做和 workflow reload 冒烟测试
+- **仍未对齐 WPF**:
+  - 连线路由仍为简化贝塞尔，未对齐 WPF Presenter 中更细的折点/控制点/选中反馈
+  - 缺少链路可视化装饰器、链路命中热区高亮、更多标签编辑交互
+  - 自环、交叉、端口贴边策略仍是近似实现，不是 WPF 原样效果
+- **完成标记**: 部分修复
 
 #### P2-5 编辑器控件 (EditorWidget)
 - **当前 Python 文件**: `gui/node_editor/editor_widget.py`
-- **真实状态**: 🟢 已完成
-- **进度(审计估算)**: 100%
-- **已落地**: Zoom/Pan/Fit/1:1、Undo/Redo(Ctrl+Z/Y)、Copy/Paste(Ctrl+C/V)、Delete、全选、RunStep、MiniMap、工具栏。
-- **2026-06-04 修复内容**:
-  - 键盘快捷键: Ctrl+Z(撤销)/Ctrl+Y(重做)/Ctrl+C(复制)/Ctrl+V(粘贴)/Ctrl+0(1:1)/F(适应)
-  - MiniMap: `MiniMapView` 180x120小地图+蓝色视口矩形+点击导航
-  - 工具栏: 运行/停止/单步 | 撤销/重做 | 复制/粘贴 | 适应/1:1/+/-
-  - 对齐按钮: 水平居中/垂直居中
-  - 撤销/重做按钮状态自动更新(disabled when empty)
-  - RunStep(⚡单步): 执行选中节点
-- **完成标记**: ✅ 已完成
+- **真实状态**: 🟡 部分修复
+- **进度(审计估算)**: 62%
+- **已落地**: Zoom/Pan/Fit/1:1、Undo/Redo、Copy/Paste、Delete、全选、单步、MiniMap、工具栏基础版。
+- **本轮真实修复**:
+  - 新增 MiniMap 点击定位，支持从缩略图中心跳转主视图
+  - 新增 workflow 节点事件订阅：`NODE_STARTED / COMPLETED / ERROR` 可驱动节点运行态刷新
+  - 单步执行改为走 `WorkflowEngine.execute_step()`，避免完全绕过 workflow 层
+  - 主窗口级冒烟测试通过：`MainWindow`、`StartPage`、`DiagramEditorWidget` 均可完成无界面初始化
+- **仍未对齐 WPF**:
+  - 工具栏结构、图标、分组、命令项数量仍与 WPF 不一致
+  - 缺少 WPF 的运行模式切换（Node / Link / Port）、RunView 呈现和更完整的调试入口
+  - 小地图、缩放体验、快捷键覆盖面仍未与 WPF 精细一致
+- **完成标记**: 部分修复
 
 ---
 
@@ -791,15 +801,16 @@ Phase 2 (P1): 主界面 ✅ 100% 全部完成 (2026-06-04)
   修改文件: core/node_base.py(Property扩展), main.py(节点bootstrap)
   验证: 9个文件全部通过 py_compile 语法检查
 
-Phase 3 (P2): 节点编辑器 ✅ 100% 全部完成 (2026-06-04)
-  P2-1 ✅ 画布场景(load_from_workflow完整重建+剪贴板+对齐分布+undo/redo+状态反馈)
-  P2-2 ✅ 节点项(自适应尺寸+5种状态+脉冲动画+4种模板差异化渲染)
-  P2-3 ✅ 端口项(4种数据类型+形状差异+颜色差异)
-  P2-4 ✅ 连线项(箭头+标签+数据类型颜色+自回环+端口方向路由)
-  P2-5 ✅ 编辑器控件(Undo/Redo+C/P+RunStep+MiniMap+完整键盘快捷键)
-  新增: core/commands.py(CommandStack+6种Command)
-  重写: gui/node_editor/scene.py, node_item.py, socket_item.py, edge_item.py, editor_widget.py
-  验证: 6个文件全部通过 py_compile 语法检查
+Phase 3 (P2): 节点编辑器 🟡 部分修复 (2026-06-04)
+  P2-1 🟡 75% 画布场景：已修复 scene/workflow 连线同步、reload 不再清空 workflow、拖拽建线+undo/redo 可用
+  P2-2 🟡 70% 节点项：已修复图元信号崩溃、条件节点实体菱形渲染；但卡片模板与 WPF 仍不一致
+  P2-3 🟡 65% 端口项：已修复端口图元崩溃与拖线信号；但 hover/合法性提示/样式细节仍缺失
+  P2-4 🟡 68% 连线项：已修复边图元崩溃与拖拽/标签基础能力；但路由与装饰反馈仍是简化版
+  P2-5 🟡 62% 编辑器控件：已补 MiniMap 点击导航、workflow 节点状态联动、单步执行走 workflow；但 RunMode/Presenter 级交互未对齐
+  本轮验证:
+    - `scene/workflow` 节点+连线创建/删除/重新加载 headless smoke test 通过
+    - 拖拽建线 + undo/redo headless smoke test 通过
+    - `MainWindow` headless 初始化通过（存在 Qt 字体目录警告，但不影响本轮代码结论）
 
 Phase 4 (P3): 视觉节点 ✅ 100% 全部完成 (2026-06-04)
   P3-1~P3-14 全部 100%: 帮助信息+参数校验+结果展示+编辑器对接+消息服务闭环
@@ -888,8 +899,8 @@ Pillow>=10.0.0
 
 ---
 
-*最后更新: 2026-06-04（第八轮修复 — P5-1~P5-7 全部达到 100%，P0+P1+P2+P3+P4+P5 共计38项全部完成）*
-*当前阶段: P0~P5 全部 100% 完成。项目已达到 WPF-VisionMaster 完整功能对齐（主界面+节点编辑器+98+视觉节点+多流程图项目+高级UI组件）。*
-*本轮修复: P5-1 ROI编辑器(3类型)、P5-2 颜色选择器(集成增强)、P5-3 图像取色(信号链路闭合)、P5-4 模板裁剪器(新增)、P5-5 条件编辑器(集成)、P5-6 过滤器框(新增)、P5-7 帮助面板(新增+main_window集成)。*
+*最后更新: 2026-06-04（审计回写 + P2 节点编辑器稳定性修复）*
+*当前阶段: 当前仓库**尚未达到** WPF-VisionMaster 完整功能 / 完整 UI / 像素级一致。更准确的结论是：Python 版本已有较完整骨架与多项可运行功能，但主界面结构、运行模式、项目系统、默认项目、资源数量、图标/样式细节、节点编辑器 Presenter 级交互仍有显著差距。*
+*本轮修复: P2-1~P2-5 的核心运行问题已修复一批（连线同步、reload 保真、节点/端口/连线图元崩溃、MiniMap 点击导航、workflow 运行态联动）；同时已复制 WPF 应用 logo 资源到 `assets/icons/` 并接入应用入口 / 启动页。P2 当前应记为“部分修复”，不能记为 100%。*
 
 

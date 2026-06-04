@@ -12,9 +12,9 @@ Visual differences by type: fill color, pen style, shape.
 """
 
 from enum import Enum
-from PyQt5.QtWidgets import (QGraphicsEllipseItem, QGraphicsSceneMouseEvent,
+from PyQt5.QtWidgets import (QGraphicsObject, QGraphicsSceneMouseEvent,
                               QStyleOptionGraphicsItem, QWidget)
-from PyQt5.QtCore import Qt, QPointF, QRectF, pyqtSignal, QLineF
+from PyQt5.QtCore import Qt, QPointF, QRectF, pyqtSignal
 from PyQt5.QtGui import (QPen, QBrush, QColor, QPainter, QPainterPath,
                           QLinearGradient, QPolygonF)
 
@@ -41,7 +41,7 @@ class PortDataType(Enum):
         self.dashed = dashed
 
 
-class SocketItem(QGraphicsEllipseItem):
+class SocketItem(QGraphicsObject):
     """Visual port on a node. Supports drag-to-connect.
 
     Colors and shapes vary by data type:
@@ -61,6 +61,9 @@ class SocketItem(QGraphicsEllipseItem):
         self._hovered = False
         self._dragging = False
         self._connected_edges: list = []
+        self._pen = QPen()
+        self._brush = QBrush()
+        self._rect = QRectF(-PORT_RADIUS, -PORT_RADIUS, PORT_DIAMETER, PORT_DIAMETER)
 
         # Determine data type from port metadata
         dt_str = getattr(port, 'data_type', 'image') or 'image'
@@ -69,9 +72,8 @@ class SocketItem(QGraphicsEllipseItem):
         except KeyError:
             self._data_type = PortDataType.IMAGE
 
-        self.setRect(-PORT_RADIUS, -PORT_RADIUS, PORT_DIAMETER, PORT_DIAMETER)
         self.setAcceptHoverEvents(True)
-        self.setFlag(self.ItemSendsGeometryChanges, True)
+        self.setFlag(QGraphicsObject.ItemSendsGeometryChanges, True)
         self.setZValue(20)
         self.setCursor(Qt.CrossCursor)
 
@@ -83,20 +85,23 @@ class SocketItem(QGraphicsEllipseItem):
         dt = self._data_type
 
         if self._hovered or self._dragging:
-            pen = QPen(dt.glow_color, 2.5)
-            brush = QBrush(dt.glow_color)
+            self._pen = QPen(dt.glow_color, 2.5)
+            self._brush = QBrush(dt.glow_color)
         elif self.port.is_output:
-            pen = QPen(dt.color, 2.0)
-            brush = QBrush(dt.color.lighter(120))
+            self._pen = QPen(dt.color, 2.0)
+            self._brush = QBrush(dt.color.lighter(120))
         else:
-            pen = QPen(dt.color, 1.5)
+            self._pen = QPen(dt.color, 1.5)
             if dt.dashed:
-                pen.setStyle(Qt.DashLine)
-            brush = QBrush(QColor("#333337"))
+                self._pen.setStyle(Qt.DashLine)
+            self._brush = QBrush(QColor("#333337"))
 
-        self.setPen(pen)
-        self.setBrush(brush)
         self.setToolTip(f"{self.port.dock.name} — {dt.label}")
+        self.update()
+
+    def boundingRect(self) -> QRectF:
+        pad = PORT_HOVER_RADIUS + 2
+        return self._rect.adjusted(-pad, -pad, pad, pad)
 
     # ── Shape (varies by data type) ──────────────────────────────────
 
@@ -108,8 +113,8 @@ class SocketItem(QGraphicsEllipseItem):
 
     def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget):
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.setPen(self.pen())
-        painter.setBrush(self.brush())
+        painter.setPen(self._pen)
+        painter.setBrush(self._brush)
 
         r = PORT_RADIUS
         dt = self._data_type
@@ -185,7 +190,7 @@ class SocketItem(QGraphicsEllipseItem):
         super().mouseReleaseEvent(event)
 
     def itemChange(self, change, value):
-        if change == self.ItemPositionHasChanged:
+        if change == QGraphicsObject.ItemPositionHasChanged:
             for edge in self._connected_edges:
                 edge.update_path()
         return super().itemChange(change, value)

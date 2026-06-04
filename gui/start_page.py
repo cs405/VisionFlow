@@ -14,7 +14,7 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                               QPushButton, QListWidget, QListWidgetItem,
                               QFrame, QSizePolicy)
 from PyQt5.QtCore import Qt, pyqtSignal, QSize
-from PyQt5.QtGui import QFont, QIcon
+from PyQt5.QtGui import QFont, QIcon, QPixmap
 
 
 class StartPage(QWidget):
@@ -50,6 +50,14 @@ class StartPage(QWidget):
         center_layout.addStretch(2)
 
         # Logo / Title
+        logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "icons", "logo.png")
+        if os.path.exists(logo_path):
+            logo = QLabel()
+            logo.setAlignment(Qt.AlignCenter)
+            logo.setPixmap(QPixmap(logo_path).scaled(72, 72, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            logo.setStyleSheet("background: transparent;")
+            center_layout.addWidget(logo)
+
         title = QLabel("VisionFlow")
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("color: #0078d4; font-size: 32px; font-weight: bold; background: transparent;")

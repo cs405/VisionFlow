@@ -86,43 +86,89 @@ class WorkflowEngine:
 
     # -- Link management --
 
+    def _resolve_port(self, node: NodeBase, *, port_id: str | None = None,
+                      dock: PortDock | None = None, is_output: bool | None = None):
+        """Resolve a concrete port by id first, then by dock/direction."""
+        if port_id:
+            for port in node.ports:
+                if port.port_id == port_id:
+                    return port
+
+        for port in node.ports:
+            if dock is not None and port.dock != dock:
+                continue
+            if is_output is True and not port.is_output:
+                continue
+            if is_output is False and not port.is_input:
+                continue
+            return port
+        return None
+
+    def _has_link_between(self, from_node_id: str, to_node_id: str,
+                          *, exclude_link_id: str | None = None) -> bool:
+        for link in self._links:
+            if exclude_link_id and link.link_id == exclude_link_id:
+                continue
+            if link.from_node_id == from_node_id and link.to_node_id == to_node_id:
+                return True
+        return False
+
     def add_link(self, from_node_id: str, to_node_id: str,
                  from_port_dock: PortDock = PortDock.BOTTOM,
-                 to_port_dock: PortDock = PortDock.TOP) -> LinkData | None:
-        """Create a link between two nodes."""
+                 to_port_dock: PortDock = PortDock.TOP,
+                 from_port_id: str | None = None,
+                 to_port_id: str | None = None,
+                 link_id: str | None = None,
+                 text: str = "") -> LinkData | None:
+        """Create a link between two nodes using exact ports when available."""
         from_node = self._nodes.get(from_node_id)
         to_node = self._nodes.get(to_node_id)
         if not from_node or not to_node:
             return None
 
-        # Find matching ports
-        from_port = None
-        to_port = None
-        for p in from_node.ports:
-            if p.dock == from_port_dock and p.is_output:
-                from_port = p
-                break
-        for p in to_node.ports:
-            if p.dock == to_port_dock and p.is_input:
-                to_port = p
-                break
+        from_port = self._resolve_port(
+            from_node,
+            port_id=from_port_id,
+            dock=from_port_dock,
+            is_output=True,
+        )
+        to_port = self._resolve_port(
+            to_node,
+            port_id=to_port_id,
+            dock=to_port_dock,
+            is_output=False,
+        )
 
         if not from_port or not to_port:
             return None
+
+        for existing in self._links:
+            if (existing.from_node_id == from_node_id and
+                    existing.from_port_id == from_port.port_id and
+                    existing.to_node_id == to_node_id and
+                    existing.to_port_id == to_port.port_id):
+                return existing
 
         link = LinkData(
             from_node_id=from_node_id,
             from_port_id=from_port.port_id,
             to_node_id=to_node_id,
             to_port_id=to_port.port_id,
+            text=text,
         )
+        if link_id:
+            link.link_id = link_id
         self._links.append(link)
 
         # Update adjacency
-        from_port.connected_links.append(link)
-        to_port.connected_links.append(link)
-        to_node.from_node_datas.append(from_node)
-        from_node.to_node_datas.append(to_node)
+        if link not in from_port.connected_links:
+            from_port.connected_links.append(link)
+        if link not in to_port.connected_links:
+            to_port.connected_links.append(link)
+        if from_node not in to_node.from_node_datas:
+            to_node.from_node_datas.append(from_node)
+        if to_node not in from_node.to_node_datas:
+            from_node.to_node_datas.append(to_node)
 
         event_system.publish(EventType.LINK_ADDED, sender=self, link=link)
         event_system.publish(EventType.DIAGRAM_CHANGED, sender=self)
@@ -140,13 +186,25 @@ class WorkflowEngine:
 
         self._links.remove(link)
 
-        # Update adjacency
-        to_node = self._nodes.get(link.to_node_id)
+        # Update port connection state
         from_node = self._nodes.get(link.from_node_id)
+        to_node = self._nodes.get(link.to_node_id)
+        if from_node:
+            from_port = self._resolve_port(from_node, port_id=link.from_port_id)
+            if from_port and link in from_port.connected_links:
+                from_port.connected_links.remove(link)
+        if to_node:
+            to_port = self._resolve_port(to_node, port_id=link.to_port_id)
+            if to_port and link in to_port.connected_links:
+                to_port.connected_links.remove(link)
+
+        # Update adjacency only when there is no remaining link between the nodes
         if to_node and from_node:
-            if from_node in to_node.from_node_datas:
+            if (from_node in to_node.from_node_datas and
+                    not self._has_link_between(link.from_node_id, link.to_node_id, exclude_link_id=link.link_id)):
                 to_node.from_node_datas.remove(from_node)
-            if to_node in from_node.to_node_datas:
+            if (to_node in from_node.to_node_datas and
+                    not self._has_link_between(link.from_node_id, link.to_node_id, exclude_link_id=link.link_id)):
                 from_node.to_node_datas.remove(to_node)
 
         event_system.publish(EventType.LINK_REMOVED, sender=self, link=link)

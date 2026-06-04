@@ -12,7 +12,7 @@ Features:
 
 from enum import Enum
 
-from PyQt5.QtWidgets import (QGraphicsItem, QGraphicsTextItem,
+from PyQt5.QtWidgets import (QGraphicsItem, QGraphicsObject, QGraphicsTextItem,
                               QGraphicsSceneMouseEvent, QStyleOptionGraphicsItem,
                               QWidget)
 from PyQt5.QtCore import Qt, QRectF, QPointF, pyqtSignal, QTimer
@@ -104,7 +104,7 @@ PORT_OFFSETS = {
 }
 
 
-class NodeItem(QGraphicsItem):
+class NodeItem(QGraphicsObject):
     """Visual node on the diagram canvas.
 
     Adapts size to content, shows execution state, and uses type-specific templates.
@@ -256,17 +256,19 @@ class NodeItem(QGraphicsItem):
         return self._rect.adjusted(-pad, -pad, pad, pad)
 
     def shape(self) -> QPainterPath:
+        return self._build_body_path(self._rect)
+
+    def _build_body_path(self, rect: QRectF) -> QPainterPath:
         path = QPainterPath()
         if self._template == NodeTemplate.CONDITION:
             # Diamond-like shape
-            w, h = self._node_w, self._node_h
-            path.moveTo(0, -h / 2)
-            path.lineTo(w / 2, 0)
-            path.lineTo(0, h / 2)
-            path.lineTo(-w / 2, 0)
+            path.moveTo(rect.center().x(), rect.top())
+            path.lineTo(rect.right(), rect.center().y())
+            path.lineTo(rect.center().x(), rect.bottom())
+            path.lineTo(rect.left(), rect.center().y())
             path.closeSubpath()
         else:
-            path.addRoundedRect(self._rect, NODE_CORNER_RADIUS, NODE_CORNER_RADIUS)
+            path.addRoundedRect(rect, NODE_CORNER_RADIUS, NODE_CORNER_RADIUS)
         return path
 
     # ── Paint ─────────────────────────────────────────────────────────
@@ -278,13 +280,11 @@ class NodeItem(QGraphicsItem):
 
         # Shadow
         sr = self._rect.adjusted(2, 2, 2, 2)
-        shadow_path = QPainterPath()
-        shadow_path.addRoundedRect(sr, NODE_CORNER_RADIUS, NODE_CORNER_RADIUS)
+        shadow_path = self._build_body_path(sr)
         painter.fillPath(shadow_path, NODE_SHADOW)
 
         # Body
-        body_path = QPainterPath()
-        body_path.addRoundedRect(self._rect, NODE_CORNER_RADIUS, NODE_CORNER_RADIUS)
+        body_path = self._build_body_path(self._rect)
 
         if self._state == NodeState.RUNNING:
             import math
@@ -334,8 +334,7 @@ class NodeItem(QGraphicsItem):
         # OUTPUT template: double border
         if self._template == NodeTemplate.OUTPUT and not self.isSelected():
             inner = self._rect.adjusted(3, 3, -3, -3)
-            ipath = QPainterPath()
-            ipath.addRoundedRect(inner, NODE_CORNER_RADIUS, NODE_CORNER_RADIUS)
+            ipath = self._build_body_path(inner)
             painter.setPen(QPen(border_color.lighter(120), 0.5))
             painter.drawPath(ipath)
 

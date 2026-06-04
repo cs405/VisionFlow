@@ -38,6 +38,8 @@ from gui.node_editor.socket_item import SocketItem
 class MiniMapView(QGraphicsView):
     """Small overview of the full scene in the corner."""
 
+    scene_point_clicked = pyqtSignal(QPointF)
+
     def __init__(self, scene: DiagramScene, parent=None):
         super().__init__(scene, parent)
         self.setFixedSize(180, 120)
@@ -68,7 +70,10 @@ class MiniMapView(QGraphicsView):
 
     def mousePressEvent(self, event: QMouseEvent):
         """Click to navigate the main view."""
-        # Can be wired to center the main view on the clicked point
+        if event.button() == Qt.LeftButton:
+            self.scene_point_clicked.emit(self.mapToScene(event.pos()))
+            event.accept()
+            return
         super().mousePressEvent(event)
 
 
@@ -240,6 +245,7 @@ class DiagramEditorWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._workflow: WorkflowEngine | None = None
+        self._subscribed_workflow: WorkflowEngine | None = None
         self._mini_timer = QTimer(self)
         self._mini_timer.setInterval(100)
         self._mini_timer.timeout.connect(self._update_minimap)
@@ -340,6 +346,7 @@ class DiagramEditorWidget(QWidget):
 
         # Mini-map
         self._minimap = MiniMapView(self.scene, self)
+        self._minimap.scene_point_clicked.connect(self._center_view_on_scene_point)
         self._minimap.move(6, 6)
         self._minimap.show()
         self._minimap.setParent(self.view)
@@ -360,6 +367,10 @@ class DiagramEditorWidget(QWidget):
         cs = self.scene.command_stack
         self._undo_btn.setEnabled(cs.can_undo)
         self._redo_btn.setEnabled(cs.can_redo)
+
+    def _center_view_on_scene_point(self, scene_pos: QPointF):
+        self.view.centerOn(scene_pos)
+        self._update_minimap()
 
     # ── Socket drag signals ───────────────────────────────────────────
 
@@ -390,16 +401,18 @@ class DiagramEditorWidget(QWidget):
     # ── Workflow integration ──────────────────────────────────────────
 
     def bind_workflow(self, workflow: WorkflowEngine):
+        self._unsubscribe_workflow_events()
         self._workflow = workflow
+        self._subscribed_workflow = workflow
         self.scene.bind_workflow(workflow)
         self.scene.load_from_workflow(workflow)
+        self._subscribe_workflow_events()
 
     def _on_run(self):
         if self._workflow:
-            self._workflow.execute()
-            # Mark running state on all nodes
             for item in self.scene.get_all_node_items():
-                item.set_state(NodeState.RUNNING)
+                item.set_state(NodeState.IDLE)
+            self._workflow.execute()
 
     def _on_stop(self):
         if self._workflow:
@@ -411,7 +424,10 @@ class DiagramEditorWidget(QWidget):
         """Execute the currently selected node."""
         nd = self.scene.get_selected_node_data()
         if nd and isinstance(nd, VisionNodeData) and self._workflow:
-            nd.update_invoke_current()
+            item = self.scene.get_node_item(nd.node_id)
+            if item:
+                item.set_state(NodeState.RUNNING)
+            self._workflow.execute_step(nd.node_id)
             item = self.scene.get_node_item(nd.node_id)
             if item:
                 item.update_from_node()
@@ -437,3 +453,36 @@ class DiagramEditorWidget(QWidget):
 
     def clear(self):
         self.scene.clear_all()
+
+    def _subscribe_workflow_events(self):
+        event_system.subscribe(EventType.NODE_STARTED, self._on_node_started)
+        event_system.subscribe(EventType.NODE_COMPLETED, self._on_node_completed)
+        event_system.subscribe(EventType.NODE_ERROR, self._on_node_error)
+        event_system.subscribe(EventType.WORKFLOW_STOPPED, self._on_workflow_stopped)
+
+    def _unsubscribe_workflow_events(self):
+        event_system.unsubscribe(EventType.NODE_STARTED, self._on_node_started)
+        event_system.unsubscribe(EventType.NODE_COMPLETED, self._on_node_completed)
+        event_system.unsubscribe(EventType.NODE_ERROR, self._on_node_error)
+        event_system.unsubscribe(EventType.WORKFLOW_STOPPED, self._on_workflow_stopped)
+
+    def _belongs_to_bound_workflow(self, sender) -> bool:
+        return bool(sender) and getattr(sender, 'diagram_data', None) is self._subscribed_workflow
+
+    def _on_node_started(self, sender, **kwargs):
+        if self._belongs_to_bound_workflow(sender):
+            self.scene.on_workflow_state_changed(sender.node_id, "running")
+
+    def _on_node_completed(self, sender, **kwargs):
+        if self._belongs_to_bound_workflow(sender):
+            self.scene.on_workflow_state_changed(sender.node_id, "completed")
+
+    def _on_node_error(self, sender, **kwargs):
+        if self._belongs_to_bound_workflow(sender):
+            self.scene.on_workflow_state_changed(sender.node_id, "error")
+
+    def _on_workflow_stopped(self, sender, **kwargs):
+        if sender is self._subscribed_workflow:
+            for item in self.scene.get_all_node_items():
+                item.set_state(NodeState.IDLE)
+

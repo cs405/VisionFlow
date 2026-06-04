@@ -15,6 +15,9 @@ from PyQt5.QtCore import QPointF
 class Command(ABC):
     """A reversible operation on the diagram."""
 
+    def __init__(self):
+        self._description = self.__class__.__name__
+
     @abstractmethod
     def execute(self) -> bool:
         """Perform the operation. Returns True on success."""
@@ -27,7 +30,11 @@ class Command(ABC):
 
     @property
     def description(self) -> str:
-        return self.__class__.__name__
+        return self._description
+
+    @description.setter
+    def description(self, value: str):
+        self._description = value or self.__class__.__name__
 
 
 class CommandStack:
@@ -109,6 +116,7 @@ class AddNodeCommand(Command):
     """Add a node to the scene."""
 
     def __init__(self, scene, node_data, pos: QPointF = None, group_name: str = ""):
+        super().__init__()
         self._scene = scene
         self._node_data = node_data
         self._pos = pos
@@ -137,6 +145,7 @@ class RemoveNodeCommand(Command):
     """Remove a node and its edges from the scene."""
 
     def __init__(self, scene, node_id: str):
+        super().__init__()
         self._scene = scene
         self._node_id = node_id
         self._node_item = scene.get_node_item(node_id)
@@ -179,6 +188,7 @@ class AddLinkCommand(Command):
     """Add a link between two sockets."""
 
     def __init__(self, scene, from_socket, to_socket):
+        super().__init__()
         self._scene = scene
         self._from_socket = from_socket
         self._to_socket = to_socket
@@ -203,6 +213,7 @@ class RemoveLinkCommand(Command):
     """Remove a link."""
 
     def __init__(self, scene, link_id: str):
+        super().__init__()
         self._scene = scene
         self._link_id = link_id
         edge = scene.get_edge_item(link_id)
@@ -227,6 +238,7 @@ class MoveNodeCommand(Command):
     """Move a node to a new position."""
 
     def __init__(self, scene, node_id: str, old_pos: QPointF, new_pos: QPointF):
+        super().__init__()
         self._scene = scene
         self._node_id = node_id
         self._old_pos = QPointF(old_pos)
@@ -252,6 +264,7 @@ class BatchCommand(Command):
     """Execute multiple commands as one atomic unit."""
 
     def __init__(self, commands: list[Command] = None, description: str = "批量操作"):
+        super().__init__()
         self._commands = commands or []
         self.description = description
 

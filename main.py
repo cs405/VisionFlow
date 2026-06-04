@@ -63,6 +63,7 @@ def run_gui(project_path: str = None):
     try:
         from PyQt5.QtWidgets import QApplication
         from PyQt5.QtCore import Qt
+        from PyQt5.QtGui import QIcon
     except ImportError:
         print("PyQt5 is required for GUI mode. Install it with: pip install PyQt5")
         print("Or use CLI mode: python main.py --cli <project.json>")
@@ -72,6 +73,10 @@ def run_gui(project_path: str = None):
     app.setApplicationName("VisionFlow")
     app.setOrganizationName("VisionFlow")
     app.setApplicationVersion("2.0.0")
+
+    icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "icons", "logo.ico")
+    if os.path.exists(icon_path):
+        app.setWindowIcon(QIcon(icon_path))
 
     # Apply dark theme
     app.setStyle("Fusion")
@@ -84,6 +89,8 @@ def run_gui(project_path: str = None):
     # Create and show main window
     from gui.main_window import MainWindow
     window = MainWindow()
+    if os.path.exists(icon_path):
+        window.setWindowIcon(QIcon(icon_path))
     window.show()
 
     # Open project if specified

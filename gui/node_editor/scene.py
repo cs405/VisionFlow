@@ -123,9 +123,9 @@ class DiagramScene(QGraphicsScene):
         self._workflow = workflow
 
     def add_node_item(self, node_data: NodeBase, pos: QPointF = None,
-                      group_name: str = "") -> NodeItem:
+                      group_name: str = "", sync_workflow: bool = True) -> NodeItem:
         item = NodeItem(node_data, group_name)
-        if pos:
+        if pos is not None:
             item.setPos(pos)
         else:
             count = len(self._node_items)
@@ -138,7 +138,7 @@ class DiagramScene(QGraphicsScene):
         item.node_selected.connect(self._on_node_item_selected)
         item.node_moved.connect(self._on_node_item_moved)
 
-        if self._workflow:
+        if sync_workflow and self._workflow:
             self._workflow.add_node(node_data)
 
         event_system.publish(EventType.NODE_ADDED, sender=self, node=node_data)
@@ -146,7 +146,7 @@ class DiagramScene(QGraphicsScene):
         self.node_item_added.emit(item)
         return item
 
-    def remove_node_item(self, node_id: str):
+    def remove_node_item(self, node_id: str, sync_workflow: bool = True):
         item = self._node_items.pop(node_id, None)
         if item is None:
             return
@@ -155,9 +155,9 @@ class DiagramScene(QGraphicsScene):
             edge = self._edge_items[eid]
             if (edge.from_socket and edge.from_socket.port.node_id == node_id) or \
                (edge.to_socket and edge.to_socket.port.node_id == node_id):
-                self.remove_edge_item(eid)
+                self.remove_edge_item(eid, sync_workflow=sync_workflow)
         self.removeItem(item)
-        if self._workflow:
+        if sync_workflow and self._workflow:
             self._workflow.remove_node(node_id)
         event_system.publish(EventType.NODE_REMOVED, sender=self, node=item.node_data)
         event_system.publish(EventType.DIAGRAM_CHANGED, sender=self)
@@ -171,43 +171,59 @@ class DiagramScene(QGraphicsScene):
 
     # ── Edge management ───────────────────────────────────────────────
 
-    def create_edge(self, from_socket: SocketItem, to_socket: SocketItem) -> EdgeItem | None:
-        if not from_socket.port.is_output:
-            return None
-        if not to_socket.port.is_input:
+    def create_edge(self, from_socket: SocketItem, to_socket: SocketItem,
+                    sync_workflow: bool = True,
+                    existing_link: LinkData | None = None) -> EdgeItem | None:
+        if from_socket.port.is_input and to_socket.port.is_output:
+            from_socket, to_socket = to_socket, from_socket
+        if not from_socket.port.is_output or not to_socket.port.is_input:
             return None
         if from_socket.port.node_id == to_socket.port.node_id:
             return None
         for edge in self._edge_items.values():
-            if edge.from_socket is from_socket and edge.to_socket is to_socket:
+            if (edge.from_socket is from_socket and edge.to_socket is to_socket) or (
+                edge.link_data and
+                edge.link_data.from_port_id == from_socket.port.port_id and
+                edge.link_data.to_port_id == to_socket.port.port_id
+            ):
                 return None
 
-        link = LinkData(
-            from_node_id=from_socket.port.node_id,
-            from_port_id=from_socket.port.port_id,
-            to_node_id=to_socket.port.node_id,
-            to_port_id=to_socket.port.port_id,
-        )
+        if sync_workflow and self._workflow:
+            link = self._workflow.add_link(
+                from_socket.port.node_id,
+                to_socket.port.node_id,
+                from_port_id=from_socket.port.port_id,
+                to_port_id=to_socket.port.port_id,
+                link_id=existing_link.link_id if existing_link else None,
+                text=existing_link.text if existing_link else "",
+            )
+            if link is None:
+                return None
+        else:
+            link = existing_link or LinkData(
+                from_node_id=from_socket.port.node_id,
+                from_port_id=from_socket.port.port_id,
+                to_node_id=to_socket.port.node_id,
+                to_port_id=to_socket.port.port_id,
+            )
+
         edge = EdgeItem(from_socket, to_socket, link)
         self.addItem(edge)
         self._edge_items[link.link_id] = edge
         edge.edge_selected.connect(self._on_edge_selected)
-
-        if self._workflow:
-            self._workflow.add_link(from_socket.port.node_id, to_socket.port.node_id)
 
         event_system.publish(EventType.LINK_ADDED, sender=self, link=link)
         event_system.publish(EventType.DIAGRAM_CHANGED, sender=self)
         self.edge_item_added.emit(edge)
         return edge
 
-    def remove_edge_item(self, link_id: str):
+    def remove_edge_item(self, link_id: str, sync_workflow: bool = True):
         edge = self._edge_items.pop(link_id, None)
         if edge is None:
             return
         edge.disconnect()
         self.removeItem(edge)
-        if self._workflow:
+        if sync_workflow and self._workflow:
             self._workflow.remove_link(link_id)
         event_system.publish(EventType.LINK_REMOVED, sender=self, link=link_id)
         event_system.publish(EventType.DIAGRAM_CHANGED, sender=self)
@@ -501,16 +517,16 @@ class DiagramScene(QGraphicsScene):
 
     # ── Serialization ─────────────────────────────────────────────────
 
-    def clear_all(self):
+    def clear_all(self, sync_workflow: bool = True):
         for node_id in list(self._node_items.keys()):
-            self.remove_node_item(node_id)
+            self.remove_node_item(node_id, sync_workflow=sync_workflow)
         self._node_items.clear()
         self._edge_items.clear()
         self._cmd_stack.clear()
 
     def load_from_workflow(self, workflow: WorkflowEngine):
         """Populate scene from workflow, fully rebuilding nodes and edges."""
-        self.clear_all()
+        self.clear_all(sync_workflow=False)
         self._workflow = workflow
 
         # Create nodes at saved positions
@@ -519,7 +535,7 @@ class DiagramScene(QGraphicsScene):
             x = getattr(node, '_pos_x', 0.0) or 0.0
             y = getattr(node, '_pos_y', 0.0) or 0.0
             pos = QPointF(x, y) if (x or y) else None
-            item = self.add_node_item(node, pos)
+            item = self.add_node_item(node, pos, sync_workflow=False)
             if item:
                 # Store position for later
                 node._pos_x = item.pos().x()
@@ -533,7 +549,7 @@ class DiagramScene(QGraphicsScene):
                 fs = from_item.get_socket_by_port_id(link.from_port_id)
                 ts = to_item.get_socket_by_port_id(link.to_port_id)
                 if fs and ts:
-                    self.create_edge(fs, ts)
+                    self.create_edge(fs, ts, sync_workflow=False, existing_link=link)
 
     def save_to_workflow(self, workflow: WorkflowEngine):
         """Save scene state back to workflow (node positions, links)."""

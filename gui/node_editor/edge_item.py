@@ -12,7 +12,7 @@ Features:
 """
 
 import math
-from PyQt5.QtWidgets import (QGraphicsPathItem, QGraphicsSceneMouseEvent,
+from PyQt5.QtWidgets import (QGraphicsObject, QGraphicsSceneMouseEvent,
                               QStyleOptionGraphicsItem, QWidget, QGraphicsItem,
                               QGraphicsTextItem)
 from PyQt5.QtCore import Qt, QPointF, QRectF, pyqtSignal
@@ -40,7 +40,7 @@ CONTROL_POINT_OFFSET = 80
 ARROW_SIZE = 8.0
 
 
-class EdgeItem(QGraphicsPathItem):
+class EdgeItem(QGraphicsObject):
     """Bezier curve edge connecting two SocketItems.
 
     Supports:
@@ -63,6 +63,9 @@ class EdgeItem(QGraphicsPathItem):
         self._hovered = False
         self._temp_end: QPointF | None = None
         self._label_item: QGraphicsTextItem | None = None
+        self._path = QPainterPath()
+        self._pen = QPen()
+        self._arrow_poly = QPolygonF()
 
         # Determine color from source port data type
         dt = getattr(from_socket.port, 'data_type', 'image') or 'image'
@@ -70,10 +73,13 @@ class EdgeItem(QGraphicsPathItem):
 
         self.setZValue(5)
         self.setAcceptHoverEvents(True)
-        self.setFlag(QGraphicsItem.ItemIsSelectable, True)
+        self.setFlag(QGraphicsObject.ItemIsSelectable, True)
 
         self._update_color()
         self.update_path()
+
+        if self.link_data and self.link_data.text:
+            self.set_label(self.link_data.text)
 
         from_socket.add_edge(self)
         if to_socket:
@@ -95,7 +101,25 @@ class EdgeItem(QGraphicsPathItem):
         pen = QPen(color, width)
         pen.setCapStyle(Qt.RoundCap)
         pen.setJoinStyle(Qt.RoundJoin)
-        self.setPen(pen)
+        self._pen = pen
+        self.update()
+
+    def boundingRect(self) -> QRectF:
+        rect = self._path.boundingRect()
+        if hasattr(self, '_arrow_poly') and self._arrow_poly is not None and not self._arrow_poly.isEmpty():
+            rect = rect.united(self._arrow_poly.boundingRect())
+        return rect.adjusted(-8, -8, 8, 8)
+
+    def path(self) -> QPainterPath:
+        return self._path
+
+    def setPath(self, path: QPainterPath):
+        self.prepareGeometryChange()
+        self._path = path
+        self.update()
+
+    def pen(self) -> QPen:
+        return self._pen
 
     # ── Path computation ──────────────────────────────────────────────
 
@@ -165,7 +189,7 @@ class EdgeItem(QGraphicsPathItem):
     def _update_arrow(self, end: QPointF):
         """Compute and cache arrowhead polygon."""
         if not self.to_socket and not self._temp_end:
-            self._arrow_poly = None
+            self._arrow_poly = QPolygonF()
             return
 
         # Get direction at end of path
@@ -209,13 +233,13 @@ class EdgeItem(QGraphicsPathItem):
     def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget):
         painter.setRenderHint(QPainter.Antialiasing)
         self._update_color()
-        painter.setPen(self.pen())
+        painter.setPen(self._pen)
         painter.setBrush(Qt.NoBrush)
-        painter.drawPath(self.path())
+        painter.drawPath(self._path)
 
         # Arrowhead
         if hasattr(self, '_arrow_poly') and self._arrow_poly and not self._arrow_poly.isEmpty():
-            painter.setBrush(QBrush(self.pen().color()))
+            painter.setBrush(QBrush(self._pen.color()))
             painter.setPen(Qt.NoPen)
             painter.drawPolygon(self._arrow_poly)
 
@@ -223,7 +247,7 @@ class EdgeItem(QGraphicsPathItem):
         """Wider shape for easier mouse hit detection."""
         stroker = QPainterPathStroker()
         stroker.setWidth(10.0)
-        return stroker.createStroke(self.path())
+        return stroker.createStroke(self._path)
 
     # ── Temp end (drag creation) ──────────────────────────────────────
 
