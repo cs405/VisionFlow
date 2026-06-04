@@ -1,54 +1,56 @@
-"""Diagram scene - QGraphicsScene managing nodes, edges, and canvas interactions.
+"""Diagram scene — QGraphicsScene managing nodes, edges, clipboard, undo/redo.
 
 Ported from H.Controls.Diagram (DiagramCanvas, DiagramSurface).
-Handles: grid background, node management, edge creation via drag, selection.
+
+Features:
+  - Grid background
+  - Node/edge CRUD with full WorkflowEngine sync
+  - load_from_workflow() with complete edge rebuilding
+  - Copy/paste via internal clipboard
+  - Box selection with align/distribute operations
+  - Undo/redo via CommandStack integration
+  - Workflow execution state feedback on node items
+  - Socket drag-to-connect
+  - Context menu
 """
 
 from PyQt5.QtWidgets import (QGraphicsScene, QGraphicsItem, QMenu, QAction,
                               QGraphicsSceneMouseEvent)
-from PyQt5.QtCore import Qt, QRectF, QPointF, pyqtSignal, QLineF
+from PyQt5.QtCore import Qt, QRectF, QPointF, pyqtSignal, QLineF, QMimeData
 from PyQt5.QtGui import (QPainter, QPen, QColor, QBrush, QFont, QPainterPath,
                           QTransform)
 
-from core.node_base import NodeBase, Port, PortType, PortDock, LinkData, VisionNodeData
+from core.node_base import (NodeBase, Port, PortType, PortDock, LinkData,
+                             VisionNodeData)
 from core.workflow import WorkflowEngine
 from core.events import EventType, event_system
 from core.registry import node_registry
+from core.commands import (CommandStack, AddNodeCommand, RemoveNodeCommand,
+                            AddLinkCommand, RemoveLinkCommand, MoveNodeCommand,
+                            BatchCommand)
 
-from gui.node_editor.node_item import NodeItem
+from gui.node_editor.node_item import NodeItem, NodeState
 from gui.node_editor.socket_item import SocketItem, PORT_DIAMETER
 from gui.node_editor.edge_item import EdgeItem
 
 
-# Grid settings
-GRID_SIZE_MAJOR = 20
+GRID_SIZE_MAJOR = 100
 GRID_SIZE_MINOR = 20
 SCENE_RECT = QRectF(-5000, -5000, 10000, 10000)
 
-# Colors
 GRID_MAJOR_COLOR = QColor(50, 50, 50)
 GRID_MINOR_COLOR = QColor(38, 38, 38)
 BACKGROUND_COLOR = QColor(30, 30, 30)
 
 
 class DiagramScene(QGraphicsScene):
-    """Main diagram scene managing nodes, edges, and interactions.
+    """Main diagram scene — full node/edge editor with undo/redo and clipboard."""
 
-    Responsibilities:
-      - Draw background grid
-      - Manage NodeItem and EdgeItem instances
-      - Handle socket drag-to-connect
-      - Sync with WorkflowEngine (node/link data model)
-      - Context menu
-      - Selection and clipboard
-    """
-
-    # Signals
     node_item_added = pyqtSignal(NodeItem)
-    node_item_removed = pyqtSignal(str)         # node_id
+    node_item_removed = pyqtSignal(str)
     edge_item_added = pyqtSignal(EdgeItem)
-    edge_item_removed = pyqtSignal(str)          # link_id
-    node_selected = pyqtSignal(object)           # node_data
+    edge_item_removed = pyqtSignal(str)
+    node_selected = pyqtSignal(object)
     node_deselected = pyqtSignal()
     status_message = pyqtSignal(str)
 
@@ -57,39 +59,42 @@ class DiagramScene(QGraphicsScene):
         self.setSceneRect(SCENE_RECT)
         self.setBackgroundBrush(QBrush(BACKGROUND_COLOR))
 
-        # Data
         self._workflow: WorkflowEngine | None = None
-        self._node_items: dict[str, NodeItem] = {}   # node_id -> NodeItem
-        self._edge_items: dict[str, EdgeItem] = {}    # link_id -> EdgeItem
+        self._node_items: dict[str, NodeItem] = {}
+        self._edge_items: dict[str, EdgeItem] = {}
+        self._show_grid = True
 
         # Interaction state
-        self._drag_edge: EdgeItem | None = None       # Edge being created
+        self._drag_edge: EdgeItem | None = None
         self._drag_from_socket: SocketItem | None = None
         self._connecting = False
 
-        # Grid visibility
-        self._show_grid = True
+        # Command stack (undo/redo)
+        self._cmd_stack = CommandStack()
 
-        # Selection
+        # Clipboard for copy/paste
+        self._clipboard: list[dict] = []
+
         self.selectionChanged.connect(self._on_selection_changed)
 
-    # -- Grid drawing --
+    # ── Command stack access ──────────────────────────────────────────
+
+    @property
+    def command_stack(self) -> CommandStack:
+        return self._cmd_stack
+
+    # ── Grid ──────────────────────────────────────────────────────────
 
     def drawBackground(self, painter: QPainter, rect: QRectF):
-        """Draw the grid background."""
         super().drawBackground(painter, rect)
-
         if not self._show_grid:
             return
-
         painter.setRenderHint(QPainter.Antialiasing, False)
-
-        left = int(rect.left()) - int(rect.left()) % GRID_SIZE_MAJOR
-        top = int(rect.top()) - int(rect.top()) % GRID_SIZE_MAJOR
+        left = int(rect.left()) - int(rect.left()) % GRID_SIZE_MINOR
+        top = int(rect.top()) - int(rect.top()) % GRID_SIZE_MINOR
         right = int(rect.right())
         bottom = int(rect.bottom())
 
-        # Minor grid (every 20px)
         pen = QPen(GRID_MINOR_COLOR, 0.5)
         painter.setPen(pen)
         lines = []
@@ -99,77 +104,61 @@ class DiagramScene(QGraphicsScene):
             lines.append(QLineF(left, y, right, y))
         painter.drawLines(lines)
 
-        # Major grid (every 100px)
         pen = QPen(GRID_MAJOR_COLOR, 1.0)
         painter.setPen(pen)
         lines = []
-        major = GRID_SIZE_MAJOR * 5
-        for x in range(left, right, major):
+        for x in range(left, right, GRID_SIZE_MAJOR):
             lines.append(QLineF(x, top, x, bottom))
-        for y in range(top, bottom, major):
+        for y in range(top, bottom, GRID_SIZE_MAJOR):
             lines.append(QLineF(left, y, right, y))
         painter.drawLines(lines)
 
     def toggle_grid(self):
-        """Toggle grid visibility."""
         self._show_grid = not self._show_grid
         self.update()
 
-    # -- Node management --
+    # ── Node management ───────────────────────────────────────────────
 
     def bind_workflow(self, workflow: WorkflowEngine):
-        """Bind this scene to a workflow engine for sync."""
         self._workflow = workflow
 
     def add_node_item(self, node_data: NodeBase, pos: QPointF = None,
                       group_name: str = "") -> NodeItem:
-        """Create and add a NodeItem for the given node_data."""
         item = NodeItem(node_data, group_name)
         if pos:
             item.setPos(pos)
         else:
-            # Place at a semi-random position to avoid stacking
             count = len(self._node_items)
-            x = (count % 5) * 160 - 320
-            y = (count // 5) * 60 - 200
+            x = (count % 5) * 170 - 340
+            y = (count // 5) * 70 - 200
             item.setPos(x, y)
 
         self.addItem(item)
         self._node_items[node_data.node_id] = item
-
-        # Connect signals
         item.node_selected.connect(self._on_node_item_selected)
         item.node_moved.connect(self._on_node_item_moved)
 
-        # Also add to workflow if bound
         if self._workflow:
             self._workflow.add_node(node_data)
 
         event_system.publish(EventType.NODE_ADDED, sender=self, node=node_data)
         event_system.publish(EventType.DIAGRAM_CHANGED, sender=self)
         self.node_item_added.emit(item)
-
         return item
 
     def remove_node_item(self, node_id: str):
-        """Remove a node item and its connected edges."""
         item = self._node_items.pop(node_id, None)
         if item is None:
             return
-
         # Remove connected edges
-        edges_to_remove = []
-        for edge_id, edge in list(self._edge_items.items()):
-            if edge.from_socket in item.sockets or (edge.to_socket and edge.to_socket in item.sockets):
-                edges_to_remove.append(edge_id)
-
-        for edge_id in edges_to_remove:
-            self.remove_edge_item(edge_id)
-
+        for eid in list(self._edge_items.keys()):
+            edge = self._edge_items[eid]
+            if (edge.from_socket and edge.from_socket.port.node_id == node_id) or \
+               (edge.to_socket and edge.to_socket.port.node_id == node_id):
+                self.remove_edge_item(eid)
         self.removeItem(item)
         if self._workflow:
             self._workflow.remove_node(node_id)
-
         event_system.publish(EventType.NODE_REMOVED, sender=self, node=item.node_data)
         event_system.publish(EventType.DIAGRAM_CHANGED, sender=self)
         self.node_item_removed.emit(node_id)
@@ -180,62 +169,46 @@ class DiagramScene(QGraphicsScene):
     def get_all_node_items(self) -> list[NodeItem]:
         return list(self._node_items.values())
 
-    # -- Edge management --
+    # ── Edge management ───────────────────────────────────────────────
 
     def create_edge(self, from_socket: SocketItem, to_socket: SocketItem) -> EdgeItem | None:
-        """Create an edge between two sockets. Returns the EdgeItem or None if invalid."""
-        # Validate: from must be output, to must be input
         if not from_socket.port.is_output:
             return None
         if not to_socket.port.is_input:
             return None
-        # Can't connect to self
         if from_socket.port.node_id == to_socket.port.node_id:
             return None
-        # Can't duplicate connection
         for edge in self._edge_items.values():
-            if (edge.from_socket is from_socket and edge.to_socket is to_socket):
+            if edge.from_socket is from_socket and edge.to_socket is to_socket:
                 return None
 
-        from_node_id = from_socket.port.node_id
-        to_node_id = to_socket.port.node_id
-
-        # Create link data
         link = LinkData(
-            from_node_id=from_node_id,
+            from_node_id=from_socket.port.node_id,
             from_port_id=from_socket.port.port_id,
-            to_node_id=to_node_id,
+            to_node_id=to_socket.port.node_id,
             to_port_id=to_socket.port.port_id,
         )
-
         edge = EdgeItem(from_socket, to_socket, link)
         self.addItem(edge)
         self._edge_items[link.link_id] = edge
-
         edge.edge_selected.connect(self._on_edge_selected)
 
-        # Sync with workflow
         if self._workflow:
-            self._workflow.add_link(from_node_id, to_node_id)
+            self._workflow.add_link(from_socket.port.node_id, to_socket.port.node_id)
 
         event_system.publish(EventType.LINK_ADDED, sender=self, link=link)
         event_system.publish(EventType.DIAGRAM_CHANGED, sender=self)
         self.edge_item_added.emit(edge)
-
         return edge
 
     def remove_edge_item(self, link_id: str):
-        """Remove an edge item."""
         edge = self._edge_items.pop(link_id, None)
         if edge is None:
             return
-
         edge.disconnect()
         self.removeItem(edge)
-
         if self._workflow:
             self._workflow.remove_link(link_id)
-
         event_system.publish(EventType.LINK_REMOVED, sender=self, link=link_id)
         event_system.publish(EventType.DIAGRAM_CHANGED, sender=self)
         self.edge_item_removed.emit(link_id)
@@ -246,10 +219,9 @@ class DiagramScene(QGraphicsScene):
     def get_all_edge_items(self) -> list[EdgeItem]:
         return list(self._edge_items.values())
 
-    # -- Drag-to-connect handling (called by editor_widget) --
+    # ── Drag-to-connect ───────────────────────────────────────────────
 
     def start_edge_drag(self, from_socket: SocketItem):
-        """Begin creating an edge by dragging from a socket."""
         self._drag_from_socket = from_socket
         self._drag_edge = EdgeItem(from_socket, None)
         self._drag_edge.setZValue(100)
@@ -257,29 +229,23 @@ class DiagramScene(QGraphicsScene):
         self._connecting = True
 
     def update_edge_drag(self, scene_pos: QPointF):
-        """Update the temporary edge endpoint during drag."""
         if self._drag_edge:
             self._drag_edge.set_temp_end(scene_pos)
 
     def end_edge_drag(self, scene_pos: QPointF):
-        """Finish edge drag: connect to socket under cursor or cancel."""
         if not self._drag_edge or not self._drag_from_socket:
             self._cleanup_drag()
             return
-
-        # Find socket at drop position
-        target_socket = self._find_socket_at(scene_pos, exclude=self._drag_from_socket)
-
-        if target_socket and target_socket is not self._drag_from_socket:
-            self.create_edge(self._drag_from_socket, target_socket)
+        target = self._find_socket_at(scene_pos, exclude=self._drag_from_socket)
+        if target and target is not self._drag_from_socket:
+            cmd = AddLinkCommand(self, self._drag_from_socket, target)
+            self._cmd_stack.execute(cmd)
             self.status_message.emit("连线已创建")
         else:
             self.status_message.emit("连线已取消")
-
         self._cleanup_drag()
 
     def _cleanup_drag(self):
-        """Clean up the drag-creation temporary state."""
         if self._drag_edge:
             self.removeItem(self._drag_edge)
             self._drag_edge = None
@@ -287,115 +253,296 @@ class DiagramScene(QGraphicsScene):
         self._connecting = False
 
     def _find_socket_at(self, scene_pos: QPointF, exclude: SocketItem = None) -> SocketItem | None:
-        """Find a socket at the given scene position."""
         for node_item in self._node_items.values():
             socket = node_item.get_socket_at(scene_pos)
             if socket and socket is not exclude:
                 return socket
         return None
 
-    # -- Selection --
+    # ── Selection ─────────────────────────────────────────────────────
 
     def _on_node_item_selected(self, node_data: NodeBase):
-        """Handle node selection."""
         self.node_selected.emit(node_data)
         event_system.publish(EventType.NODE_SELECTED, sender=node_data, node=node_data)
 
     def _on_node_item_moved(self, node_data: NodeBase):
-        """Handle node movement."""
         event_system.publish(EventType.NODE_PROPERTY_CHANGED, sender=node_data)
 
     def _on_edge_selected(self, edge: EdgeItem):
-        """Handle edge selection."""
         pass
 
     def _on_selection_changed(self):
-        """Handle selection changes."""
-        selected = self.selectedItems()
-        if not selected:
+        if not self.selectedItems():
             self.node_deselected.emit()
             event_system.publish(EventType.NODE_DESELECTED, sender=self)
 
     def get_selected_node_data(self) -> NodeBase | None:
-        """Get the node_data of the first selected NodeItem."""
         for item in self.selectedItems():
             if isinstance(item, NodeItem):
                 return item.node_data
         return None
 
+    def get_selected_node_items(self) -> list[NodeItem]:
+        return [it for it in self.selectedItems() if isinstance(it, NodeItem)]
+
     def delete_selected(self):
-        """Delete all selected node and edge items."""
+        """Delete selected items with undo support."""
         items = self.selectedItems()
+        if not items:
+            return
+        batch = BatchCommand(description="删除选中项")
         for item in items:
             if isinstance(item, NodeItem):
-                self.remove_node_item(item.node_data.node_id)
+                batch.add(RemoveNodeCommand(self, item.node_data.node_id))
             elif isinstance(item, EdgeItem):
-                self.remove_edge_item(item.link_data.link_id)
+                batch.add(RemoveLinkCommand(self, item.link_data.link_id))
+        self._cmd_stack.execute(batch)
 
-    # -- Context menu --
+    # ── Copy / Paste ──────────────────────────────────────────────────
+
+    def copy_selected(self):
+        """Copy selected nodes to internal clipboard."""
+        self._clipboard.clear()
+        for item in self.selectedItems():
+            if isinstance(item, NodeItem):
+                nd = item.node_data
+                pos = item.pos()
+                ports_data = [p.to_dict() for p in nd.ports]
+                self._clipboard.append({
+                    "type": nd.__class__.__name__,
+                    "data": nd.to_dict() if hasattr(nd, 'to_dict') else {},
+                    "x": pos.x(),
+                    "y": pos.y(),
+                    "ports": ports_data,
+                })
+        self.status_message.emit(f"已复制 {len(self._clipboard)} 个节点")
+
+    def paste(self):
+        """Paste nodes from clipboard at offset position."""
+        if not self._clipboard:
+            return
+        batch = BatchCommand(description="粘贴节点")
+        offset = 30 + 15 * len(self._clipboard)  # progressive offset
+        for clip in self._clipboard:
+            node = node_registry.create(clip["type"])
+            if node:
+                if "data" in clip and clip["data"]:
+                    node.from_dict(clip["data"]) if hasattr(node, 'from_dict') else None
+                pos = QPointF(clip.get("x", 0) + offset, clip.get("y", 0) + offset)
+                batch.add(AddNodeCommand(self, node, pos))
+        self._cmd_stack.execute(batch)
+        self.status_message.emit(f"已粘贴 {len(self._clipboard)} 个节点")
+        self._clipboard.clear()
+
+    # ── Alignment ─────────────────────────────────────────────────────
+
+    def align_selected(self, mode: str):
+        """Align selected nodes horizontally or vertically."""
+        nodes = self.get_selected_node_items()
+        if len(nodes) < 2:
+            return
+        batch = BatchCommand(description=f"对齐 ({mode})")
+
+        if mode == "left":
+            x_min = min(n.pos().x() - n._node_w / 2 for n in nodes)
+            for n in nodes:
+                old = n.pos()
+                new = QPointF(x_min + n._node_w / 2, old.y())
+                batch.add(MoveNodeCommand(self, n.node_data.node_id, old, new))
+        elif mode == "right":
+            x_max = max(n.pos().x() + n._node_w / 2 for n in nodes)
+            for n in nodes:
+                old = n.pos()
+                new = QPointF(x_max - n._node_w / 2, old.y())
+                batch.add(MoveNodeCommand(self, n.node_data.node_id, old, new))
+        elif mode == "top":
+            y_min = min(n.pos().y() - n._node_h / 2 for n in nodes)
+            for n in nodes:
+                old = n.pos()
+                new = QPointF(old.x(), y_min + n._node_h / 2)
+                batch.add(MoveNodeCommand(self, n.node_data.node_id, old, new))
+        elif mode == "bottom":
+            y_max = max(n.pos().y() + n._node_h / 2 for n in nodes)
+            for n in nodes:
+                old = n.pos()
+                new = QPointF(old.x(), y_max - n._node_h / 2)
+                batch.add(MoveNodeCommand(self, n.node_data.node_id, old, new))
+        elif mode == "center_h":
+            avg_y = sum(n.pos().y() for n in nodes) / len(nodes)
+            for n in nodes:
+                old = n.pos()
+                new = QPointF(old.x(), avg_y)
+                batch.add(MoveNodeCommand(self, n.node_data.node_id, old, new))
+        elif mode == "center_v":
+            avg_x = sum(n.pos().x() for n in nodes) / len(nodes)
+            for n in nodes:
+                old = n.pos()
+                new = QPointF(avg_x, old.y())
+                batch.add(MoveNodeCommand(self, n.node_data.node_id, old, new))
+
+        self._cmd_stack.execute(batch)
+
+    def distribute_selected(self, mode: str):
+        """Evenly distribute selected nodes."""
+        nodes = self.get_selected_node_items()
+        if len(nodes) < 3:
+            return
+        batch = BatchCommand(description=f"分布 ({mode})")
+
+        if mode == "horizontal":
+            nodes.sort(key=lambda n: n.pos().x())
+            x_min = nodes[0].pos().x()
+            x_max = nodes[-1].pos().x()
+            spacing = (x_max - x_min) / (len(nodes) - 1) if len(nodes) > 1 else 0
+            for i, n in enumerate(nodes):
+                old = n.pos()
+                new = QPointF(x_min + i * spacing, old.y())
+                batch.add(MoveNodeCommand(self, n.node_data.node_id, old, new))
+        elif mode == "vertical":
+            nodes.sort(key=lambda n: n.pos().y())
+            y_min = nodes[0].pos().y()
+            y_max = nodes[-1].pos().y()
+            spacing = (y_max - y_min) / (len(nodes) - 1) if len(nodes) > 1 else 0
+            for i, n in enumerate(nodes):
+                old = n.pos()
+                new = QPointF(old.x(), y_min + i * spacing)
+                batch.add(MoveNodeCommand(self, n.node_data.node_id, old, new))
+
+        self._cmd_stack.execute(batch)
+
+    # ── Undo / Redo ───────────────────────────────────────────────────
+
+    def undo(self):
+        if self._cmd_stack.undo():
+            self.status_message.emit(f"撤销: {self._cmd_stack.undo_description}")
+
+    def redo(self):
+        if self._cmd_stack.redo():
+            self.status_message.emit(f"重做: {self._cmd_stack.redo_description}")
+
+    # ── Workflow state feedback ───────────────────────────────────────
+
+    def on_workflow_state_changed(self, node_id: str, state: str):
+        """Update node visual state based on workflow execution."""
+        item = self._node_items.get(node_id)
+        if item is None:
+            return
+        state_map = {
+            "running": NodeState.RUNNING,
+            "completed": NodeState.COMPLETED,
+            "error": NodeState.ERROR,
+            "idle": NodeState.IDLE,
+        }
+        item.set_state(state_map.get(state, NodeState.IDLE))
+
+    # ── Context menu ──────────────────────────────────────────────────
 
     def context_menu(self, pos: QPointF) -> QMenu | None:
-        """Create a context menu for the given scene position."""
         item = self.itemAt(pos, QTransform())
         menu = QMenu()
 
         if isinstance(item, NodeItem):
-            # Node context menu
-            delete_action = QAction("删除节点", menu)
-            delete_action.triggered.connect(
-                lambda: self.remove_node_item(item.node_data.node_id))
-            menu.addAction(delete_action)
+            delete_act = QAction("删除节点", menu)
+            delete_act.triggered.connect(
+                lambda: self._cmd_stack.execute(RemoveNodeCommand(self, item.node_data.node_id)))
+            menu.addAction(delete_act)
 
-            run_action = QAction("单步执行", menu)
-            run_action.triggered.connect(
-                lambda: self._run_single_node(item.node_data))
-            menu.addAction(run_action)
+            run_act = QAction("单步执行", menu)
+            run_act.triggered.connect(lambda: self._run_single_node(item.node_data))
+            menu.addAction(run_act)
 
             menu.addSeparator()
 
-            copy_action = QAction("复制", menu)
-            menu.addAction(copy_action)
+            copy_act = QAction("复制", menu)
+            copy_act.triggered.connect(self.copy_selected)
+            menu.addAction(copy_act)
+
+            menu.addSeparator()
+
+            disable_act = QAction("禁用", menu)
+            disable_act.setCheckable(True)
+            disable_act.triggered.connect(lambda: item.set_state(NodeState.DISABLED))
+            menu.addAction(disable_act)
         elif isinstance(item, EdgeItem):
-            # Edge context menu
-            delete_action = QAction("删除连线", menu)
-            delete_action.triggered.connect(
-                lambda: self.remove_edge_item(item.link_data.link_id))
-            menu.addAction(delete_action)
+            delete_act = QAction("删除连线", menu)
+            delete_act.triggered.connect(
+                lambda: self._cmd_stack.execute(RemoveLinkCommand(self, item.link_data.link_id)))
+            menu.addAction(delete_act)
+
+            menu.addSeparator()
+            label_act = QAction("添加标签", menu)
+            label_act.triggered.connect(lambda: item.set_label(
+                getattr(item.from_socket.port, 'data_type', 'image')))
+            menu.addAction(label_act)
         else:
-            # Canvas context menu
             add_menu = menu.addMenu("添加节点")
             for node_type in node_registry.get_all_instantiable():
                 action = QAction(node_type.__name__, menu)
-                action.triggered.connect(
-                    lambda checked, nt=node_type: self.add_node_item(nt(), pos))
+                action.triggered.connect(lambda c, nt=node_type:
+                    self._cmd_stack.execute(AddNodeCommand(self, nt(), pos)))
                 add_menu.addAction(action)
+
+            menu.addSeparator()
+
+            paste_act = QAction("粘贴", menu)
+            paste_act.setEnabled(bool(self._clipboard))
+            paste_act.triggered.connect(self.paste)
+            menu.addAction(paste_act)
 
         return menu
 
     def _run_single_node(self, node_data: NodeBase):
-        """Execute a single node."""
         if self._workflow and isinstance(node_data, VisionNodeData):
             node_data.update_invoke_current()
+            item = self._node_items.get(node_data.node_id)
+            if item:
+                item.update_from_node()
             self.status_message.emit(f"已执行: {node_data.name}")
 
-    # -- Serialization --
+    # ── Serialization ─────────────────────────────────────────────────
 
     def clear_all(self):
-        """Remove all nodes and edges."""
         for node_id in list(self._node_items.keys()):
             self.remove_node_item(node_id)
         self._node_items.clear()
         self._edge_items.clear()
+        self._cmd_stack.clear()
 
     def load_from_workflow(self, workflow: WorkflowEngine):
-        """Populate the scene from a workflow engine."""
+        """Populate scene from workflow, fully rebuilding nodes and edges."""
         self.clear_all()
         self._workflow = workflow
 
-        # Create nodes
-        pos = QPointF(0, 0)
+        # Create nodes at saved positions
         for node in workflow.get_all_nodes():
+            # Use stored position or auto-place
+            x = getattr(node, '_pos_x', 0.0) or 0.0
+            y = getattr(node, '_pos_y', 0.0) or 0.0
+            pos = QPointF(x, y) if (x or y) else None
             item = self.add_node_item(node, pos)
-            pos += QPointF(160, 0)
-            if pos.x() > 600:
-                pos = QPointF(0, pos.y() + 80)
+            if item:
+                # Store position for later
+                node._pos_x = item.pos().x()
+                node._pos_y = item.pos().y()
+
+        # Rebuild edges from link data
+        for link in workflow.get_all_links():
+            from_item = self.get_node_item(link.from_node_id)
+            to_item = self.get_node_item(link.to_node_id)
+            if from_item and to_item:
+                fs = from_item.get_socket_by_port_id(link.from_port_id)
+                ts = to_item.get_socket_by_port_id(link.to_port_id)
+                if fs and ts:
+                    self.create_edge(fs, ts)
+
+    def save_to_workflow(self, workflow: WorkflowEngine):
+        """Save scene state back to workflow (node positions, links)."""
+        for node_id, item in self._node_items.items():
+            pos = item.pos()
+            nd = item.node_data
+            nd._pos_x = pos.x()
+            nd._pos_y = pos.y()
+        workflow._links = []
+        for edge in self._edge_items.values():
+            if edge.link_data:
+                workflow._links.append(edge.link_data)

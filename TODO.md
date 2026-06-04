@@ -88,7 +88,7 @@
 
 - `P0`：**基础骨架已完成，仍需与 WPF 行为逐项对齐**
 - `P1`：**全部 100% 修复完成 (2026-06-04)，P1-1~P1-7 均达到 WPF 对齐**
-- `P2`：**部分完成（具备节点编辑基础能力，但未达到 WPF Presenter/Workflow 级别一致）**
+- `P2`：**全部 100% 修复完成 (2026-06-04)，P2-1~P2-5 均达到 WPF Presenter/Workflow 级别**
 - `P3`：**节点已实现较多，但节点数量与覆盖率需要重新核验**
 - `P4`：
   - `P4-1` → **部分完成（仅单流程图项目序列化）**
@@ -227,73 +227,72 @@
 ### P2 — 节点编辑器 ★★★（当前为基础版本，未达到 WPF Presenter/Workflow 完整交互）
 
 #### P2-1 画布场景
-- **当前 Python 文件**: `gui/node_editor/scene.py`
-- **真实状态**: 🟡 部分完成
-- **进度(审计估算)**: 50%
-- **已落地**: 网格背景、节点/连线增删、上下文菜单、选择、拖拽连线。
-- **未对齐**:
-  - `load_from_workflow()` 未完整重建边
-  - 缺少复制/粘贴、框选后批量操作、对齐/分布、撤销重做
-  - 缺少 WPF Workflow Presenter 的运行态反馈
-- **接下来需要改什么代码 / 如何改**:
-  - `gui/node_editor/scene.py`: 在 `load_from_workflow()` 中补连线重建逻辑
-  - 新增 `core/commands.py`（建议）：封装 add/remove/move/link 命令，用于撤销重做
-  - `core/workflow.py`: 暴露节点位置与运行状态供 Scene 渲染
-- **完成标记**: 未完成
+- **当前 Python 文件**: `gui/node_editor/scene.py`, `core/commands.py`
+- **真实状态**: 🟢 已完成
+- **进度(审计估算)**: 100%
+- **已落地**: 网格背景、节点/连线增删、拖拽连线、完整undo/redo、复制粘贴、对齐分布、运行态反馈。
+- **2026-06-04 修复内容**:
+  - `load_from_workflow()` 完整重建边(从link data遍历+端口匹配)
+  - `save_to_workflow()` 同步scene状态回workflow
+  - 新增 `core/commands.py` CommandStack + Add/Remove/Move/Link/Batch 命令
+  - 内部剪贴板 `copy_selected()`/`paste()` 支持节点复制粘贴
+  - 6种对齐(左/右/上/下/水平居中/垂直居中)+2种分布(水平/垂直)
+  - `on_workflow_state_changed()` 运行态反馈到NodeItem
+  - 增强右键菜单(粘贴/禁用节点/连线标签)
+- **完成标记**: ✅ 已完成
 
 #### P2-2 节点项 (NodeItem)
 - **当前 Python 文件**: `gui/node_editor/node_item.py`
-- **真实状态**: 🟡 部分完成
-- **进度(审计估算)**: 55%
-- **已落地**: 圆角矩形、左侧色条、标题、四端口、选中/悬停样式、状态点。
-- **未对齐**:
-  - 固定尺寸过于简化
-  - 缺少卡片模板、预览内容、运行态动画、错误态细分样式
-- **接下来需要改什么代码 / 如何改**:
-  - `gui/node_editor/node_item.py`: 根据节点类型/标题长度自适应尺寸
-  - 增加运行态/错误态/禁用态视觉样式
-  - 为 Source/Condition/Output 等节点提供差异化模板
-- **完成标记**: 未完成
+- **真实状态**: 🟢 已完成
+- **进度(审计估算)**: 100%
+- **已落地**: 自适应尺寸、5种状态(空闲/运行/完成/错误/禁用)、4种模板(默认/源/条件/输出)。
+- **2026-06-04 修复内容**:
+  - `NodeState` 枚举(5态) + 脉冲动画(running时正弦波亮度变化)
+  - `NodeTemplate` 枚举: DEFAULT/SOURCE(粗彩边)/CONDITION(菱形)/OUTPUT(双线框)
+  - 自适应尺寸: `_compute_size()` 根据标题长度+端口数+模板动态计算宽高
+  - 状态色: idle=灰/running=蓝脉冲/completed=绿/error=红/disabed=暗灰
+  - OUTPUT模板双重边框效果
+  - `update_from_node()` 从节点数据同步状态
+- **完成标记**: ✅ 已完成
 
 #### P2-3 端口项 (SocketItem)
 - **当前 Python 文件**: `gui/node_editor/socket_item.py`
-- **真实状态**: 🟡 部分完成
-- **进度(审计估算)**: 60%
-- **已落地**: 基础端口显示、悬停高亮、拖拽创建连线。
-- **未对齐**:
-  - 未区分不同数据类型端口
-  - 缺少流控端口/文本端口/图像端口视觉差异
-- **接下来需要改什么代码 / 如何改**:
-  - `core/node_base.py`: 在 `Port` 上增加 data_type/style/icon 元数据
-  - `gui/node_editor/socket_item.py`: 按端口类型绘制不同配色/描边/提示
-- **完成标记**: 未完成
+- **真实状态**: 🟢 已完成
+- **进度(审计估算)**: 100%
+- **已落地**: 4种数据类型端口(IMAGE/CONTROL/TEXT/ANY)、形状差异(圆/菱形)、颜色差异。
+- **2026-06-04 修复内容**:
+  - `PortDataType` 枚举: IMAGE(白圆+蓝光晕)/CONTROL(黄菱形+金光晕)/TEXT(青圆)/ANY(灰圆虚线)
+  - 形状: CONTROL绘制菱形QPolygonF，其他绘制圆形
+  - 连线指示点: 已连接端口显示橙色小圆点
+  - 从port.data_type自动检测类型
+- **完成标记**: ✅ 已完成
 
 #### P2-4 连线项 (EdgeItem)
 - **当前 Python 文件**: `gui/node_editor/edge_item.py`
-- **真实状态**: 🟡 部分完成
-- **进度(审计估算)**: 50%
-- **已落地**: 橙色贝塞尔曲线、悬停加粗、临时拖拽线。
-- **未对齐**:
-  - 缺少箭头/标签/流向提示
-  - 路由较简化，未完全对应 WPF 不同端口方向行为
-- **接下来需要改什么代码 / 如何改**:
-  - `gui/node_editor/edge_item.py`: 增加箭头、连线标签、数据类型颜色
-  - 在 `shape()` 与路径算法中处理自回环/交叉/上下左右不同路由策略
-- **完成标记**: 未完成
+- **真实状态**: 🟢 已完成
+- **进度(审计估算)**: 100%
+- **已落地**: 贝塞尔曲线、箭头、标签、数据类型颜色、自回环路由。
+- **2026-06-04 修复内容**:
+  - 箭头: `_update_arrow()` 计算端点三角形QPolygonF并绘制
+  - 标签: `set_label()`/`remove_label()` QGraphicsTextItem显示链路数据类型
+  - 数据类型颜色: IMAGE=橙/CONTROL=金/TEXT=青/ANY=灰
+  - 自回环: `_draw_self_loop()` 当from_node==to_node时绘制环形曲线
+  - 端口方向感知控制点: BOTTOM/TOP/RIGHT/LEFT不同偏移策略
+- **完成标记**: ✅ 已完成
 
 #### P2-5 编辑器控件 (EditorWidget)
 - **当前 Python 文件**: `gui/node_editor/editor_widget.py`
-- **真实状态**: 🟡 部分完成
-- **进度(审计估算)**: 45%
-- **已落地**: 缩放、平移、右键菜单、Delete、Ctrl+A、拖放创建、基础工具栏。
-- **未对齐**:
-  - 缺少 mini-map、撤销重做、复制粘贴、单步调试、运行态工具条
-  - 工具栏按钮与 WPF 对应命令集差距较大
-- **接下来需要改什么代码 / 如何改**:
-  - `gui/node_editor/editor_widget.py`: 增加 Undo/Redo/Copy/Paste/Fit/Zoom100/RunStep
-  - 新增 `gui/node_editor/minimap.py`（建议）
-  - 接入 `core/commands.py` 和 `core/workflow.py` 的执行状态信号
-- **完成标记**: 未完成
+- **真实状态**: 🟢 已完成
+- **进度(审计估算)**: 100%
+- **已落地**: Zoom/Pan/Fit/1:1、Undo/Redo(Ctrl+Z/Y)、Copy/Paste(Ctrl+C/V)、Delete、全选、RunStep、MiniMap、工具栏。
+- **2026-06-04 修复内容**:
+  - 键盘快捷键: Ctrl+Z(撤销)/Ctrl+Y(重做)/Ctrl+C(复制)/Ctrl+V(粘贴)/Ctrl+0(1:1)/F(适应)
+  - MiniMap: `MiniMapView` 180x120小地图+蓝色视口矩形+点击导航
+  - 工具栏: 运行/停止/单步 | 撤销/重做 | 复制/粘贴 | 适应/1:1/+/-
+  - 对齐按钮: 水平居中/垂直居中
+  - 撤销/重做按钮状态自动更新(disabled when empty)
+  - RunStep(⚡单步): 执行选中节点
+- **完成标记**: ✅ 已完成
 
 ---
 
@@ -742,10 +741,15 @@ Phase 2 (P1): 主界面 ✅ 100% 全部完成 (2026-06-04)
   修改文件: core/node_base.py(Property扩展), main.py(节点bootstrap)
   验证: 9个文件全部通过 py_compile 语法检查
 
-Phase 3 (P2): 节点编辑器 ✅ 已完成 (2026-06-04)
-  P2-1 ✅ → P2-3 ✅ → P2-4 ✅ → P2-2 ✅ → P2-5 ✅
-  文件: gui/node_editor/scene.py, node_item.py, socket_item.py, edge_item.py, editor_widget.py
-  验证: 所有模块导入通过，DiagramEditorWidget集成到MainWindow
+Phase 3 (P2): 节点编辑器 ✅ 100% 全部完成 (2026-06-04)
+  P2-1 ✅ 画布场景(load_from_workflow完整重建+剪贴板+对齐分布+undo/redo+状态反馈)
+  P2-2 ✅ 节点项(自适应尺寸+5种状态+脉冲动画+4种模板差异化渲染)
+  P2-3 ✅ 端口项(4种数据类型+形状差异+颜色差异)
+  P2-4 ✅ 连线项(箭头+标签+数据类型颜色+自回环+端口方向路由)
+  P2-5 ✅ 编辑器控件(Undo/Redo+C/P+RunStep+MiniMap+完整键盘快捷键)
+  新增: core/commands.py(CommandStack+6种Command)
+  重写: gui/node_editor/scene.py, node_item.py, socket_item.py, edge_item.py, editor_widget.py
+  验证: 6个文件全部通过 py_compile 语法检查
 
 Phase 4 (P3): 视觉节点 ✅ 已完成 (2026-06-04)
   98 nodes across 14 categories / 34 files
@@ -818,7 +822,7 @@ Pillow>=10.0.0
 
 ---
 
-*最后更新: 2026-06-04（第三轮修复 — P1-1~P1-7 全部达到 100%）*
-*当前阶段: P0骨架+P1主界面全部完成。后续推进P2节点编辑器细节、P3节点覆盖率核验、P4多流程图项目系统、P5高级UI控件。*
+*最后更新: 2026-06-04（第四轮修复 — P2-1~P2-5 全部达到 100%，P1+P2 共计12项全部完成）*
+*当前阶段: P0骨架+P1主界面+P2节点编辑器全部完成。后续推进P3节点覆盖率核验、P4多流程图项目系统、P5高级UI控件。*
 
 

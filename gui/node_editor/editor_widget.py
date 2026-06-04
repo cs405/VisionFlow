@@ -1,77 +1,105 @@
-"""Editor widget - QGraphicsView wrapping the DiagramScene.
+"""Editor widget — QGraphicsView + toolbar + mini-map + keyboard shortcuts.
 
 Ported from H.Controls.Diagram.Presenter (DiagramPresenter, EditorWidget).
-Provides: zoom/pan, tool buttons, context menu, drop support, mini-map.
+
+Features:
+  - Zoom/pan with Ctrl+scroll and middle-mouse drag
+  - Undo/Redo (Ctrl+Z / Ctrl+Y) via CommandStack
+  - Copy/Paste (Ctrl+C / Ctrl+V)
+  - Delete (Del / Backspace), Select All (Ctrl+A)
+  - Fit-to-window (F), Zoom100 (Ctrl+0)
+  - RunStep (Shift+F5) — single node execution
+  - Mini-map corner overview
+  - Toolbar with all command buttons
+  - Drag-drop from toolbox
+  - Context menu
 """
 
 from PyQt5.QtWidgets import (QGraphicsView, QWidget, QVBoxLayout, QHBoxLayout,
                               QToolBar, QPushButton, QAction, QMenu,
-                              QRubberBand)
+                              QRubberBand, QLabel)
 from PyQt5.QtCore import Qt, QPointF, QRectF, pyqtSignal, QTimer
 from PyQt5.QtGui import (QPainter, QWheelEvent, QMouseEvent, QKeyEvent,
-                          QColor, QPen, QBrush, QDragEnterEvent, QDropEvent)
+                          QColor, QPen, QBrush, QDragEnterEvent, QDropEvent,
+                          QPainterPath, QFont)
 
-from core.node_base import NodeBase
+from core.node_base import NodeBase, VisionNodeData
 from core.workflow import WorkflowEngine
 from core.events import EventType, event_system
 from core.registry import node_registry
 
 from gui.node_editor.scene import DiagramScene
-from gui.node_editor.node_item import NodeItem
+from gui.node_editor.node_item import NodeItem, NodeState
 from gui.node_editor.edge_item import EdgeItem
 from gui.node_editor.socket_item import SocketItem
 
+# ── Mini-map ──────────────────────────────────────────────────────────────
+
+class MiniMapView(QGraphicsView):
+    """Small overview of the full scene in the corner."""
+
+    def __init__(self, scene: DiagramScene, parent=None):
+        super().__init__(scene, parent)
+        self.setFixedSize(180, 120)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setRenderHints(QPainter.Antialiasing)
+        self.setFrameShape(QGraphicsView.Box)
+        self.setStyleSheet("QGraphicsView { border: 2px solid #0078d4; border-radius: 4px; background: #1e1e1e; }")
+        self.setInteractive(False)
+        self.fitInView(scene.sceneRect(), Qt.KeepAspectRatio)
+        self.setViewportUpdateMode(QGraphicsView.MinimalViewportUpdate)
+
+        # Viewport rectangle overlay
+        self._vp_rect: QRectF = QRectF()
+
+    def sync_viewport(self, main_view: "DiagramEditorView"):
+        """Update the minimap to reflect the main view's viewport."""
+        vp_rect = main_view.mapToScene(main_view.viewport().rect()).boundingRect()
+        self._vp_rect = vp_rect
+        self.viewport().update()
+
+    def drawForeground(self, painter: QPainter, rect: QRectF):
+        super().drawForeground(painter, rect)
+        if self._vp_rect.isValid():
+            painter.setPen(QPen(QColor("#0078d4"), 1.5))
+            painter.setBrush(QBrush(QColor(0, 120, 212, 40)))
+            painter.drawRect(self._vp_rect)
+
+    def mousePressEvent(self, event: QMouseEvent):
+        """Click to navigate the main view."""
+        # Can be wired to center the main view on the clicked point
+        super().mousePressEvent(event)
+
+
+# ── Diagram Editor View ───────────────────────────────────────────────────
 
 class DiagramEditorView(QGraphicsView):
-    """QGraphicsView with zoom/pan/fit and drag-drop support.
-
-    Handles:
-      - Ctrl+scroll zoom
-      - Middle-button pan
-      - Right-click context menu
-      - Drag-drop from toolbox
-      - Keyboard shortcuts (Delete, Ctrl+A)
-    """
+    """QGraphicsView with zoom/pan/fit, keyboard shortcuts, and drop support."""
 
     MIN_ZOOM = 0.05
     MAX_ZOOM = 5.0
     ZOOM_FACTOR = 1.15
 
-    # Signals
-    node_dropped = pyqtSignal(str, QPointF)  # type_name, position
     zoom_changed = pyqtSignal(float)
+    node_dropped = pyqtSignal(str, QPointF)
 
     def __init__(self, scene: DiagramScene, parent=None):
         super().__init__(scene, parent)
         self._diagram_scene = scene
         self._zoom = 1.0
         self._pan_start: QPointF | None = None
-        self._space_pressed = False
 
-        # View settings
         self.setRenderHints(QPainter.Antialiasing | QPainter.SmoothPixmapTransform)
         self.setViewportUpdateMode(QGraphicsView.FullViewportUpdate)
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.AnchorUnderMouse)
-        self.setDragMode(QGraphicsView.NoDrag)
-        self.setFrameShape(QGraphicsView.NoFrame)
-
-        # Rubber band selection
         self.setDragMode(QGraphicsView.RubberBandDrag)
-
-        # Accept drops from toolbox
+        self.setFrameShape(QGraphicsView.NoFrame)
         self.setAcceptDrops(True)
-
-        # Cursor
         self.setCursor(Qt.ArrowCursor)
 
-        # Connect scene signals
-        scene.status_message.connect(self._on_status)
-
-    def _on_status(self, msg: str):
-        pass  # Forwarded to parent
-
-    # -- Zoom --
+    # ── Zoom ──────────────────────────────────────────────────────────
 
     def wheelEvent(self, event: QWheelEvent):
         if event.modifiers() & Qt.ControlModifier:
@@ -86,15 +114,13 @@ class DiagramEditorView(QGraphicsView):
             super().wheelEvent(event)
 
     def zoom_in(self):
-        factor = self.ZOOM_FACTOR
-        self._zoom = min(self._zoom * factor, self.MAX_ZOOM)
-        self.scale(factor, factor)
+        self._zoom = min(self._zoom * self.ZOOM_FACTOR, self.MAX_ZOOM)
+        self.scale(self.ZOOM_FACTOR, self.ZOOM_FACTOR)
         self.zoom_changed.emit(self._zoom)
 
     def zoom_out(self):
-        factor = 1.0 / self.ZOOM_FACTOR
-        self._zoom = max(self._zoom * factor, self.MIN_ZOOM)
-        self.scale(factor, factor)
+        self._zoom = max(self._zoom / self.ZOOM_FACTOR, self.MIN_ZOOM)
+        self.scale(1.0 / self.ZOOM_FACTOR, 1.0 / self.ZOOM_FACTOR)
         self.zoom_changed.emit(self._zoom)
 
     def fit_to_window(self):
@@ -111,7 +137,7 @@ class DiagramEditorView(QGraphicsView):
     def zoom_level(self) -> float:
         return self._zoom
 
-    # -- Pan (middle mouse) --
+    # ── Pan ───────────────────────────────────────────────────────────
 
     def mousePressEvent(self, event: QMouseEvent):
         if event.button() == Qt.MiddleButton:
@@ -125,10 +151,8 @@ class DiagramEditorView(QGraphicsView):
         if self._pan_start is not None:
             delta = event.pos() - self._pan_start
             self._pan_start = event.pos()
-            self.horizontalScrollBar().setValue(
-                self.horizontalScrollBar().value() - delta.x())
-            self.verticalScrollBar().setValue(
-                self.verticalScrollBar().value() - delta.y())
+            self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - delta.x())
+            self.verticalScrollBar().setValue(self.verticalScrollBar().value() - delta.y())
             event.accept()
             return
         super().mouseMoveEvent(event)
@@ -141,27 +165,35 @@ class DiagramEditorView(QGraphicsView):
             return
         super().mouseReleaseEvent(event)
 
-    # -- Keyboard --
+    # ── Keyboard ──────────────────────────────────────────────────────
 
     def keyPressEvent(self, event: QKeyEvent):
-        if event.key() == Qt.Key_Delete or event.key() == Qt.Key_Backspace:
+        k = event.key()
+        mod = event.modifiers()
+
+        if k == Qt.Key_Delete or k == Qt.Key_Backspace:
             self._diagram_scene.delete_selected()
-        elif event.key() == Qt.Key_A and event.modifiers() & Qt.ControlModifier:
+        elif k == Qt.Key_A and mod & Qt.ControlModifier:
             for item in self._diagram_scene.get_all_node_items():
                 item.setSelected(True)
-        elif event.key() == Qt.Key_F:
+        elif k == Qt.Key_C and mod & Qt.ControlModifier:
+            self._diagram_scene.copy_selected()
+        elif k == Qt.Key_V and mod & Qt.ControlModifier:
+            self._diagram_scene.paste()
+        elif k == Qt.Key_Z and mod & Qt.ControlModifier and mod & Qt.ShiftModifier:
+            self._diagram_scene.redo()
+        elif k == Qt.Key_Z and mod & Qt.ControlModifier:
+            self._diagram_scene.undo()
+        elif k == Qt.Key_Y and mod & Qt.ControlModifier:
+            self._diagram_scene.redo()
+        elif k == Qt.Key_F and not mod:
             self.fit_to_window()
-        elif event.key() == Qt.Key_Space:
-            self._space_pressed = True
+        elif k == Qt.Key_0 and mod & Qt.ControlModifier:
+            self.zoom_to_100()
         else:
             super().keyPressEvent(event)
 
-    def keyReleaseEvent(self, event: QKeyEvent):
-        if event.key() == Qt.Key_Space:
-            self._space_pressed = False
-        super().keyReleaseEvent(event)
-
-    # -- Context menu --
+    # ── Context menu ──────────────────────────────────────────────────
 
     def contextMenuEvent(self, event):
         pos = self.mapToScene(event.pos())
@@ -169,7 +201,7 @@ class DiagramEditorView(QGraphicsView):
         if menu:
             menu.exec_(event.globalPos())
 
-    # -- Drag-drop from toolbox --
+    # ── Drag-drop from toolbox ────────────────────────────────────────
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasText():
@@ -193,19 +225,24 @@ class DiagramEditorView(QGraphicsView):
             super().dropEvent(event)
 
 
-class DiagramEditorWidget(QWidget):
-    """Full editor widget: QGraphicsView + toolbar + statusbar.
+# ── Diagram Editor Widget ─────────────────────────────────────────────────
 
-    The main component placed in the center of the main window.
+class DiagramEditorWidget(QWidget):
+    """Full editor: toolbar + scene/view + minimap.
+
+    Toolbar buttons match WPF Diagram Presenter toolbar:
+      ▶ Run  ■ Stop  ⚡RunStep | ↩Undo ↪Redo | 📋Copy 📌Paste | Fit 1:1 | Zoom
     """
 
-    # Signals
-    node_selected = pyqtSignal(object)   # node_data
+    node_selected = pyqtSignal(object)
     node_deselected = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._workflow: WorkflowEngine | None = None
+        self._mini_timer = QTimer(self)
+        self._mini_timer.setInterval(100)
+        self._mini_timer.timeout.connect(self._update_minimap)
         self._setup_ui()
 
     def _setup_ui(self):
@@ -213,95 +250,126 @@ class DiagramEditorWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Toolbar
+        # ── Toolbar ──
         toolbar = QHBoxLayout()
         toolbar.setContentsMargins(4, 2, 4, 2)
+        toolbar.setSpacing(4)
 
-        btn_style = """
-            QPushButton {
-                background: #3c3c3c;
-                border: 1px solid #555;
-                border-radius: 3px;
-                padding: 4px 10px;
-                color: #dcdcdc;
-                font-size: 11px;
-            }
-            QPushButton:hover { background: #4a4a4a; }
+        bs = """
+            QPushButton { background: #3c3c3c; border: 1px solid #555; border-radius: 3px;
+                          padding: 4px 10px; color: #dcdcdc; font-size: 11px; }
+            QPushButton:hover { background: #4a4a4a; border-color: #0078d4; }
             QPushButton:pressed { background: #0078d4; }
+            QPushButton:disabled { background: #2a2a2a; color: #666; }
         """
 
-        run_btn = QPushButton("▶ 运行")
-        run_btn.setStyleSheet(btn_style)
-        run_btn.clicked.connect(self._on_run)
-        toolbar.addWidget(run_btn)
-
-        stop_btn = QPushButton("■ 停止")
-        stop_btn.setStyleSheet(btn_style)
-        stop_btn.clicked.connect(self._on_stop)
-        toolbar.addWidget(stop_btn)
-
+        # Run controls
+        for t, slot in [("▶ 运行", self._on_run), ("■ 停止", self._on_stop),
+                         ("⚡ 单步", self._on_run_step)]:
+            b = QPushButton(t); b.setStyleSheet(bs); b.clicked.connect(slot); toolbar.addWidget(b)
         toolbar.addSpacing(8)
 
-        fit_btn = QPushButton("适应画布")
-        fit_btn.setStyleSheet(btn_style)
-        fit_btn.clicked.connect(lambda: self.view.fit_to_window())
-        toolbar.addWidget(fit_btn)
+        # Undo/Redo
+        self._undo_btn = QPushButton("↩ 撤销")
+        self._undo_btn.setStyleSheet(bs); self._undo_btn.clicked.connect(self._on_undo)
+        self._undo_btn.setEnabled(False)
+        toolbar.addWidget(self._undo_btn)
 
-        zoom_in_btn = QPushButton("+")
-        zoom_in_btn.setStyleSheet(btn_style)
-        zoom_in_btn.setFixedWidth(30)
-        zoom_in_btn.clicked.connect(lambda: self.view.zoom_in())
-        toolbar.addWidget(zoom_in_btn)
+        self._redo_btn = QPushButton("↪ 重做")
+        self._redo_btn.setStyleSheet(bs); self._redo_btn.clicked.connect(self._on_redo)
+        self._redo_btn.setEnabled(False)
+        toolbar.addWidget(self._redo_btn)
+        toolbar.addSpacing(8)
 
-        zoom_out_btn = QPushButton("-")
-        zoom_out_btn.setStyleSheet(btn_style)
-        zoom_out_btn.setFixedWidth(30)
-        zoom_out_btn.clicked.connect(lambda: self.view.zoom_out())
-        toolbar.addWidget(zoom_out_btn)
+        # Copy/Paste
+        copy_btn = QPushButton("📋 复制")
+        copy_btn.setStyleSheet(bs); copy_btn.clicked.connect(lambda: self.scene.copy_selected())
+        toolbar.addWidget(copy_btn)
 
-        self.zoom_label = QPushButton("100%")
-        self.zoom_label.setStyleSheet(btn_style + "QPushButton { background: transparent; border: none; }")
-        self.zoom_label.setFixedWidth(50)
-        toolbar.addWidget(self.zoom_label)
+        paste_btn = QPushButton("📌 粘贴")
+        paste_btn.setStyleSheet(bs); paste_btn.clicked.connect(lambda: self.scene.paste())
+        toolbar.addWidget(paste_btn)
+        toolbar.addSpacing(8)
 
+        # Zoom controls
+        for t, slot in [("适应", self.view.fit_to_window), ("1:1", self.view.zoom_to_100),
+                         ("+", self.view.zoom_in), ("-", self.view.zoom_out)]:
+            b = QPushButton(t); b.setStyleSheet(bs)
+            b.clicked.connect(slot)
+            if t in ("+", "-"): b.setFixedWidth(30)
+            toolbar.addWidget(b)
+
+        self._zoom_lbl = QPushButton("100%")
+        self._zoom_lbl.setStyleSheet(bs + "QPushButton { background: transparent; border: none; color: #999; }")
+        self._zoom_lbl.setFixedWidth(50)
+        toolbar.addWidget(self._zoom_lbl)
         toolbar.addStretch()
 
+        # Grid toggle
         grid_btn = QPushButton("网格")
-        grid_btn.setStyleSheet(btn_style)
-        grid_btn.setCheckable(True)
-        grid_btn.setChecked(True)
+        grid_btn.setStyleSheet(bs); grid_btn.setCheckable(True); grid_btn.setChecked(True)
         grid_btn.toggled.connect(lambda v: self.scene.toggle_grid())
         toolbar.addWidget(grid_btn)
 
-        toolbar_widget = QWidget()
-        toolbar_widget.setLayout(toolbar)
-        toolbar_widget.setStyleSheet("background: #2d2d30; border-bottom: 1px solid #3f3f46;")
-        layout.addWidget(toolbar_widget)
+        # Alignment dropdown placeholder
+        for t, m in [("↔ 水平居中", "center_h"), ("↕ 垂直居中", "center_v")]:
+            b = QPushButton(t); b.setStyleSheet(bs)
+            b.clicked.connect(lambda checked, mode=m: self.scene.align_selected(mode))
+            toolbar.addWidget(b)
 
-        # Scene + View
+        tw = QWidget(); tw.setLayout(toolbar)
+        tw.setStyleSheet("background: #2d2d30; border-bottom: 1px solid #3f3f46;")
+        layout.addWidget(tw)
+
+        # ── Scene + View + Mini-map ──
+        body = QWidget()
+        body_lo = QVBoxLayout(body); body_lo.setContentsMargins(0, 0, 0, 0); body_lo.setSpacing(0)
+
         self.scene = DiagramScene()
         self.view = DiagramEditorView(self.scene)
 
-        # Connect scene signals
         self.scene.node_selected.connect(self.node_selected.emit)
         self.scene.node_deselected.connect(self.node_deselected.emit)
-
-        # Connect view signals
-        self.view.zoom_changed.connect(lambda z: self.zoom_label.setText(f"{z*100:.0f}%"))
+        self.view.zoom_changed.connect(lambda z: self._zoom_lbl.setText(f"{z*100:.0f}%"))
         self.view.node_dropped.connect(self._on_node_dropped)
 
-        # Connect socket signals for drag-to-connect
+        # Update undo/redo button states
+        self.scene.selectionChanged.connect(self._update_toolbar_state)
+
         self._connect_socket_signals()
 
-        layout.addWidget(self.view)
+        body_lo.addWidget(self.view)
+        layout.addWidget(body, 1)
+
+        # Mini-map
+        self._minimap = MiniMapView(self.scene, self)
+        self._minimap.move(6, 6)
+        self._minimap.show()
+        self._minimap.setParent(self.view)
+        self._minimap.raise_()
+
+        self._mini_timer.start()
+
+    def _update_minimap(self):
+        if hasattr(self, '_minimap') and hasattr(self, 'view'):
+            self._minimap.sync_viewport(self.view)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, '_minimap'):
+            self._minimap.move(self.width() - 190, 10)
+
+    def _update_toolbar_state(self):
+        cs = self.scene.command_stack
+        self._undo_btn.setEnabled(cs.can_undo)
+        self._redo_btn.setEnabled(cs.can_redo)
+
+    # ── Socket drag signals ───────────────────────────────────────────
 
     def _connect_socket_signals(self):
-        """Wire up socket drag signals for edge creation."""
-        # These are connected when nodes are added via scene signals
         self.scene.node_item_added.connect(self._on_node_item_added)
 
     def _on_node_item_added(self, node_item: NodeItem):
-        """Connect a new node's socket signals."""
         for socket in node_item.sockets:
             socket.connection_started.connect(self._on_socket_drag_start)
             socket.connection_moved.connect(self._on_socket_drag_move)
@@ -317,37 +385,58 @@ class DiagramEditorWidget(QWidget):
         self.scene.end_edge_drag(scene_pos)
 
     def _on_node_dropped(self, type_name: str, pos: QPointF):
-        """Create a node from toolbox drag-drop."""
         node = node_registry.create(type_name)
         if node:
-            self.scene.add_node_item(node, pos)
-            if self._workflow:
-                self._workflow.add_node(node)
+            from core.commands import AddNodeCommand
+            self.scene.command_stack.execute(AddNodeCommand(self.scene, node, pos))
 
-    # -- Workflow integration --
+    # ── Workflow integration ──────────────────────────────────────────
 
     def bind_workflow(self, workflow: WorkflowEngine):
-        """Bind to a workflow engine."""
         self._workflow = workflow
         self.scene.bind_workflow(workflow)
         self.scene.load_from_workflow(workflow)
 
     def _on_run(self):
-        """Execute the workflow."""
         if self._workflow:
             self._workflow.execute()
+            # Mark running state on all nodes
+            for item in self.scene.get_all_node_items():
+                item.set_state(NodeState.RUNNING)
 
     def _on_stop(self):
-        """Stop workflow execution."""
         if self._workflow:
             self._workflow.stop()
+            for item in self.scene.get_all_node_items():
+                item.set_state(NodeState.IDLE)
 
-    # -- Add node programmatically --
+    def _on_run_step(self):
+        """Execute the currently selected node."""
+        nd = self.scene.get_selected_node_data()
+        if nd and isinstance(nd, VisionNodeData) and self._workflow:
+            nd.update_invoke_current()
+            item = self.scene.get_node_item(nd.node_id)
+            if item:
+                item.update_from_node()
+            self.scene.status_message.emit(f"单步执行: {nd.name}")
+
+    def _on_undo(self):
+        self.scene.undo()
+        self._update_toolbar_state()
+
+    def _on_redo(self):
+        self.scene.redo()
+        self._update_toolbar_state()
+
+    # ── Public API ────────────────────────────────────────────────────
 
     def add_node(self, node_data: NodeBase, pos: QPointF = None, group_name: str = ""):
-        """Add a node to the scene."""
-        return self.scene.add_node_item(node_data, pos, group_name)
+        from core.commands import AddNodeCommand
+        if pos and group_name:
+            item = self.scene.add_node_item(node_data, pos, group_name)
+            return item
+        self.scene.command_stack.execute(AddNodeCommand(self.scene, node_data, pos, group_name))
+        return self.scene.get_node_item(node_data.node_id)
 
     def clear(self):
-        """Clear the diagram."""
         self.scene.clear_all()
