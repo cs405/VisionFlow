@@ -123,7 +123,8 @@ def _create_choices_editor(parent, prop_name, prop_desc, current_value):
     elif current_value in choices:
         combo.setCurrentText(str(current_value))
 
-    if prop_desc.readonly:
+    ro = getattr(parent, '_force_readonly', False) or prop_desc.readonly
+    if ro:
         combo.setEnabled(False)
 
     return combo, combo
@@ -343,11 +344,21 @@ class PropertyPanel(QWidget):
 
     property_changed = pyqtSignal(str, object, object)  # name, old_value, new_value
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, group_filter: list[str] | None = None,
+                 readonly: bool = False):
+        """Create property panel.
+
+        Args:
+            group_filter: If set, only show properties in these groups (e.g. [RESULT_PARAMETERS]).
+                         If None, show all properties. Used by module results tab.
+            readonly: If True, all editors are read-only. Used by module results tab.
+        """
         super().__init__(parent)
         self._current_node: NodeBase | None = None
         self._image_viewer = None
         self._property_widgets: dict[str, QWidget] = {}
+        self._group_filter = group_filter
+        self._force_readonly = readonly
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setSingleShot(True)
         self._refresh_timer.setInterval(500)  # 500ms debounce
@@ -356,6 +367,10 @@ class PropertyPanel(QWidget):
 
     def set_image_viewer(self, viewer):
         self._image_viewer = viewer
+
+    def _is_readonly(self, prop_desc: Property) -> bool:
+        """Check read-only combining force_readonly mode and property-level flag."""
+        return self._force_readonly or prop_desc.readonly
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -430,6 +445,9 @@ class PropertyPanel(QWidget):
         ]
 
         for group_name in group_order:
+            # Apply group filter (module results tab shows only selected groups)
+            if self._group_filter is not None and group_name not in self._group_filter:
+                continue
             props = groups.get(group_name, [])
             if not props:
                 continue
@@ -534,7 +552,7 @@ class PropertyPanel(QWidget):
             widget.setChecked(bool(current_value))
             widget.toggled.connect(lambda v, n=prop_name: self._set_property_value(n, v))
             self._property_widgets[prop_name] = widget
-            if prop_desc.readonly:
+            if self._is_readonly(prop_desc):
                 widget.setEnabled(False)
             return widget
 
@@ -547,7 +565,7 @@ class PropertyPanel(QWidget):
             widget.setValue(int(current_value or 0))
             widget.valueChanged.connect(lambda v, n=prop_name: self._set_property_value(n, v))
             self._property_widgets[prop_name] = widget
-            if prop_desc.readonly:
+            if self._is_readonly(prop_desc):
                 widget.setReadOnly(True)
             return widget
 
@@ -562,7 +580,7 @@ class PropertyPanel(QWidget):
             widget.setValue(float(current_value or 0.0))
             widget.valueChanged.connect(lambda v, n=prop_name: self._set_property_value(n, v))
             self._property_widgets[prop_name] = widget
-            if prop_desc.readonly:
+            if self._is_readonly(prop_desc):
                 widget.setReadOnly(True)
             return widget
 
@@ -586,7 +604,7 @@ class PropertyPanel(QWidget):
             label = QLabel(f"[{len(current_value)} 项]")
             label.setStyleSheet("color: #999; font-size: 11px;")
             hbox.addWidget(label)
-            if not prop_desc.readonly:
+            if not self._is_readonly(prop_desc):
                 btn = QPushButton("...")
                 btn.setFixedWidth(30)
                 btn.setFixedHeight(22)
@@ -602,7 +620,7 @@ class PropertyPanel(QWidget):
             # File path detection
             is_path = any(kw in prop_name.lower() for kw in ["path", "file", "src", "dir", "folder"])
 
-            if is_path and not prop_desc.readonly:
+            if is_path and not self._is_readonly(prop_desc):
                 container = QWidget()
                 hbox = QHBoxLayout(container)
                 hbox.setContentsMargins(0, 0, 0, 0)
@@ -621,7 +639,7 @@ class PropertyPanel(QWidget):
 
             widget.textChanged.connect(lambda v, n=prop_name: self._set_property_value(n, v))
             self._property_widgets[prop_name] = widget
-            if prop_desc.readonly:
+            if self._is_readonly(prop_desc):
                 widget.setReadOnly(True)
             return widget
 

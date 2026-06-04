@@ -244,6 +244,7 @@ class DiagramEditorWidget(QWidget):
     node_double_clicked = pyqtSignal(object)
     node_properties_requested = pyqtSignal(object)
     node_help_requested = pyqtSignal(object)
+    node_executed = pyqtSignal(object, str, str)  # node, state("Success"/"Error"), time_span
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -492,10 +493,14 @@ class DiagramEditorWidget(QWidget):
     def _on_node_completed(self, sender, **kwargs):
         if self._belongs_to_bound_workflow(sender):
             self.scene.on_workflow_state_changed(sender.node_id, "completed")
+            import time
+            self.node_executed.emit(sender, "Success", time.strftime("%H:%M:%S"))
 
     def _on_node_error(self, sender, **kwargs):
         if self._belongs_to_bound_workflow(sender):
             self.scene.on_workflow_state_changed(sender.node_id, "error")
+            import time
+            self.node_executed.emit(sender, "Error", time.strftime("%H:%M:%S"))
 
     def _on_workflow_stopped(self, sender, **kwargs):
         if sender is self._subscribed_workflow:

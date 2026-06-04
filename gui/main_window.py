@@ -470,18 +470,17 @@ class MainWindow(QMainWindow):
         return panel
 
     def _build_bottom_panel(self):
-        self._bottom_tabs = QTabWidget()
-        self._bottom_tabs.setStyleSheet(_TAB_STYLE)
-        self._bottom_tabs.setMinimumHeight(120)
-
+        # Use ResultPanel's built-in 3-tab layout (历史/当前/帮助) — WPF aligned
         self._result_panel = ResultPanel()
         self._result_panel.set_image_viewer(self._img_panel.viewer)
         self._result_panel.node_jump_requested.connect(self._jump_to_node)
-        self._bottom_tabs.addTab(self._result_panel._history_table, "历史结果")
-        self._bottom_tabs.addTab(self._result_panel._current_table, "当前模块结果")
+        self._result_panel.image_update_requested.connect(self._on_result_image_update)
+        # Wrap in a container so toggle/corner button works
+        self._bottom_tabs = self._result_panel._tabs
+        self._bottom_tabs.setStyleSheet(_TAB_STYLE)
+        self._bottom_tabs.setMinimumHeight(120)
 
-        self._help_panel = HelpPanel()
-        self._bottom_tabs.addTab(self._help_panel, "帮助")
+        self._help_panel = HelpPanel()  # keep for backward-compat direct usage
 
         self._bottom_visible = True
         self._bottom_toggle = QPushButton("▼")
@@ -697,6 +696,7 @@ class MainWindow(QMainWindow):
         editor.node_double_clicked.connect(self._on_editor_node_double_clicked)
         editor.node_properties_requested.connect(self._on_editor_node_double_clicked)
         editor.node_help_requested.connect(self._on_editor_node_help_requested)
+        editor.node_executed.connect(self._on_node_executed)
         editor.scene.status_message.connect(self._on_editor_status)
 
     def _create_diagram_page(self, diagram: DiagramData) -> QWidget:
@@ -901,7 +901,12 @@ class MainWindow(QMainWindow):
         self._property_panel.set_node(node)
         self._help_panel.set_node(node)
         self._module_result_title.setText(f"模块名称 <{node.name}>" if node else "模块名称 <未选择>")
-        self._result_panel.show_node_results(node if isinstance(node, VisionNodeData) else None)
+        if isinstance(node, VisionNodeData):
+            self._result_panel.show_node_results(node)
+            self._result_panel.show_help(node)
+        else:
+            self._result_panel.show_node_results(None)
+            self._result_panel.show_help(None)
         self._update_image_context(node)
 
         if isinstance(node, SrcFilesVisionNodeData):
@@ -958,6 +963,14 @@ class MainWindow(QMainWindow):
         # Flash highlight on the property panel
         if hasattr(self, '_property_panel'):
             self._property_panel.flash_highlight()
+
+    def _on_node_executed(self, node_data, state: str, time_span: str):
+        """Log node execution to history (WPF Messages.Add)."""
+        if isinstance(node_data, VisionNodeData):
+            src_path = ""
+            if hasattr(node_data, 'src_file_path'):
+                src_path = node_data.src_file_path or ""
+            self._result_panel.add_to_history(node_data, state, time_span, src_path)
 
     def _on_editor_node_help_requested(self, node_data: NodeBase):
         """Handle right-click → 帮助 — switch to help tab and show node help."""
@@ -1126,6 +1139,13 @@ class MainWindow(QMainWindow):
                 self._center_tabs.setCurrentIndex(0)
         except Exception:
             pass
+
+    def _on_result_image_update(self, image):
+        """Handle history row click — update main image display (WPF selection linkage)."""
+        import numpy as np
+        if image is not None:
+            self._img_panel.set_image(image)
+            self._center_tabs.setCurrentIndex(0)  # switch to image tab
 
     def _on_resource_file_double_clicked(self, path: str):
         """Open full-size zoom viewer for the image file (WPF ShowZoomViewImageFileCommand)."""
