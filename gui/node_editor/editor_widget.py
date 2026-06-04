@@ -145,7 +145,7 @@ class DiagramEditorView(QGraphicsView):
     # ── Pan ───────────────────────────────────────────────────────────
 
     def mousePressEvent(self, event: QMouseEvent):
-        if event.button() == Qt.MiddleButton:
+        if event.button() in (Qt.MiddleButton, Qt.RightButton):
             self._pan_start = event.pos()
             self.setCursor(Qt.ClosedHandCursor)
             event.accept()
@@ -163,12 +163,21 @@ class DiagramEditorView(QGraphicsView):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent):
-        if event.button() == Qt.MiddleButton and self._pan_start is not None:
+        btn = event.button()
+        if btn in (Qt.MiddleButton, Qt.RightButton) and self._pan_start is not None:
             self._pan_start = None
             self.setCursor(Qt.ArrowCursor)
             event.accept()
             return
         super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event: QMouseEvent):
+        """Double-click → FitToBounds (WPF Zoombox behavior)."""
+        if event.button() == Qt.LeftButton:
+            self.fit_to_window()
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
 
     # ── Keyboard ──────────────────────────────────────────────────────
 
@@ -198,9 +207,11 @@ class DiagramEditorView(QGraphicsView):
         else:
             super().keyPressEvent(event)
 
-    # ── Context menu ──────────────────────────────────────────────────
+    # ── Context menu (right-click without drag) ─────────────────────────
 
     def contextMenuEvent(self, event):
+        if self._pan_start is not None:
+            return  # was a drag, don't show menu
         pos = self.mapToScene(event.pos())
         menu = self._diagram_scene.context_menu(pos)
         if menu:

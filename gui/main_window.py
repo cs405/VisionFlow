@@ -279,7 +279,7 @@ class MainWindow(QMainWindow):
         """
         for icon, tip, slot in [
             (FontIcons.Setting, "设置", None),
-            (FontIcons.Color, "主题", None),
+            (FontIcons.Color, "切换主题 (亮/暗)", self._on_toggle_theme),
             (FontIcons.Info, "关于", self._on_about),
             (FontIcons.Help, "帮助", None),
         ]:
@@ -657,6 +657,10 @@ class MainWindow(QMainWindow):
         run_menu.addAction(stop_action)
 
         system_menu = menu_bar.addMenu("系统(&S)")
+        proj_edit_action = QAction("项目属性...", self)
+        proj_edit_action.triggered.connect(self._on_edit_project)
+        system_menu.addAction(proj_edit_action)
+        system_menu.addSeparator()
         left_toggle = QAction("切换左侧流程资源", self)
         left_toggle.triggered.connect(self.toggle_left_panel)
         system_menu.addAction(left_toggle)
@@ -1009,6 +1013,7 @@ class MainWindow(QMainWindow):
             self._node_cnt_lbl.setText(f"节点: {len(self._workflow.get_all_nodes())}")
 
     def _on_wf_start(self, sender, **kwargs):
+        self._wf_start_time = __import__('time').time()
         self._state_lbl.setText(f"{FontIcons.Sync} 运行中")
         self._state_lbl.setStyleSheet("color: #2196f3; font-weight: bold;")
         self._msg_lbl.setText("流程运行中...")
@@ -1017,21 +1022,37 @@ class MainWindow(QMainWindow):
         self._side_status_strip.set_status("结果区正在等待输出...", "#2196f3")
 
     def _on_wf_done(self, sender, **kwargs):
+        elapsed = self._format_elapsed()
         self._state_lbl.setText(f"{FontIcons.Completed} 完成")
         self._state_lbl.setStyleSheet("color: #4caf50; font-weight: bold;")
-        self._msg_lbl.setText("流程执行完成")
+        self._msg_lbl.setText(f"流程执行完成 (用时: {elapsed})")
         self._run_btn.setEnabled(True)
-        self._diagram_status_strip.set_status("流程图执行完成", "#4caf50")
+        self._diagram_status_strip.set_status(f"流程图执行完成 · 用时: {elapsed}", "#4caf50")
         self._side_status_strip.set_status("结果区已更新", "#4caf50")
 
     def _on_wf_err(self, sender, **kwargs):
+        elapsed = self._format_elapsed()
         self._state_lbl.setText(f"{FontIcons.Error} 错误")
         self._state_lbl.setStyleSheet("color: #f44336; font-weight: bold;")
         result = kwargs.get("result")
-        self._msg_lbl.setText(str(result) if result else "流程错误")
+        self._msg_lbl.setText(f"{str(result) if result else '流程错误'} (用时: {elapsed})")
         self._run_btn.setEnabled(True)
         self._diagram_status_strip.set_status(f"流程图错误：{self._msg_lbl.text()}", "#f44336")
         self._side_status_strip.set_status("结果区收到错误消息", "#f44336")
+
+    def _format_elapsed(self) -> str:
+        """Format elapsed workflow time (WPF TimeSpan display)."""
+        import time
+        start = getattr(self, '_wf_start_time', None)
+        if start is None:
+            return "00:00:00"
+        seconds = time.time() - start
+        h = int(seconds // 3600)
+        m = int((seconds % 3600) // 60)
+        s = int(seconds % 60)
+        if h > 0:
+            return f"{h:02d}:{m:02d}:{s:02d}"
+        return f"{m:02d}:{s:02d}"
 
     def _on_proj_load(self, sender, **kwargs):
         project = kwargs.get("project")
@@ -1338,6 +1359,74 @@ class MainWindow(QMainWindow):
             return f"{filename}    |    {size_text}    |    {modified}"
         except OSError:
             return os.path.basename(path)
+
+    def _on_toggle_theme(self):
+        """Toggle between dark and light themes (WPF ShowColorThemeViewCommand)."""
+        theme_manager.toggle()
+        self._apply_theme()
+
+    def _apply_theme(self):
+        """Reapply the current theme to the entire window."""
+        self.setPalette(theme_manager.colors.to_palette())
+        self.setStyleSheet(theme_manager.get_stylesheet())
+        # Force repaint all children
+        for child in self.findChildren(QWidget):
+            child.style().unpolish(child)
+            child.style().polish(child)
+            child.update()
+
+    def _on_edit_project(self):
+        """Open project settings dialog (WPF ShowEditProjectCommand)."""
+        project = project_service.current_project
+        if project is None:
+            project = project_service.new_project()
+        from PyQt5.QtWidgets import QDialog, QFormLayout, QDialogButtonBox
+        dlg = QDialog(self)
+        dlg.setWindowTitle("项目属性")
+        dlg.setMinimumWidth(400)
+        dlg.setStyleSheet("QDialog { background: #2d2d30; color: #dcdcdc; }")
+        form = QFormLayout(dlg)
+
+        name_edit = QLineEdit(project.display_name)
+        form.addRow("项目名称:", name_edit)
+
+        desc_edit = QLineEdit(getattr(project, 'description', ''))
+        form.addRow("描述:", desc_edit)
+
+        author_edit = QLineEdit(getattr(project, 'author', ''))
+        form.addRow("作者:", author_edit)
+
+        info = QLabel(f"流程图: {len(project.diagrams)} 个\n节点总数: {sum(len(d.workflow.get_all_nodes()) if d.workflow else 0 for d in project.diagrams)}")
+        info.setStyleSheet("color: #999; font-size: 11px;")
+        form.addRow(info)
+
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.accepted.connect(dlg.accept)
+        btns.rejected.connect(dlg.reject)
+        form.addRow(btns)
+
+        if dlg.exec_() == dlg.Accepted:
+            project.name = name_edit.text() or project.name
+            project.description = desc_edit.text()
+            project.author = author_edit.text()
+            self._sync_proj_labels(project)
+            self._log_panel.info(f"项目属性已更新: {project.display_name}")
+
+    def _show_notification(self, level: str, title: str, message: str):
+        """Show desktop notification (WPF ShowXxxNotifyMessageOutputNodeData)."""
+        from PyQt5.QtWidgets import QSystemTrayIcon
+        if QSystemTrayIcon.isSystemTrayAvailable() and QSystemTrayIcon.supportsMessages():
+            if not hasattr(self, '_tray_icon'):
+                self._tray_icon = QSystemTrayIcon(self)
+                icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "icons", "logo.png")
+                if os.path.exists(icon_path):
+                    self._tray_icon.setIcon(QIcon(icon_path))
+                self._tray_icon.show()
+            icon_map = {"Info": 1, "Warning": 2, "Error": 3, "Success": 1}
+            self._tray_icon.showMessage(title, message, icon_map.get(level, 1), 3000)
+        else:
+            # Fallback: status bar message
+            self._log_panel.info(f"[{level}] {title}: {message}")
 
     def _on_about(self):
         QMessageBox.about(

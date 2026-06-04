@@ -139,8 +139,20 @@ class ImageViewer(QGraphicsView):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setFrameShape(QGraphicsView.NoFrame)
 
-        # Background
-        self.setBackgroundBrush(QBrush(QColor(30, 30, 30)))
+        # Background — WPF Tile25 checkered pattern for transparent areas
+        self.setBackgroundBrush(self._create_tile_brush(QColor(45, 45, 48), QColor(52, 52, 55), 16))
+
+    def _create_tile_brush(self, color1: QColor, color2: QColor, size: int) -> QBrush:
+        """Create a checkerboard tile brush (WPF Tile25 style)."""
+        from PyQt5.QtGui import QPixmap
+        from PyQt5.QtCore import QSize
+        pixmap = QPixmap(size * 2, size * 2)
+        pixmap.fill(color1)
+        painter = QPainter(pixmap)
+        painter.fillRect(0, 0, size, size, color2)
+        painter.fillRect(size, size, size, size, color2)
+        painter.end()
+        return QBrush(pixmap)
 
         # Mouse tracking
         self.setMouseTracking(True)

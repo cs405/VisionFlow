@@ -39,6 +39,7 @@ class RoiEditorDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("ROI 编辑器")
         self.resize(960, 680)
+        self._fullscreen = False
         self._image = image
         self._updating = False
         self._roi_type = roi_type
@@ -268,6 +269,15 @@ class RoiEditorDialog(QDialog):
             h, w = self._image.shape[:2]
             sz = min(w, h)
             self.set_rect(((w - sz) // 2, (h - sz) // 2, sz, sz))
+
+    def toggle_fullscreen(self):
+        """Toggle full-screen mode (WPF DrawROI '全屏绘制' button)."""
+        if self._fullscreen:
+            self.showNormal()
+            self._fullscreen = False
+        else:
+            self.showMaximized()
+            self._fullscreen = True
 
     @classmethod
     def edit_roi(cls, image: np.ndarray | None,

@@ -33,6 +33,11 @@ from core.node_base import (NodeBase, Port, PortType, PortDock,
                             ConditionNodeData, WaitAllParallelNodeData)
 from gui.node_editor.socket_item import SocketItem, PORT_DIAMETER
 from gui.font_icons import FontIcons, icon_font
+from gui.theme import theme_manager
+
+# Helper to get current theme colors
+def _tc():
+    return theme_manager.colors
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -402,43 +407,43 @@ class NodeItem(QGraphicsObject):
         shadow_path = self._build_body_path(sr)
         painter.fillPath(shadow_path, NODE_SHADOW)
 
-        # ── Body background ──
-        # WPF: White default, LightGray on hover/selected → dark equivalents
+        # ── Body background (theme-aware) ──
+        c = _tc()
         if self._state == NodeState.DISABLED:
             bg_color = NODE_BG_DISABLED
         elif self.isSelected():
-            bg_color = NODE_BG_SELECTED
+            bg_color = c.node_bg_selected
         elif self._hovered:
-            bg_color = NODE_BG_HOVER
+            bg_color = c.node_bg_hover
         elif self._state == NodeState.RUNNING:
             import math
             pulse = (math.sin(self._pulse_val * 4) + 1) / 2
             r = int(60 + pulse * 30)
             bg_color = QColor(r, r, r)
         else:
-            bg_color = NODE_BG
+            bg_color = c.node_bg
 
         painter.fillPath(body_path, bg_color)
 
         # ── Left bar (WPF: Border Width=30, Visibility bound to State) ──
         self._draw_left_bar(painter, state_color)
 
-        # ── Border ──
-        # WPF: DiagramKeys.StateBorder base + IsMouseOver → Foreground, IsSelected → Orange
+        # ── Border (theme-aware) ──
+        c = _tc()
         if self.isSelected():
-            border_color = NODE_BORDER_SELECTED   # WPF Orange
+            border_color = c.node_border_selected   # WPF Orange
             border_width = 2.0
         elif self._state == NodeState.ERROR:
             border_color = NODE_BORDER_ERROR
             border_width = 2.0
         elif self._hovered:
-            border_color = NODE_BORDER_HOVER       # WPF Foreground brush
+            border_color = c.border_focus           # WPF Foreground brush
             border_width = 1.5
         elif self._template == NodeTemplate.SOURCE:
             border_color = self._flag_color
             border_width = 2.0
         else:
-            border_color = NODE_BORDER
+            border_color = c.node_border
             border_width = 1.0
 
         painter.setPen(QPen(border_color, border_width))
@@ -452,8 +457,9 @@ class NodeItem(QGraphicsObject):
             painter.setPen(QPen(border_color.lighter(120), 0.5))
             painter.drawPath(ipath)
 
-        # ── Title text (WPF: TextBlock center-aligned, right of bar) ──
-        text_color = NODE_TEXT_DISABLED if self._state == NodeState.DISABLED else NODE_TEXT_COLOR
+        # ── Title text (theme-aware) ──
+        c = _tc()
+        text_color = NODE_TEXT_DISABLED if self._state == NodeState.DISABLED else c.node_text
         painter.setPen(text_color)
         font = self._title_font()
         painter.setFont(font)
