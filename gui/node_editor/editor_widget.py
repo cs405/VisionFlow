@@ -242,6 +242,8 @@ class DiagramEditorWidget(QWidget):
     node_selected = pyqtSignal(object)
     node_deselected = pyqtSignal()
     node_double_clicked = pyqtSignal(object)
+    node_properties_requested = pyqtSignal(object)
+    node_help_requested = pyqtSignal(object)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -266,6 +268,8 @@ class DiagramEditorWidget(QWidget):
 
         self.scene.node_selected.connect(self.node_selected.emit)
         self.scene.node_deselected.connect(self.node_deselected.emit)
+        self.scene.node_properties_requested.connect(self.node_properties_requested.emit)
+        self.scene.node_help_requested.connect(self.node_help_requested.emit)
         self.scene.selectionChanged.connect(self._update_toolbar_state)
         self.view.node_dropped.connect(self._on_node_dropped)
         self._connect_socket_signals()
@@ -283,30 +287,35 @@ class DiagramEditorWidget(QWidget):
             QPushButton:disabled { background: #2a2a2a; color: #666; }
         """
 
-        # Run controls
-        for t, slot in [("▶ 运行", self._on_run), ("■ 停止", self._on_stop),
-                         ("⚡ 单步", self._on_run_step)]:
-            b = QPushButton(t); b.setStyleSheet(bs); b.clicked.connect(slot); toolbar.addWidget(b)
+        # Run controls — FontIcon buttons (WPF alignment)
+        from gui.font_icons import FontIcons, FontIconButton
+        for icon, text, slot in [
+            (FontIcons.Replay, "运行", self._on_run),
+            (FontIcons.Stop, "停止", self._on_stop),
+            ("⚡", "单步", self._on_run_step),
+        ]:
+            b = FontIconButton(icon, text, font_size=12)
+            b.setStyleSheet(bs); b.clicked.connect(slot); toolbar.addWidget(b)
         toolbar.addSpacing(8)
 
         # Undo/Redo
-        self._undo_btn = QPushButton("↩ 撤销")
+        self._undo_btn = FontIconButton(FontIcons.Undo, "撤销", font_size=12)
         self._undo_btn.setStyleSheet(bs); self._undo_btn.clicked.connect(self._on_undo)
         self._undo_btn.setEnabled(False)
         toolbar.addWidget(self._undo_btn)
 
-        self._redo_btn = QPushButton("↪ 重做")
+        self._redo_btn = FontIconButton(FontIcons.Redo, "重做", font_size=12)
         self._redo_btn.setStyleSheet(bs); self._redo_btn.clicked.connect(self._on_redo)
         self._redo_btn.setEnabled(False)
         toolbar.addWidget(self._redo_btn)
         toolbar.addSpacing(8)
 
         # Copy/Paste
-        copy_btn = QPushButton("📋 复制")
+        copy_btn = FontIconButton(FontIcons.Copy, "复制", font_size=12)
         copy_btn.setStyleSheet(bs); copy_btn.clicked.connect(lambda: self.scene.copy_selected())
         toolbar.addWidget(copy_btn)
 
-        paste_btn = QPushButton("📌 粘贴")
+        paste_btn = FontIconButton(FontIcons.Paste, "粘贴", font_size=12)
         paste_btn.setStyleSheet(bs); paste_btn.clicked.connect(lambda: self.scene.paste())
         toolbar.addWidget(paste_btn)
         toolbar.addSpacing(8)

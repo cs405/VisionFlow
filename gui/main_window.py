@@ -137,8 +137,7 @@ class _DiagramTabHeader(QWidget):
         layout.setContentsMargins(6, 0, 6, 0)
         layout.setSpacing(4)
 
-        self._icon = QLabel("▣")
-        self._icon.setStyleSheet("color: #4caf50; font-size: 11px; font-weight: bold;")
+        self._icon = FontIconTextBlock(FontIcons.Photo2, font_size=11, color="#4caf50")
         layout.addWidget(self._icon)
 
         self._name_edit = QLineEdit(name)
@@ -151,15 +150,15 @@ class _DiagramTabHeader(QWidget):
         self._name_edit.editingFinished.connect(self._emit_rename)
         layout.addWidget(self._name_edit, 1)
 
-        self._start_btn = self._make_btn("▶", "启动")
+        self._start_btn = self._make_btn(FontIcons.Replay, "启动")
         self._start_btn.clicked.connect(self.run_requested.emit)
         layout.addWidget(self._start_btn)
 
-        self._stop_btn = self._make_btn("■", "停止")
+        self._stop_btn = self._make_btn(FontIcons.Stop, "停止")
         self._stop_btn.clicked.connect(self.stop_requested.emit)
         layout.addWidget(self._stop_btn)
 
-        self._reset_btn = self._make_btn("↺", "重置")
+        self._reset_btn = self._make_btn(FontIcons.Refresh, "重置")
         self._reset_btn.clicked.connect(self.reset_requested.emit)
         layout.addWidget(self._reset_btn)
         self.set_active(False)
@@ -272,16 +271,21 @@ class MainWindow(QMainWindow):
         row1_layout.addWidget(self._cap_proj_lbl)
         row1_layout.addWidget(_hsep())
 
-        action_style = (
-            "QPushButton { background: transparent; border: none; color: #999; font-size: 13px; padding: 0 8px; }"
-            "QPushButton:hover { background: #3e3e42; color: #dcdcdc; }"
-        )
-        for icon, tip in [("⚙", "设置"), ("🎨", "主题"), ("ℹ", "关于"), ("📖", "帮助")]:
-            button = QPushButton(icon)
-            button.setToolTip(tip)
+        # WPF FontIcon action buttons (Setting / Theme / About / Guide)
+        action_style = """
+            QPushButton { background: transparent; border: none; color: #999; font-family: 'Segoe Fluent Icons', 'Segoe MDL2 Assets', 'Segoe UI Symbol'; font-size: 13px; padding: 0 8px; }
+            QPushButton:hover { background: #3e3e42; color: #dcdcdc; }
+        """
+        for icon, tip, slot in [
+            (FontIcons.Setting, "设置", None),
+            (FontIcons.Color, "主题", None),
+            (FontIcons.Info, "关于", self._on_about),
+            (FontIcons.Help, "帮助", None),
+        ]:
+            button = FontIconButton(icon, tooltip=tip, font_size=13)
             button.setStyleSheet(action_style)
-            if tip == "关于":
-                button.clicked.connect(self._on_about)
+            if slot:
+                button.clicked.connect(slot)
             row1_layout.addWidget(button)
 
         window_style = (
@@ -316,12 +320,12 @@ class MainWindow(QMainWindow):
             row2_layout.addWidget(button)
         row2_layout.addWidget(_hsep())
 
-        self._run_btn = QPushButton("▶ 运行")
+        self._run_btn = FontIconButton(FontIcons.Replay, "运行", tooltip="运行流程 (F5)", font_size=12)
         self._run_btn.setStyleSheet(_CMD_BTN)
         self._run_btn.clicked.connect(self._on_run_workflow)
         row2_layout.addWidget(self._run_btn)
 
-        self._stop_btn = QPushButton("■ 停止")
+        self._stop_btn = FontIconButton(FontIcons.Stop, "停止", tooltip="停止运行 (Shift+F5)", font_size=12)
         self._stop_btn.setStyleSheet(_CMD_BTN)
         self._stop_btn.clicked.connect(self._on_stop_workflow)
         row2_layout.addWidget(self._stop_btn)
@@ -339,12 +343,12 @@ class MainWindow(QMainWindow):
             row2_layout.addWidget(button)
         row2_layout.addWidget(_hsep())
 
-        undo_btn = QPushButton("↩ 撤销")
+        undo_btn = FontIconButton(FontIcons.Undo, "撤销", tooltip="撤销 (Ctrl+Z)", font_size=12)
         undo_btn.setStyleSheet(_CMD_BTN)
         undo_btn.clicked.connect(self._on_undo_diagram)
         row2_layout.addWidget(undo_btn)
 
-        redo_btn = QPushButton("↪ 重做")
+        redo_btn = FontIconButton(FontIcons.Redo, "重做", tooltip="重做 (Ctrl+Y)", font_size=12)
         redo_btn.setStyleSheet(_CMD_BTN)
         redo_btn.clicked.connect(self._on_redo_diagram)
         row2_layout.addWidget(redo_btn)
@@ -507,15 +511,14 @@ class MainWindow(QMainWindow):
         corner_layout = QHBoxLayout(corner)
         corner_layout.setContentsMargins(4, 0, 4, 0)
         corner_layout.setSpacing(4)
-        for text, tip, slot in [
-            ("+", "新建流程图", self._on_add_diagram),
-            ("▶", "启动当前流程图", self._on_run_workflow),
-            ("■", "停止当前流程图", self._on_stop_workflow),
-            ("↺", "重置当前流程图视图", self._on_reset_workflow_view),
+        for icon, tip, slot in [
+            (FontIcons.Add, "新建流程图", self._on_add_diagram),
+            (FontIcons.Replay, "启动当前流程图", self._on_run_workflow),
+            (FontIcons.Stop, "停止当前流程图", self._on_stop_workflow),
+            (FontIcons.Refresh, "重置当前流程图视图", self._on_reset_workflow_view),
         ]:
-            button = QPushButton(text)
+            button = FontIconButton(icon, tooltip=tip, font_size=12)
             button.setFixedSize(24, 24)
-            button.setToolTip(tip)
             button.setStyleSheet(
                 "QPushButton { background: transparent; border: 1px solid #505050; border-radius: 2px; color: #dcdcdc; }"
                 "QPushButton:hover { background: #3e3e42; border-color: #0078d4; }"
@@ -536,7 +539,7 @@ class MainWindow(QMainWindow):
             "QStatusBar::item { border: none; }"
         )
 
-        self._state_lbl = QLabel("● 空闲")
+        self._state_lbl = QLabel(f"{FontIcons.Completed} 空闲")
         self._state_lbl.setStyleSheet("color: #4caf50; font-weight: bold;")
         status.addWidget(self._state_lbl)
         status.addWidget(_hsep())
@@ -691,6 +694,8 @@ class MainWindow(QMainWindow):
         editor.node_selected.connect(self._on_editor_node_selected)
         editor.node_deselected.connect(lambda: self._select_node(None))
         editor.node_double_clicked.connect(self._on_editor_node_double_clicked)
+        editor.node_properties_requested.connect(self._on_editor_node_double_clicked)
+        editor.node_help_requested.connect(self._on_editor_node_help_requested)
         editor.scene.status_message.connect(self._on_editor_status)
 
     def _create_diagram_page(self, diagram: DiagramData) -> QWidget:
@@ -953,6 +958,16 @@ class MainWindow(QMainWindow):
         if hasattr(self, '_property_panel'):
             self._property_panel.flash_highlight()
 
+    def _on_editor_node_help_requested(self, node_data: NodeBase):
+        """Handle right-click → 帮助 — switch to help tab and show node help."""
+        self._select_node(node_data)
+        # Switch to help tab
+        if hasattr(self, '_bottom_tabs'):
+            self._bottom_tabs.setCurrentIndex(2)  # index 2 = 帮助
+        # Show help content
+        if hasattr(self, '_help_panel'):
+            self._help_panel.set_node(node_data)
+
     def _on_editor_status(self, message: str):
         self._msg_lbl.setText(message)
         if message:
@@ -980,7 +995,7 @@ class MainWindow(QMainWindow):
             self._node_cnt_lbl.setText(f"节点: {len(self._workflow.get_all_nodes())}")
 
     def _on_wf_start(self, sender, **kwargs):
-        self._state_lbl.setText("● 运行中")
+        self._state_lbl.setText(f"{FontIcons.Sync} 运行中")
         self._state_lbl.setStyleSheet("color: #2196f3; font-weight: bold;")
         self._msg_lbl.setText("流程运行中...")
         self._run_btn.setEnabled(False)
@@ -988,7 +1003,7 @@ class MainWindow(QMainWindow):
         self._side_status_strip.set_status("结果区正在等待输出...", "#2196f3")
 
     def _on_wf_done(self, sender, **kwargs):
-        self._state_lbl.setText("● 完成")
+        self._state_lbl.setText(f"{FontIcons.Completed} 完成")
         self._state_lbl.setStyleSheet("color: #4caf50; font-weight: bold;")
         self._msg_lbl.setText("流程执行完成")
         self._run_btn.setEnabled(True)
@@ -996,7 +1011,7 @@ class MainWindow(QMainWindow):
         self._side_status_strip.set_status("结果区已更新", "#4caf50")
 
     def _on_wf_err(self, sender, **kwargs):
-        self._state_lbl.setText("● 错误")
+        self._state_lbl.setText(f"{FontIcons.Error} 错误")
         self._state_lbl.setStyleSheet("color: #f44336; font-weight: bold;")
         result = kwargs.get("result")
         self._msg_lbl.setText(str(result) if result else "流程错误")
@@ -1104,8 +1119,9 @@ class MainWindow(QMainWindow):
             import cv2
             image = cv2.imread(path, cv2.IMREAD_COLOR)
             if image is not None:
+                h, w = image.shape[:2]
                 self._img_panel.set_image(image)
-                self._img_panel.set_file_info(self._format_file_info(path))
+                self._img_panel.set_image_info(path, w, h)
                 self._center_tabs.setCurrentIndex(0)
         except Exception:
             pass
@@ -1252,7 +1268,12 @@ class MainWindow(QMainWindow):
         self._img_panel.set_result_badge(badge, badge_color)
         self._img_panel.set_source_hint(source_hint)
         self._img_panel.set_message_banner(getattr(node, "message", ""))
-        self._img_panel.set_file_info(self._format_file_info(source_path) if source_path else "")
+        if source_path:
+            pixel_w = getattr(node, 'pixel_width', 0) or 0
+            pixel_h = getattr(node, 'pixel_height', 0) or 0
+            self._img_panel.set_image_info(source_path, pixel_w, pixel_h)
+        else:
+            self._img_panel.set_image_info(None)
 
     def _find_source_context(self, node: NodeBase | None) -> tuple[str | None, str]:
         if node is None:

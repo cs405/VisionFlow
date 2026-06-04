@@ -882,11 +882,41 @@ class ImageViewerPanel(QWidget):
         self._file_info_strip.setVisible(bool(text))
         self._file_info_strip.setText(text)
 
+    def set_image_info(self, file_path: str | None, pixel_w: int = 0, pixel_h: int = 0):
+        """Set bottom info strip with full file metadata (WPF image source info bar).
+
+        Format: filename.ext | 1920×1080 | 1.2 MB | 2024-01-15 14:30:00
+        """
+        if not file_path:
+            self._file_info_strip.setVisible(False)
+            return
+        import os
+        from datetime import datetime
+        parts = [os.path.basename(file_path)]
+        if pixel_w > 0 and pixel_h > 0:
+            parts.append(f"{pixel_w}×{pixel_h}")
+        try:
+            size = os.path.getsize(file_path)
+            if size < 1024 * 1024:
+                parts.append(f"{size / 1024:.1f} KB")
+            else:
+                parts.append(f"{size / 1024 / 1024:.2f} MB")
+        except OSError:
+            pass
+        try:
+            mtime = os.path.getmtime(file_path)
+            parts.append(datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S"))
+        except OSError:
+            pass
+        self._file_info_strip.setText("  |  ".join(parts))
+        self._file_info_strip.setToolTip(file_path)
+        self._file_info_strip.setVisible(True)
+
     def clear_context_info(self):
         self.set_result_badge("无结果")
         self.set_source_hint("")
         self.set_message_banner("")
-        self.set_file_info("")
+        self._file_info_strip.setVisible(False)
 
     def set_roi_rect(self, rect: tuple[int, int, int, int] | None, label: str = "ROI"):
         self.viewer.set_roi_rect(rect, label=label)

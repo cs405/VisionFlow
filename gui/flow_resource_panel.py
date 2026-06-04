@@ -41,8 +41,15 @@ PAGE_BTN_SIZE = 30       # WPF: FontSize="25" with margin
 
 # ── Async thumbnail loader ────────────────────────────────────────────────
 
+# Video file extensions (used for thumbnail detection)
+VIDEO_EXTENSIONS = {'.avi', '.mp4', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpg', '.mpeg'}
+
 class ThumbnailLoader(QThread):
-    """Background thread for loading image thumbnails from file paths."""
+    """Background thread for loading image/video thumbnails from file paths.
+
+    For image files: loads and scales to 75×75.
+    For video files: captures first frame and scales.
+    """
     thumbnail_ready = pyqtSignal(str, QPixmap)   # file_path, pixmap
 
     def __init__(self, parent=None):
@@ -61,12 +68,17 @@ class ThumbnailLoader(QThread):
             if not self._running:
                 break
             try:
-                img = cv2.imread(path, cv2.IMREAD_COLOR)
+                ext = os.path.splitext(path)[1].lower()
+                if ext in VIDEO_EXTENSIONS:
+                    img = self._capture_video_frame(path)
+                else:
+                    img = cv2.imread(path, cv2.IMREAD_COLOR)
+
                 if img is None:
                     continue
                 h, w = img.shape[:2]
                 # Scale to fit 75x75, maintaining aspect ratio
-                scale = min(THUMB_SIZE / w, THUMB_SIZE / h)
+                scale = min(THUMB_SIZE / max(w, 1), THUMB_SIZE / max(h, 1))
                 if scale < 1.0:
                     new_w, new_h = int(w * scale), int(h * scale)
                     img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
@@ -81,6 +93,21 @@ class ThumbnailLoader(QThread):
                 self.thumbnail_ready.emit(path, pixmap)
             except Exception:
                 continue
+
+    def _capture_video_frame(self, path: str) -> np.ndarray | None:
+        """Capture first frame of a video file as thumbnail."""
+        try:
+            cap = cv2.VideoCapture(path)
+            if not cap.isOpened():
+                return None
+            ret, frame = cap.read()
+            cap.release()
+            if ret and frame is not None:
+                # Add small "▶" overlay indicator for videos
+                return frame
+            return None
+        except Exception:
+            return None
 
 
 # ── Thumbnail widget ──────────────────────────────────────────────────────
@@ -450,7 +477,16 @@ class FlowResourcePanel(QWidget):
         idx = 0
         if current and current in paths:
             idx = paths.index(current) + 1
-        self._index_label.setText(f"{idx}/{total}")
+
+        # Show file size for current file (WPF: [12.3 MB] filename)
+        size_text = ""
+        if current and os.path.exists(current):
+            try:
+                size = os.path.getsize(current)
+                size_text = f"[{size / 1024 / 1024:.1f} MB]" if size >= 1024 * 1024 else f"[{size / 1024:.1f} KB]"
+            except OSError:
+                pass
+        self._index_label.setText(f"{idx}/{total}  {size_text}")
 
         self._run_all_btn.blockSignals(True)
         self._run_all_btn.setChecked(getattr(node, 'use_all_image', False))

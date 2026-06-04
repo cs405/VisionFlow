@@ -52,6 +52,8 @@ class DiagramScene(QGraphicsScene):
     edge_item_removed = pyqtSignal(str)
     node_selected = pyqtSignal(object)
     node_deselected = pyqtSignal()
+    node_properties_requested = pyqtSignal(object)   # 右键 → 属性
+    node_help_requested = pyqtSignal(object)          # 右键 → 帮助
     status_message = pyqtSignal(str)
 
     def __init__(self, parent=None):
@@ -458,27 +460,43 @@ class DiagramScene(QGraphicsScene):
         menu = QMenu()
 
         if isinstance(item, NodeItem):
-            delete_act = QAction("删除节点", menu)
-            delete_act.triggered.connect(
-                lambda: self._cmd_stack.execute(RemoveNodeCommand(self, item.node_data.node_id)))
-            menu.addAction(delete_act)
-
-            run_act = QAction("单步执行", menu)
+            # ── 运行 ──
+            run_act = QAction("▶  运行此节点", menu)
             run_act.triggered.connect(lambda: self._run_single_node(item.node_data))
             menu.addAction(run_act)
 
             menu.addSeparator()
 
-            copy_act = QAction("复制", menu)
+            # ── 编辑 ──
+            prop_act = QAction("⚙  属性...", menu)
+            prop_act.triggered.connect(lambda: self.node_properties_requested.emit(item.node_data))
+            menu.addAction(prop_act)
+
+            copy_act = QAction("📋  复制", menu)
             copy_act.triggered.connect(self.copy_selected)
             menu.addAction(copy_act)
 
             menu.addSeparator()
 
-            disable_act = QAction("禁用", menu)
+            # ── 删除 / 禁用 ──
+            delete_act = QAction("🗑  删除节点", menu)
+            delete_act.triggered.connect(
+                lambda: self._cmd_stack.execute(RemoveNodeCommand(self, item.node_data.node_id)))
+            menu.addAction(delete_act)
+
+            disable_act = QAction("⊘  禁用节点", menu)
             disable_act.setCheckable(True)
-            disable_act.triggered.connect(lambda: item.set_state(NodeState.DISABLED))
+            disable_act.setChecked(item._state == NodeState.DISABLED)
+            disable_act.triggered.connect(
+                lambda checked: item.set_state(NodeState.DISABLED if checked else NodeState.IDLE))
             menu.addAction(disable_act)
+
+            menu.addSeparator()
+
+            # ── 帮助 ──
+            help_act = QAction("?  帮助", menu)
+            help_act.triggered.connect(lambda: self.node_help_requested.emit(item.node_data))
+            menu.addAction(help_act)
         elif isinstance(item, EdgeItem):
             delete_act = QAction("删除连线", menu)
             delete_act.triggered.connect(
