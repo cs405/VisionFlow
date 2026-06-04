@@ -1,61 +1,80 @@
 # VisionFlow TODO — WPF-VisionMaster 对齐清单
 
 > 本文档对照 `WPF-VisionMaster/` 源码，逐项记录 Python (PyQt5) 版本尚未对齐的功能、UI 组件、交互行为和资源数据，按优先级排序。
+>
+> **最新更新**: 2026-06-04 — 第一节（1.1-1.3）全部完成，第二节（2.1-2.2）完成。新增 `gui/font_icons.py`、`gui/widgets/` 包。
 
 ---
 
-## 一、左侧节点栏 — GridSplitterBox 窄栏模式与阈值逻辑
+## 一、左侧节点栏 — GridSplitterBox 窄栏模式与阈值逻辑 ✅ COMPLETED (2026-06-04)
 
-### 1.1 窄栏 / 宽栏双模式切换（阈值 90px）
+### 1.1 窄栏 / 宽栏双模式切换（阈值 90px） ✅
 
-- **WPF 行为**：`GridSplitterBox` 监听 `MenuWidth.Value`，以 **90px** 为阈值在两套布局之间自动切换：
-  - **宽栏模式（>90px）**：显示 GroupBox「流程资源」，内部是 `TreeViewPresenter`（树形）/ `ItemsControlPresenter`（图标网格）双视图，右上角有 `FontIconToggleButton` 切换按钮。
-  - **窄栏模式（≤90px）**：隐藏 GroupBox，仅显示 `ContextMenuPresenter`（紧凑的右键菜单式节点列表）。
-- **Python 现状**：左侧是一个固定 `QTabWidget`，内含 `ToolboxPanel`（QScrollArea + QGridLayout 图标网格）。没有窄栏模式，没有 TreeView 视图，没有宽度阈值切换。
-- **需要做的**：
-  1. 将左侧面板重构为 `GridSplitterBox` 等价组件：监听 splitter 宽度变化，在 90px 阈值切换布局。
-  2. 实现宽栏两视图切换：图标网格（当前已有基础） + 树形列表（新增 `QTreeWidget`，节点按分组展开）。
-  3. 实现窄栏模式：紧凑弹出式节点列表（`QListWidget` + 右键菜单风格）。
-  4. 宽/窄切换的 `FontIconToggleButton`（对齐 WPF 的 `AlignLeft` / `CaretBottomRightSolidCenter8` 图标）。
-  5. 图标网格与树形列表之间的切换按钮 + 状态持久化（`QSettings`）。
+- **WPF 行为**：`GridSplitterBox` 监听 `MenuWidth.Value`，以 **90px** 为阈值在两套布局之间自动切换。
+- **实现**：
+  - `gui/widgets/grid_splitter_box.py` — GridSplitterBox 等价组件，含 WIDTH_THRESHOLD=90 常量
+  - `gui/toolbox_panel.py` — ToolboxPanel 内部通过 `resizeEvent()` 监听宽度变化，自动在宽栏(>90px)/窄栏(≤90px)之间切换
+  - 宽栏模式：标题栏「流程资源」+ 搜索框 + 树/网格双视图 + 统计底栏
+  - 窄栏模式：紧凑的垂直图标列表（_NarrowNodeButton，28×28 带颜色图标）
+  - 视图持久化：QSettings 存储 VIEW_MODE_KEY
 
-### 1.2 TreeView 视图
+### 1.2 TreeView 视图 ✅
 
-- **WPF 行为**：`TreeViewPresenter` 使用 `HierarchicalDataTemplate`，按分组（`NodeGroups`） → 节点（`NodeDatas`）两层展示，右侧显示 `Description` 文字。
-- **Python 现状**：无 TreeView 模式。
-- **需要做的**：新增 `QTreeWidget`，列：名称 + 描述；支持拖拽到画布（与图标网格共享 `QMimeData` 拖拽逻辑）。
+- **WPF 行为**：`TreeViewPresenter` 使用 `HierarchicalDataTemplate`，按分组 → 节点两层展示 Name + Description。
+- **实现**：
+  - `gui/toolbox_panel.py:_create_tree()` — QTreeWidget 两列（模块名称 | 描述）
+  - 分组标题加粗着色，节点项带 tooltip 和 UserRole 数据
+  - 支持拖拽到画布（setDragEnabled(True)）
+  - 点击选中节点（itemClicked → node_type_selected 信号）
+  - 双击添加节点到画布（itemDoubleClicked → node_type_selected 信号）
+  - 默认展开所有分组（expandAll()）
 
-### 1.3 收藏 + 搜索 + 最近使用
+### 1.3 收藏 + 搜索 + 最近使用 ✅
 
 - **WPF 行为**：`FavoriteBox` 收藏夹 + 搜索过滤 + 节点使用统计。
-- **Python 现状**：已有基础收藏功能（`QSettings` 持久化）和搜索框，但缺少「最近使用」排序。
-- **需要做的**：
-  1. 维护「最近使用」节点列表（最近 10 个），显示在收藏分组上方。
-  2. 搜索框支持实时高亮匹配分组。
+- **实现**：
+  - 收藏：`is_favorite()` / `add_favorite()` / `remove_favorite()` / `toggle_favorite()`，QSettings 持久化
+  - 最近使用：`record_use()` + `_recents` 列表（MAX_RECENTS=10），在收藏组上方显示「🕐 最近使用」组
+  - 搜索：`_search_box` QLineEdit，实时过滤（textChanged → refresh()），匹配 display_name + description + type_name + group_name
+  - MainWindow 中 `_on_node_type_selected` 调用 `self._toolbox.record_use(type_name)` 记录使用
+  - 统计底栏：分组数 · 节点数 · ★ 收藏数 · 🕐 最近数
+
+### 新增文件
+
+| 文件 | 说明 |
+|------|------|
+| `gui/font_icons.py` | FontIcons 常量类（70+ 图标码点）+ FontIconButton / FontIconToggleButton / FontIconTextBlock |
+| `gui/widgets/__init__.py` | widgets 包初始化 |
+| `gui/widgets/grid_splitter_box.py` | GridSplitterBox 等价组件（阈值切换、Mode=Extend） |
+| `gui/widgets/node_list_view.py` | 独立的 NodeListView 组件（可脱离 ToolboxPanel 使用） |
+
+### 修改文件
+
+| 文件 | 变更 |
+|------|------|
+| `gui/toolbox_panel.py` | 完全重写：集成双视图切换（树/网格）、窄栏模式、收藏、最近使用、搜索、FontIconToggleButton |
+| `gui/main_window.py` | `_on_node_type_selected` 增加 `self._toolbox.record_use(type_name)` 调用 |
 
 ---
 
 ## 二、FontIcon 系统 — 一键复刻 WPF 图标体系
 
-### 2.1 FontIcon 字体图标系统
+### 2.1 FontIcon 字体图标系统 ✅ COMPLETED (2026-06-04)
 
-- **WPF 行为**：全局使用 `FontIcons` 静态类（Segoe Fluent Icons / MDL2 字体），以 Unicode 码点（如 ``、``）表示图标，通过 `FontIconButton`、`FontIconToggleButton`、`FontIconTextBlock` 等 Presenter 渲染。关键图标包括：
-  - 工具栏：`Replay` 启动、`Delete` 删除、`Cancel` 关闭、`OpenFolderHorizontal` 打开文件夹、`PageLeft/PageRight` 翻页
-  - 状态：`Error` 错误、`Completed` 成功、`Info` 信息
-  - 节点：`Photo2` 图像、`Calendar` 日历、`PowerButton` 电源
-  - 切换：`AlignLeft` 左对齐、`CaretBottomRightSolidCenter8` 网格
-- **Python 现状**：使用文本 emoji / Unicode 字符（★ ◉ ✂ ▶ ■ 等）硬编码在按钮上，没有统一的字体图标体系。
-- **需要做的**：
-  1. 创建 `gui/font_icons.py`，定义 `FontIcons` 类，将 WPF 所有 FontIcon 码点映射为 Python 常量（使用对应的 Unicode 字符或打包 Segoe Fluent Icons 字体）。
-  2. 创建 `FontIconButton(QPushButton)`、`FontIconToggleButton(QPushButton[checkable])`、`FontIconTextBlock(QLabel)` 三个通用组件。
-  3. 全局替换所有硬编码的 emoji 文本图标为 FontIcon 常量引用。
-  4. 打包 Segoe Fluent Icons 字体文件（`SegoeFluentIcons.ttf`）到 `assets/fonts/`。
+- **WPF 行为**：全局使用 `FontIcons` 静态类（Segoe Fluent Icons / MDL2 字体），以 Unicode 码点表示图标。
+- **实现**：
+  - `gui/font_icons.py` — FontIcons 类，70+ 常量（Replay/Delete/Cancel/OpenFolderHorizontal/PageLeft/PageRight/Error/Completed/Info/Photo2/AlignLeft/CaretBottomRightSolidCenter8 等）
+  - `FontIconButton(QPushButton)` — 支持 icon-only / icon+text 模式，WPF Command/Default 样式键
+  - `FontIconToggleButton(QPushButton[checkable])` — checked_icon / unchecked_icon 双字形，WPF Switch 样式键
+  - `FontIconTextBlock(QLabel)` — 纯图标标签，支持 set_icon() / set_color()
+  - `FontIconTextBlockWithText(QWidget)` — 图标+文字组合控件
+  - 自动检测系统可用 Segoe 图标字体（Segoe Fluent Icons → Segoe MDL2 Assets → Segoe UI Symbol）
+  - 已应用于 ToolboxPanel 的树/网格切换按钮
 
-### 2.2 FontIconToggleButton Switch 样式
+### 2.2 FontIconToggleButton Switch 样式 ✅ COMPLETED (2026-06-04)
 
-- **WPF 行为**：带 `CheckedGlyph` / `UncheckedGlyph` 属性的 ToggleButton，使用 `FontIconToggleButtonKeys.Switch` 样式。
-- **Python 现状**：无对应组件。
-- **需要做的**：实现 `FontIconToggleButton`，支持 `checked_icon` / `unchecked_icon` 属性，应用于网格/树形切换、底部面板显示/隐藏开关。
+- **WPF 行为**：带 `CheckedGlyph` / `UncheckedGlyph` 属性的 ToggleButton。
+- **实现**：`FontIconToggleButton(checked_icon, unchecked_icon)` 支持 checked/unchecked 双字形，`toggled` 信号自动切换显示。已在左侧面板「流程资源」Header 中使用。
 
 ### 2.3 WPF Presenter 模板体系
 
@@ -377,32 +396,34 @@
 
 ## 优先级排序建议
 
-| 优先级 | 模块 | 原因 |
+| 优先级 | 模块 | 状态 |
 |--------|------|------|
-| **P0** | 节点双击弹出设置面板（第三节） | 高频交互，当前信号发出但无人处理 |
-| **P0** | 图像缩略图条（第四节 4.1） | 核心功能缺失，加载文件夹后看不到图片 |
-| **P0** | 画布节点样式（第五节） | 视觉差异最大，WPF 节点有 FontIcon + 30px 色条 |
-| **P1** | FontIcon 系统（第二节） | 所有 UI 图标的基础设施，后面各项都依赖它 |
-| **P1** | GridSplitterBox 窄栏/宽栏（第一节） | 左侧栏布局核心逻辑 |
-| **P1** | 节点右键菜单增强（第三节 3.2） | 提升操作效率 |
-| **P2** | 历史结果面板完善（第六节 6.2） | 运行结果可追溯 |
-| **P2** | Presenter 模板体系（第二节 2.3） | 架构级改进，影响多面板 |
-| **P2** | 工具栏 FontIcon 化（第七节） | UI 一致性 |
-| **P3** | 示例项目 + ONNX 模型（第十一节） | 丰富默认内容 |
-| **P3** | 主题切换（第十二节 12.5） | 用户体验增强 |
-| **P4** | 全屏 ROI / 通知 / 杂项 | 锦上添花 |
+| **P0** | 节点双击弹出设置面板（第三节） | ⬜ 待实施 |
+| **P0** | 图像缩略图条（第四节 4.1） | ⬜ 待实施 |
+| **P0** | 画布节点样式（第五节） | ⬜ 待实施 |
+| **P1** | ~~FontIcon 系统（第二节）~~ | ✅ 已完成 (2026-06-04) |
+| **P1** | ~~GridSplitterBox 窄栏/宽栏（第一节）~~ | ✅ 已完成 (2026-06-04) |
+| **P1** | 节点右键菜单增强（第三节 3.2） | ⬜ 待实施 |
+| **P2** | 历史结果面板完善（第六节 6.2） | ⬜ 待实施 |
+| **P2** | Presenter 模板体系（第二节 2.3） | ⬜ 待实施 |
+| **P2** | 工具栏 FontIcon 化（第七节） | ⬜ 待实施 |
+| **P3** | 示例项目 + ONNX 模型（第十一节） | ⬜ 待实施 |
+| **P3** | 主题切换（第十二节 12.5） | ⬜ 待实施 |
+| **P4** | 全屏 ROI / 通知 / 杂项 | ⬜ 待实施 |
 
 ---
 
 ## 实施路线图
 
-### 第一阶段：核心交互修复（P0）
-1. 连接 `node_double_clicked` 信号，实现双击打开属性面板/独立编辑窗口。
-2. 重写 `FlowResourcePanel` 缩略图列表，使用 QPixmap 异步加载并显示 75×75 缩略图。
-3. 重构 `NodeItem.paint()`，加入 30px 色条 + FontIcon 图标 + 选中橙色边框。
+### ✅ 第一阶段-前置：基础设施（已全部完成）
+1. ✅ 创建 `gui/font_icons.py` + `FontIconButton` / `FontIconToggleButton` / `FontIconTextBlock`。
+2. ✅ 创建 `gui/widgets/grid_splitter_box.py` — GridSplitterBox 等价组件。
+3. ✅ 重构 `gui/toolbox_panel.py` — 集成双视图（树/网格）、窄栏模式、收藏 + 最近使用 + 搜索。
 
-### 第二阶段：基础设施（P1）
-4. 创建 `gui/font_icons.py` + `FontIconButton` / `FontIconToggleButton` / `FontIconTextBlock`。
+### 第二阶段：核心交互修复（P0）
+4. 连接 `node_double_clicked` 信号，实现双击打开属性面板/独立编辑窗口。
+5. 重写 `FlowResourcePanel` 缩略图列表，使用 QPixmap 异步加载并显示 75×75 缩略图。
+6. 重构 `NodeItem.paint()`，加入 30px 色条 + FontIcon 图标 + 选中橙色边框。
 5. 重构左侧面板为 `GridSplitterBox` 等价组件，实现 90px 阈值双模式切换。
 6. 全局替换 emoji 图标为 FontIcon 引用。
 

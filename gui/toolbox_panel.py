@@ -1,101 +1,117 @@
-"""Toolbox panel - tree/grid display of available nodes with favorites.
+"""Toolbox panel — WPF GridSplitterBox + GroupBox "流程资源" 1:1 port.
 
-Ported from H.Controls.FavoriteBox + H.Controls.TreeListView.
-Shows nodes grouped by category. Supports favorites, search, and context menu.
+Aligns with WPF MainWindow.xaml left-side panel:
+  - GridSplitterBox wrapper (Mode=Extend, IsExpanded=False)
+  - Width-threshold dual-mode at 90px:
+    - Wide (>90px): GroupBox "流程资源" with tree/grid toggle + search + favorites
+    - Narrow (≤90px): compact vertical icon-only list
+  - ToggleButton (AlignLeft ⇄ CaretBottomRightSolidCenter8) switches tree/grid
+  - Favorites via QSettings persistence
+  - Search filtering
+  - Recent nodes tracking
+  - Drag-to-canvas support in both grid and tree modes
 """
 
-from dataclasses import dataclass
-
-from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QApplication,
-                              QMenu, QAction, QToolButton, QLineEdit, QScrollArea,
-                              QFrame, QGridLayout)
-from PyQt5.QtCore import Qt, pyqtSignal, QSettings, QPoint, QMimeData
-from PyQt5.QtGui import QDrag
+from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+                              QLineEdit, QScrollArea, QFrame, QGridLayout,
+                              QTreeWidget, QTreeWidgetItem, QPushButton,
+                              QApplication)
+from PyQt5.QtCore import Qt, pyqtSignal, QSettings, QMimeData, QPoint
+from PyQt5.QtGui import QDrag, QColor
 
 from core.node_group import node_data_group_manager
+from gui.font_icons import FontIcons, FontIconToggleButton
+from gui.widgets.grid_splitter_box import GridSplitterBox, WIDTH_THRESHOLD
 
+
+# ── Group metadata matching WPF ────────────────────────────────────────────
 
 GROUP_META = {
-    "图像数据源": {"color": "#4a9eff", "icon": "◎"},
-    "系统数据源": {"color": "#5c6bc0", "icon": "◫"},
-    "图像预处理模块": {"color": "#ff8c00", "icon": "◌"},
-    "滤波模块": {"color": "#9c27b0", "icon": "≈"},
-    "图像分割提取模块": {"color": "#e91e63", "icon": "✂"},
-    "形态学模块": {"color": "#00bcd4", "icon": "⬒"},
-    "逻辑模块": {"color": "#ff5722", "icon": "⇄"},
+    "图像数据源":   {"color": "#4a9eff", "icon": FontIcons.Photo2},
+    "系统数据源":   {"color": "#5c6bc0", "icon": FontIcons.Folder},
+    "图像预处理模块": {"color": "#ff8c00", "icon": FontIcons.Color},
+    "滤波模块":     {"color": "#9c27b0", "icon": FontIcons.Filter},
+    "图像分割提取模块": {"color": "#e91e63", "icon": FontIcons.Cut},
+    "形态学模块":   {"color": "#00bcd4", "icon": "⬒"},
+    "逻辑模块":     {"color": "#ff5722", "icon": "⇄"},
     "模板匹配模块": {"color": "#4caf50", "icon": "⌖"},
     "对象识别模块": {"color": "#f44336", "icon": "◉"},
     "特征提取模块": {"color": "#ff9800", "icon": "✣"},
     "网络通讯模块": {"color": "#795548", "icon": "⌁"},
     "结果输出模块": {"color": "#607d8b", "icon": "↗"},
     "Onnx通用模型": {"color": "#c2185b", "icon": "AI"},
-    "其他模块": {"color": "#607d8b", "icon": "◇"},
-    "视频处理模块": {"color": "#8d6e63", "icon": "▶"},
-    "★ 收藏": {"color": "#d7ba7d", "icon": "★"},
+    "其他模块":     {"color": "#607d8b", "icon": "◇"},
+    "视频处理模块": {"color": "#8d6e63", "icon": FontIcons.Video},
+    "★ 收藏":      {"color": "#d7ba7d", "icon": FontIcons.FavoriteStar},
+    "🕐 最近使用":  {"color": "#d7ba7d", "icon": "🕐"},
 }
 
 
-@dataclass(slots=True)
-class NodeMeta:
-    type_name: str
-    display_name: str
-    description: str
-    group_name: str
-    color: str
-    icon_text: str
+def _group_meta(group_name: str):
+    return GROUP_META.get(group_name, {"color": "#607d8b", "icon": "🧩"})
 
 
-class NodeTileButton(QFrame):
+# ── Node tile button (grid view) ───────────────────────────────────────────
+
+class _NodeTileButton(QFrame):
+    """Tiled node button for grid view. Drag source + click/double-click."""
+
     activated = pyqtSignal(str)
     selected = pyqtSignal(str)
     favorite_toggled = pyqtSignal(str)
 
-    def __init__(self, meta: NodeMeta, is_favorite: bool = False, parent=None):
+    def __init__(self, type_name: str, display_name: str, description: str,
+                 group_name: str, is_favorite: bool = False, parent=None):
         super().__init__(parent)
-        self.meta = meta
+        self.type_name = type_name
         self.is_favorite = is_favorite
         self._selected = False
-        self._press_pos = QPoint()
+        self._drag_start_pos = QPoint()
         self._drag_started = False
+
+        meta = _group_meta(group_name)
+        self._color = meta["color"]
+        self._icon_text = meta["icon"]
+
         self.setCursor(Qt.OpenHandCursor)
         self.setFixedSize(108, 78)
         self.setFrameShape(QFrame.NoFrame)
-        self._build_ui()
+        self._build_ui(display_name, description)
         self._refresh_style()
 
-    def _build_ui(self):
+    def _build_ui(self, display_name: str, description: str):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 7, 8, 7)
         layout.setSpacing(4)
 
-        top_row = QHBoxLayout()
-        top_row.setContentsMargins(0, 0, 0, 0)
-        top_row.setSpacing(4)
+        top = QHBoxLayout()
+        top.setContentsMargins(0, 0, 0, 0)
+        top.setSpacing(4)
 
-        self._icon_label = QLabel(self.meta.icon_text)
-        self._icon_label.setAlignment(Qt.AlignCenter)
-        self._icon_label.setFixedSize(28, 28)
-        self._icon_label.setStyleSheet(
-            f"background: {self.meta.color}; border-radius: 6px; color: white;"
-            "font-size: 14px; font-weight: 700; font-family: 'Segoe UI Symbol', 'Microsoft YaHei UI';"
+        icon = QLabel(self._icon_text)
+        icon.setAlignment(Qt.AlignCenter)
+        icon.setFixedSize(28, 28)
+        icon.setStyleSheet(
+            f"background: {self._color}; border-radius: 6px; color: white;"
+            "font-size: 14px; font-weight: 700;"
+            "font-family: 'Segoe UI Symbol', 'Microsoft YaHei UI';"
         )
-        top_row.addWidget(self._icon_label)
+        top.addWidget(icon)
+        top.addStretch()
 
-        top_row.addStretch()
+        fav = QLabel(FontIcons.FavoriteStar if self.is_favorite else "")
+        fav.setStyleSheet("color: #d7ba7d; font-size: 12px; font-weight: bold;")
+        top.addWidget(fav)
+        layout.addLayout(top)
 
-        self._fav_label = QLabel("★" if self.is_favorite else "")
-        self._fav_label.setStyleSheet("color: #d7ba7d; font-size: 12px; font-weight: bold;")
-        top_row.addWidget(self._fav_label)
-        layout.addLayout(top_row)
+        title = QLabel(display_name)
+        title.setWordWrap(True)
+        title.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+        title.setStyleSheet("color: #dcdcdc; font-size: 11px; font-weight: 600;")
+        title.setToolTip(description)
+        layout.addWidget(title, 1)
 
-        self._title_label = QLabel(self.meta.display_name)
-        self._title_label.setWordWrap(True)
-        self._title_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
-        self._title_label.setStyleSheet("color: #dcdcdc; font-size: 11px; font-weight: 600;")
-        self._title_label.setToolTip(self.meta.description)
-        layout.addWidget(self._title_label, 1)
-
-        self.setToolTip(f"{self.meta.display_name}\n{self.meta.description}\n类型: {self.meta.type_name}")
+        self.setToolTip(f"{display_name}\n{description}\n类型: {self.type_name}")
 
     def set_selected(self, selected: bool):
         self._selected = selected
@@ -105,20 +121,15 @@ class NodeTileButton(QFrame):
         border = "#0078d4" if self._selected else ("#d7ba7d" if self.is_favorite else "#3f3f46")
         bg = "#2f3640" if self._selected else "#252526"
         self.setStyleSheet(
-            "QFrame {"
-            f"background: {bg};"
-            f"border: 1px solid {border};"
-            "border-radius: 8px;"
-            "}"
-            "QFrame:hover { background: #2d2d30; border-color: #0078d4; }"
+            f"_NodeTileButton {{ background: {bg}; border: 1px solid {border}; border-radius: 8px; }}"
+            f"_NodeTileButton:hover {{ background: #2d2d30; border-color: #0078d4; }}"
         )
-        self._fav_label.setText("★" if self.is_favorite else "")
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
-            self._press_pos = event.pos()
+            self._drag_start_pos = event.pos()
             self._drag_started = False
-            self.selected.emit(self.meta.type_name)
+            self.selected.emit(self.type_name)
             self.setCursor(Qt.ClosedHandCursor)
             event.accept()
             return
@@ -128,140 +139,124 @@ class NodeTileButton(QFrame):
         if not (event.buttons() & Qt.LeftButton):
             super().mouseMoveEvent(event)
             return
-        if (event.pos() - self._press_pos).manhattanLength() < QApplication.startDragDistance():
+        if (event.pos() - self._drag_start_pos).manhattanLength() < QApplication.startDragDistance():
             return
         self._drag_started = True
-        self._start_drag()
+        drag = QDrag(self)
+        mime = QMimeData()
+        mime.setText(self.type_name)
+        drag.setMimeData(mime)
+        drag.setPixmap(self.grab())
+        drag.setHotSpot(self.rect().center())
+        drag.exec_(Qt.CopyAction)
         self.setCursor(Qt.OpenHandCursor)
         event.accept()
 
     def mouseReleaseEvent(self, event):
         self.setCursor(Qt.OpenHandCursor)
         if event.button() == Qt.LeftButton and not self._drag_started:
-            self.selected.emit(self.meta.type_name)
+            self.selected.emit(self.type_name)
             event.accept()
             return
         super().mouseReleaseEvent(event)
 
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.LeftButton:
-            self.activated.emit(self.meta.type_name)
+            self.activated.emit(self.type_name)
             event.accept()
             return
         super().mouseDoubleClickEvent(event)
 
-    def contextMenuEvent(self, event):
-        menu = QMenu(self)
-        menu.setStyleSheet(
-            "QMenu { background: #2d2d30; color: #dcdcdc; border: 1px solid #505050; }"
-            "QMenu::item { padding: 6px 20px; }"
-            "QMenu::item:selected { background: #0078d4; }"
+
+# ── Narrow mode compact button ─────────────────────────────────────────────
+
+class _NarrowNodeButton(QPushButton):
+    """Compact icon-only button for narrow (≤90px) mode."""
+
+    activated = pyqtSignal(str)
+
+    def __init__(self, type_name: str, display_name: str, group_name: str, parent=None):
+        super().__init__(parent)
+        self.type_name = type_name
+        meta = _group_meta(group_name)
+        self.setText(meta["icon"])
+        self.setToolTip(f"{display_name}\n{group_name}\n类型: {type_name}")
+        self.setFixedSize(28, 28)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setStyleSheet(
+            f"_NarrowNodeButton {{ background: transparent; border: 1px solid #3f3f46;"
+            f"border-radius: 4px; color: {meta['color']}; font-size: 14px; font-weight: bold;"
+            f"font-family: 'Segoe UI Symbol', 'Microsoft YaHei UI'; }}"
+            f"_NarrowNodeButton:hover {{ background: #3e3e42; border-color: #0078d4; }}"
         )
-        create_act = QAction("创建节点", self)
-        create_act.triggered.connect(lambda: self.activated.emit(self.meta.type_name))
-        menu.addAction(create_act)
-        menu.addSeparator()
-        fav_act = QAction("★ 取消收藏" if self.is_favorite else "☆ 添加到收藏", self)
-        fav_act.triggered.connect(lambda: self.favorite_toggled.emit(self.meta.type_name))
-        menu.addAction(fav_act)
-        menu.exec_(event.globalPos())
+        self.clicked.connect(lambda: self.activated.emit(self.type_name))
 
-    def _start_drag(self):
-        drag = QDrag(self)
-        mime = QMimeData()
-        mime.setText(self.meta.type_name)
-        drag.setMimeData(mime)
-        drag.setPixmap(self.grab())
-        drag.setHotSpot(self.rect().center())
-        drag.exec_(Qt.CopyAction)
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Main ToolboxPanel
+# ═══════════════════════════════════════════════════════════════════════════
 
 class ToolboxPanel(QWidget):
-    """WPF 风格的左侧流程资源栏：按分组展示图标节点，支持搜索、收藏和拖拽到画布。"""
+    """WPF-aligned left panel: GridSplitterBox wrapper with wide/narrow modes.
+
+    Public API (backward-compatible with existing MainWindow usage):
+      - node_type_selected signal
+      - refresh()
+      - set_view_mode(tree: bool)
+    """
 
     node_type_selected = pyqtSignal(str)
     favorites_changed = pyqtSignal()
 
     FAVORITES_KEY = "Toolbox/Favorites"
-    FAVORITES_GROUP_NAME = "★ 收藏"
+    RECENTS_KEY = "Toolbox/Recents"
+    VIEW_MODE_KEY = "Toolbox/ViewMode"
+    MAX_RECENTS = 10
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._favorites: list[str] = []
+        self._recents: list[str] = []
         self._selected_type: str | None = None
-        self._tile_widgets: dict[str, NodeTileButton] = {}
-        self._load_favorites()
+        self._tile_widgets: dict[str, _NodeTileButton] = {}
+        self._view_is_tree = False
+
+        self._load_persisted()
         self._setup_ui()
         self.refresh()
 
-    def _setup_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+    # ── Persistence ────────────────────────────────────────────────────
 
-        header = QWidget()
-        header.setFixedHeight(32)
-        header.setStyleSheet("background: #2d2d30; border-bottom: 1px solid #3f3f46;")
-        h_layout = QHBoxLayout(header)
-        h_layout.setContentsMargins(8, 0, 4, 0)
-        h_layout.setSpacing(4)
+    def _load_persisted(self):
+        s = QSettings()
+        favs = s.value(self.FAVORITES_KEY, [])
+        if isinstance(favs, str):
+            favs = [favs] if favs else []
+        self._favorites = list(favs) if favs else []
 
-        title = QLabel("流程资源")
-        title.setStyleSheet("color: #dcdcdc; font-size: 12px; font-weight: bold;")
-        h_layout.addWidget(title, 1)
+        recs = s.value(self.RECENTS_KEY, [])
+        if isinstance(recs, str):
+            recs = [recs] if recs else []
+        self._recents = list(recs) if recs else []
 
-        refresh_btn = QToolButton()
-        refresh_btn.setText("↻")
-        refresh_btn.setToolTip("刷新节点列表")
-        refresh_btn.setStyleSheet(
-            "QToolButton { background: transparent; border: none; color: #999; padding: 2px 6px; }"
-            "QToolButton:hover { color: #dcdcdc; background: #3e3e42; }"
-        )
-        refresh_btn.clicked.connect(self.refresh)
-        h_layout.addWidget(refresh_btn)
-        layout.addWidget(header)
-
-        self.search_box = QLineEdit()
-        self.search_box.setPlaceholderText("搜索模块 / 中文名称...")
-        self.search_box.setStyleSheet(
-            "QLineEdit { background: #333337; color: #dcdcdc; border: none;"
-            "border-bottom: 1px solid #3f3f46; padding: 6px 8px; font-size: 12px; }"
-            "QLineEdit:focus { border-bottom: 1px solid #0078d4; }"
-        )
-        self.search_box.textChanged.connect(lambda: self.refresh())
-        layout.addWidget(self.search_box)
-
-        self._scroll = QScrollArea()
-        self._scroll.setWidgetResizable(True)
-        self._scroll.setFrameShape(QFrame.NoFrame)
-        self._scroll.setStyleSheet("QScrollArea { background: #252526; border: none; }")
-        layout.addWidget(self._scroll, 1)
-
-        self._content = QWidget()
-        self._content_layout = QVBoxLayout(self._content)
-        self._content_layout.setContentsMargins(8, 8, 8, 8)
-        self._content_layout.setSpacing(10)
-        self._scroll.setWidget(self._content)
-
-        self._stats_label = QLabel()
-        self._stats_label.setStyleSheet(
-            "color: #666; font-size: 10px; padding: 3px 8px; background: #1e1e1e;"
-            "border-top: 1px solid #3f3f46;"
-        )
-        layout.addWidget(self._stats_label)
-
-    def _load_favorites(self):
-        settings = QSettings()
-        raw = settings.value(self.FAVORITES_KEY, [])
-        if isinstance(raw, str):
-            raw = [raw] if raw else []
-        self._favorites = list(raw) if raw else []
+        tree_mode = s.value(self.VIEW_MODE_KEY, "false")
+        self._view_is_tree = str(tree_mode).lower() == "true"
 
     def _save_favorites(self):
-        settings = QSettings()
-        settings.setValue(self.FAVORITES_KEY, self._favorites)
-        settings.sync()
+        s = QSettings()
+        s.setValue(self.FAVORITES_KEY, self._favorites)
+        s.sync()
         self.favorites_changed.emit()
+
+    def _save_recents(self):
+        s = QSettings()
+        s.setValue(self.RECENTS_KEY, self._recents[:self.MAX_RECENTS])
+        s.sync()
+
+    def _save_view_mode(self):
+        s = QSettings()
+        s.setValue(self.VIEW_MODE_KEY, "true" if self._view_is_tree else "false")
+        s.sync()
 
     def is_favorite(self, type_name: str) -> bool:
         return type_name in self._favorites
@@ -284,136 +279,385 @@ class ToolboxPanel(QWidget):
         else:
             self.add_favorite(type_name)
 
-    def _clear_content(self):
-        while self._content_layout.count():
-            item = self._content_layout.takeAt(0)
-            widget = item.widget()
-            child_layout = item.layout()
-            if widget is not None:
-                widget.deleteLater()
-            elif child_layout is not None:
-                while child_layout.count():
-                    child_item = child_layout.takeAt(0)
-                    if child_item.widget() is not None:
-                        child_item.widget().deleteLater()
+    def record_use(self, type_name: str):
+        if type_name in self._recents:
+            self._recents.remove(type_name)
+        self._recents.insert(0, type_name)
+        self._recents = self._recents[:self.MAX_RECENTS]
+        self._save_recents()
+
+    # ── UI setup ───────────────────────────────────────────────────────
+
+    def _setup_ui(self):
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # ── Header: "流程资源" + tree/grid toggle ──
+        header = QWidget()
+        header.setFixedHeight(32)
+        header.setStyleSheet("background: #2d2d30; border-bottom: 1px solid #3f3f46;")
+        h_layout = QHBoxLayout(header)
+        h_layout.setContentsMargins(8, 0, 2, 0)
+        h_layout.setSpacing(2)
+
+        title = QLabel("流程资源")
+        title.setStyleSheet("color: #dcdcdc; font-size: 12px; font-weight: bold; background: transparent; border: none;")
+        h_layout.addWidget(title, 1)
+
+        # Toggle: AlignLeft (tree) ⇄ CaretBottomRightSolidCenter8 (grid)
+        self._view_toggle = FontIconToggleButton(
+            checked_icon=FontIcons.AlignLeft,
+            unchecked_icon=FontIcons.CaretBottomRightSolidCenter8,
+            font_size=12,
+        )
+        self._view_toggle.setChecked(self._view_is_tree)
+        self._view_toggle.setToolTip("树形 / 网格切换")
+        self._view_toggle.setFixedSize(26, 24)
+        self._view_toggle.setStyleSheet(
+            "QPushButton { background: transparent; border: none; color: #999; padding: 2px; }"
+            "QPushButton:hover { background: #3e3e42; color: #dcdcdc; }"
+            "QPushButton:checked { color: #dcdcdc; }"
+        )
+        self._view_toggle.toggled.connect(self._on_view_toggled)
+        h_layout.addWidget(self._view_toggle)
+        main_layout.addWidget(header)
+
+        # ── Search bar ──
+        self._search_box = QLineEdit()
+        self._search_box.setPlaceholderText("搜索模块 / 中文名称...")
+        self._search_box.setStyleSheet(
+            "QLineEdit { background: #333337; color: #dcdcdc; border: none;"
+            "border-bottom: 1px solid #3f3f46; padding: 6px 8px; font-size: 12px; }"
+            "QLineEdit:focus { border-bottom: 1px solid #0078d4; }"
+        )
+        self._search_box.textChanged.connect(lambda: self.refresh())
+        main_layout.addWidget(self._search_box)
+
+        # ── Stacked views: tree | grid | narrow ──
+        self._view_frame = QFrame()
+        self._view_frame.setFrameShape(QFrame.NoFrame)
+        vf_layout = QVBoxLayout(self._view_frame)
+        vf_layout.setContentsMargins(0, 0, 0, 0)
+        vf_layout.setSpacing(0)
+
+        # Tree view
+        self._tree = self._create_tree()
+        vf_layout.addWidget(self._tree)
+
+        # Grid view
+        self._grid_scroll = QScrollArea()
+        self._grid_scroll.setWidgetResizable(True)
+        self._grid_scroll.setFrameShape(QFrame.NoFrame)
+        self._grid_scroll.setStyleSheet("QScrollArea { background: #252526; border: none; }")
+        self._grid_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._grid_content = QWidget()
+        self._grid_layout = QVBoxLayout(self._grid_content)
+        self._grid_layout.setContentsMargins(8, 8, 8, 8)
+        self._grid_layout.setSpacing(10)
+        self._grid_scroll.setWidget(self._grid_content)
+        vf_layout.addWidget(self._grid_scroll)
+
+        # Narrow mode (compact vertical icon list)
+        self._narrow_widget = QWidget()
+        self._narrow_layout = QVBoxLayout(self._narrow_widget)
+        self._narrow_layout.setContentsMargins(4, 12, 4, 4)
+        self._narrow_layout.setSpacing(4)
+        vf_layout.addWidget(self._narrow_widget)
+
+        self._tree.hide()
+        self._grid_scroll.show()
+        self._narrow_widget.hide()
+        main_layout.addWidget(self._view_frame, 1)
+
+        # ── Stats footer ──
+        self._stats_label = QLabel()
+        self._stats_label.setStyleSheet(
+            "color: #666; font-size: 10px; padding: 3px 8px; background: #1e1e1e;"
+            "border-top: 1px solid #3f3f46;"
+        )
+        main_layout.addWidget(self._stats_label)
+
+    # ── Tree view ─────────────────────────────────────────────────────
+
+    def _create_tree(self) -> QTreeWidget:
+        tree = QTreeWidget()
+        tree.setHeaderLabels(["模块名称", "描述"])
+        tree.setColumnWidth(0, 140)
+        tree.setIndentation(16)
+        tree.setRootIsDecorated(True)
+        tree.setAnimated(True)
+        tree.setExpandsOnDoubleClick(True)
+        tree.setStyleSheet("""
+            QTreeWidget {
+                background: #252526; color: #dcdcdc; border: none; font-size: 11px;
+            }
+            QTreeWidget::item { padding: 3px 4px; border: none; }
+            QTreeWidget::item:hover { background: #2d2d30; }
+            QTreeWidget::item:selected { background: #094771; }
+            QTreeWidget::branch { background: transparent; }
+            QHeaderView::section {
+                background: #2d2d30; color: #999; padding: 4px 8px;
+                border: none; border-bottom: 1px solid #3f3f46; font-size: 11px;
+            }
+        """)
+        tree.setDragEnabled(True)
+        tree.itemClicked.connect(self._on_tree_item_clicked)
+        tree.itemDoubleClicked.connect(self._on_tree_item_double_clicked)
+        return tree
+
+    def _on_tree_item_clicked(self, item: QTreeWidgetItem, col: int):
+        type_name = item.data(0, Qt.UserRole)
+        if type_name:
+            self._set_selected_type(type_name)
+            self.node_type_selected.emit(type_name)
+
+    def _on_tree_item_double_clicked(self, item: QTreeWidgetItem, col: int):
+        type_name = item.data(0, Qt.UserRole)
+        if type_name:
+            self.node_type_selected.emit(type_name)
+
+    # ── View toggle ──────────────────────────────────────────────────
+
+    def _on_view_toggled(self, checked: bool):
+        self._view_is_tree = checked
+        self._save_view_mode()
+        self._apply_view()
+
+    def set_view_mode(self, tree: bool):
+        """Programmatically switch between tree (True) and grid (False)."""
+        if self._view_toggle.isChecked() != tree:
+            self._view_toggle.setChecked(tree)
+
+    def _apply_view(self):
+        """Show the correct view based on width + toggle state."""
+        w = self.width()
+        if w <= WIDTH_THRESHOLD:
+            self._tree.hide()
+            self._grid_scroll.hide()
+            self._narrow_widget.show()
+        elif self._view_is_tree:
+            self._tree.show()
+            self._grid_scroll.hide()
+            self._narrow_widget.hide()
+        else:
+            self._tree.hide()
+            self._grid_scroll.show()
+            self._narrow_widget.hide()
+
+    def resizeEvent(self, event):
+        """React to width changes — switch between wide and narrow modes."""
+        super().resizeEvent(event)
+        self._apply_view()
+        if event.oldSize().width() != event.size().width():
+            self.refresh()
+
+    # ── Data building ────────────────────────────────────────────────
+
+    def _all_node_metas(self) -> list[dict]:
+        keyword = self._search_box.text().strip().lower()
+        result = []
+        for group in node_data_group_manager.get_all_groups():
+            for node_type in group.node_types:
+                type_name = node_type.__name__
+                display_name = type_name
+                try:
+                    instance = node_type()
+                    candidate = getattr(instance, 'display_name', '') or getattr(instance, 'name', '')
+                    if isinstance(candidate, str) and candidate.strip():
+                        display_name = candidate.strip()
+                except Exception:
+                    pass
+
+                doc = (node_type.__doc__ or '').strip().splitlines()
+                description = doc[0] if doc else display_name
+
+                if keyword and keyword not in f"{display_name} {description} {type_name} {group.name}".lower():
+                    continue
+
+                meta = _group_meta(group.name)
+                result.append({
+                    "type_name": type_name,
+                    "display_name": display_name,
+                    "description": description,
+                    "group_name": group.name,
+                    "color": meta["color"],
+                    "icon": meta["icon"],
+                    "is_favorite": self.is_favorite(type_name),
+                })
+        return result
+
+    # ── Refresh ──────────────────────────────────────────────────────
+
+    def refresh(self):
+        """Rebuild the active view."""
+        w = self.width()
+        if w <= WIDTH_THRESHOLD:
+            self._refresh_narrow()
+        elif self._view_is_tree:
+            self._refresh_tree()
+        else:
+            self._refresh_grid()
+
+    def _refresh_tree(self):
+        self._tree.clear()
+        metas = self._all_node_metas()
+        grouped: dict[str, list[dict]] = {}
+        for m in metas:
+            grouped.setdefault(m["group_name"], []).append(m)
+
+        # Recents
+        recents = [m for m in metas if m["type_name"] in self._recents]
+        if recents:
+            recents.sort(key=lambda m: self._recents.index(m["type_name"]))
+            p = self._add_tree_group("🕐 最近使用", "#d7ba7d")
+            for m in recents:
+                self._add_tree_node(p, m)
+
+        # Favorites
+        favs = [m for m in metas if m["is_favorite"]]
+        if favs:
+            p = self._add_tree_group("★ 收藏", "#d7ba7d")
+            for m in favs:
+                self._add_tree_node(p, m)
+
+        for grp in node_data_group_manager.get_all_groups():
+            items = grouped.get(grp.name, [])
+            if not items:
+                continue
+            p = self._add_tree_group(grp.name, _group_meta(grp.name)["color"])
+            for m in items:
+                self._add_tree_node(p, m)
+
+        self._tree.expandAll()
+        self._update_stats(metas)
+
+    def _add_tree_group(self, name: str, color: str) -> QTreeWidgetItem:
+        item = QTreeWidgetItem(self._tree)
+        item.setText(0, name)
+        item.setForeground(0, QColor(color))
+        font = item.font(0); font.setBold(True); item.setFont(0, font)
+        item.setFlags(item.flags() & ~Qt.ItemIsDragEnabled)
+        return item
+
+    def _add_tree_node(self, parent: QTreeWidgetItem, meta: dict):
+        item = QTreeWidgetItem(parent)
+        item.setText(0, meta["display_name"])
+        item.setText(1, meta["description"])
+        item.setData(0, Qt.UserRole, meta["type_name"])
+        item.setToolTip(0, f"{meta['display_name']}\n{meta['description']}")
+        item.setForeground(0, QColor(meta["color"]))
+        return item
+
+    def _refresh_grid(self):
+        while self._grid_layout.count():
+            w = self._grid_layout.takeAt(0)
+            if w.widget():
+                w.widget().deleteLater()
         self._tile_widgets.clear()
 
-    def _describe_node_type(self, node_type, group_name: str) -> NodeMeta:
-        display_name = ""
-        try:
-            instance = node_type()
-            candidate = getattr(instance, 'display_name', '') or getattr(instance, 'name', '')
-            if isinstance(candidate, str):
-                display_name = candidate.strip()
-        except Exception:
-            display_name = ""
-        if not display_name:
-            display_name = node_type.__name__
-        doc = (node_type.__doc__ or '').strip().splitlines()
-        description = doc[0] if doc else display_name
-        group_meta = GROUP_META.get(group_name, {"color": "#607d8b", "icon": "🧩"})
-        return NodeMeta(
-            type_name=node_type.__name__,
-            display_name=display_name,
-            description=description,
-            group_name=group_name,
-            color=group_meta["color"],
-            icon_text=group_meta["icon"],
-        )
+        metas = self._all_node_metas()
+        grouped: dict[str, list[dict]] = {}
+        for m in metas:
+            grouped.setdefault(m["group_name"], []).append(m)
 
-    def _matches_search(self, meta: NodeMeta, keyword: str) -> bool:
-        if not keyword:
-            return True
-        haystack = f"{meta.display_name} {meta.description} {meta.type_name} {meta.group_name}".lower()
-        return keyword in haystack
+        vg = 0; vn = 0
 
-    def _build_group_section(self, title: str, metas: list[NodeMeta]):
+        # Recents
+        recents = [m for m in metas if m["type_name"] in self._recents]
+        if recents:
+            recents.sort(key=lambda m: self._recents.index(m["type_name"]))
+            c = self._build_grid_group("🕐 最近使用", recents)
+            vg += 1; vn += c
+
+        # Favorites
+        favs = [m for m in metas if m["is_favorite"]]
+        if favs:
+            c = self._build_grid_group("★ 收藏", favs)
+            vg += 1; vn += c
+
+        for grp in node_data_group_manager.get_all_groups():
+            items = grouped.get(grp.name, [])
+            if not items:
+                continue
+            c = self._build_grid_group(grp.name, items)
+            vg += 1; vn += c
+
+        self._grid_layout.addStretch(1)
+        self._update_stats(metas, vg, vn)
+
+    def _build_grid_group(self, group_name: str, metas: list[dict]) -> int:
         if not metas:
-            return
-        group_meta = GROUP_META.get(title, {"color": "#607d8b", "icon": "🧩"})
-
+            return 0
+        meta = _group_meta(group_name)
         section = QWidget()
-        section_layout = QVBoxLayout(section)
-        section_layout.setContentsMargins(0, 0, 0, 0)
-        section_layout.setSpacing(6)
+        sl = QVBoxLayout(section); sl.setContentsMargins(0, 0, 0, 0); sl.setSpacing(6)
+        hdr = QLabel(f"{meta['icon']}  {group_name}")
+        hdr.setStyleSheet(f"color: {meta['color']}; font-size: 12px; font-weight: bold; padding: 2px 2px;")
+        sl.addWidget(hdr)
 
-        header = QLabel(f"{group_meta['icon']}  {title}")
-        header.setStyleSheet(
-            f"color: {group_meta['color']}; font-size: 12px; font-weight: bold; padding: 2px 2px;"
-        )
-        section_layout.addWidget(header)
+        host = QWidget()
+        grid = QGridLayout(host); grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(8); grid.setVerticalSpacing(8)
 
-        grid_host = QWidget()
-        grid = QGridLayout(grid_host)
-        grid.setContentsMargins(0, 0, 0, 0)
-        grid.setHorizontalSpacing(8)
-        grid.setVerticalSpacing(8)
-
-        for index, meta in enumerate(metas):
-            tile = NodeTileButton(meta, is_favorite=self.is_favorite(meta.type_name))
+        for i, m in enumerate(metas):
+            tile = _NodeTileButton(m["type_name"], m["display_name"], m["description"],
+                                    m["group_name"], m["is_favorite"])
             tile.activated.connect(self.node_type_selected.emit)
             tile.selected.connect(self._set_selected_type)
             tile.favorite_toggled.connect(self.toggle_favorite)
-            self._tile_widgets[meta.type_name] = tile
-            row, col = divmod(index, 2)
+            self._tile_widgets[m["type_name"]] = tile
+            row, col = divmod(i, 2)
             grid.addWidget(tile, row, col)
-            if meta.type_name == self._selected_type:
+            if m["type_name"] == self._selected_type:
                 tile.set_selected(True)
 
-        section_layout.addWidget(grid_host)
-        self._content_layout.addWidget(section)
+        sl.addWidget(host)
+        self._grid_layout.addWidget(section)
+        return len(metas)
+
+    def _refresh_narrow(self):
+        """Build compact vertical icon-only list for narrow mode."""
+        while self._narrow_layout.count():
+            w = self._narrow_layout.takeAt(0)
+            if w.widget():
+                w.widget().deleteLater()
+
+        metas = self._all_node_metas()
+        grouped: dict[str, list[dict]] = {}
+        for m in metas:
+            grouped.setdefault(m["group_name"], []).append(m)
+
+        favs = [m for m in metas if m["is_favorite"]]
+        for m in favs[:4]:
+            btn = _NarrowNodeButton(m["type_name"], m["display_name"], m["group_name"])
+            btn.activated.connect(self.node_type_selected.emit)
+            self._narrow_layout.addWidget(btn)
+
+        for grp in node_data_group_manager.get_all_groups():
+            for m in grouped.get(grp.name, [])[:2]:
+                btn = _NarrowNodeButton(m["type_name"], m["display_name"], m["group_name"])
+                btn.activated.connect(self.node_type_selected.emit)
+                self._narrow_layout.addWidget(btn)
+
+        self._narrow_layout.addStretch(1)
+        self._update_stats(metas)
 
     def _set_selected_type(self, type_name: str):
         self._selected_type = type_name
-        for current_type, tile in self._tile_widgets.items():
-            tile.set_selected(current_type == type_name)
+        for current, tile in self._tile_widgets.items():
+            tile.set_selected(current == type_name)
 
-    def refresh(self):
-        self._clear_content()
-        keyword = self.search_box.text().strip().lower()
-
-        visible_groups = 0
-        visible_nodes = 0
-
+    def _update_stats(self, metas: list[dict], groups: int = 0, nodes: int = 0):
+        if not groups:
+            groups = len(set(m["group_name"] for m in metas))
+            nodes = len(metas)
+        parts = [f"  {groups} 个分组 · {nodes} 个节点"]
         if self._favorites:
-            favorite_metas = []
-            type_lookup = {
-                node_type.__name__: node_type
-                for group in node_data_group_manager.get_all_groups()
-                for node_type in group.node_types
-            }
-            for type_name in self._favorites:
-                node_type = type_lookup.get(type_name)
-                if node_type is None:
-                    continue
-                group_name = getattr(node_type, '__group__', '') or self.FAVORITES_GROUP_NAME
-                meta = self._describe_node_type(node_type, group_name)
-                if self._matches_search(meta, keyword):
-                    favorite_metas.append(meta)
-            if favorite_metas:
-                self._build_group_section(self.FAVORITES_GROUP_NAME, favorite_metas)
-                visible_groups += 1
-                visible_nodes += len(favorite_metas)
+            parts.append(f"★ 收藏 {len(self._favorites)} 个")
+        self._stats_label.setText(" · ".join(parts))
 
-        for group in node_data_group_manager.get_all_groups():
-            if not group.node_types:
-                continue
-            metas = []
-            for node_type in group.node_types:
-                meta = self._describe_node_type(node_type, group.name)
-                if self._matches_search(meta, keyword):
-                    metas.append(meta)
-            if not metas:
-                continue
-            self._build_group_section(group.name, metas)
-            visible_groups += 1
-            visible_nodes += len(metas)
-
-        self._content_layout.addStretch(1)
-        self._stats_label.setText(
-            f"  {visible_groups} 个分组 · {visible_nodes} 个节点"
-            f"{' · ★ 收藏 ' + str(len(self._favorites)) + ' 个' if self._favorites else ''}"
-        )
+    # ── Public API ──────────────────────────────────────────────────
 
     def get_selected_node_type(self) -> str | None:
         return self._selected_type

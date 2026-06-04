@@ -927,6 +927,7 @@ class MainWindow(QMainWindow):
         editor = self._current_diagram_editor()
         if node is not None and editor is not None:
             editor.add_node(node, group_name=self._get_group(type_name))
+            self._toolbox.record_use(type_name)
             self._log_panel.info(f"添加节点: {node.name}")
             self._node_cnt_lbl.setText(f"节点: {len(self._workflow.get_all_nodes())}")
 
