@@ -7,7 +7,11 @@ Uses JSON for serialization (replacing Newtonsoft.Json).
 import json
 import os
 from datetime import datetime
-from typing import Callable
+
+try:
+    from PyQt5.QtCore import QSettings
+except ImportError:  # CLI/tests can still run without Qt available
+    QSettings = None
 
 from core.workflow import WorkflowEngine
 from core.node_base import NodeBase
@@ -50,24 +54,94 @@ class ProjectService:
 
     FILE_EXTENSION = ".json"
     FILE_FILTER = "VisionFlow 项目文件 (*.json)"
+    SETTINGS_GROUP = "Project"
+    RECENT_PROJECTS_KEY = "recentProjects"
+    MAX_RECENT_PROJECTS = 10
 
     def __init__(self):
         self.current_project: ProjectItem | None = None
         self._recent_projects: list[str] = []
+        self._settings = QSettings() if QSettings is not None else None
+        self._load_recent_projects()
 
     # -- Recent projects --
 
     @property
     def recent_projects(self) -> list[str]:
-        return self._recent_projects
+        self.cleanup_recent_projects(save=False)
+        return list(self._recent_projects)
+
+    def _load_recent_projects(self):
+        """Load recent project list from persistent settings."""
+        if self._settings is None:
+            return
+
+        self._settings.beginGroup(self.SETTINGS_GROUP)
+        raw_value = self._settings.value(self.RECENT_PROJECTS_KEY, [], type=list)
+        self._settings.endGroup()
+
+        if isinstance(raw_value, str):
+            raw_value = [raw_value] if raw_value else []
+
+        self._recent_projects = []
+        for path in raw_value or []:
+            normalized = self._normalize_project_path(path)
+            if normalized and normalized not in self._recent_projects:
+                self._recent_projects.append(normalized)
+
+        self.cleanup_recent_projects(save=True)
+
+    def _save_recent_projects(self):
+        """Persist recent project list to QSettings."""
+        if self._settings is None:
+            return
+
+        self._settings.beginGroup(self.SETTINGS_GROUP)
+        self._settings.setValue(self.RECENT_PROJECTS_KEY, self._recent_projects)
+        self._settings.endGroup()
+        self._settings.sync()
+
+    def _normalize_project_path(self, file_path: str) -> str:
+        if not file_path:
+            return ""
+        return os.path.abspath(os.path.normpath(file_path))
 
     def add_recent(self, file_path: str):
         """Add a project to the recent list."""
+        file_path = self._normalize_project_path(file_path)
+        if not file_path:
+            return
         if file_path in self._recent_projects:
             self._recent_projects.remove(file_path)
         self._recent_projects.insert(0, file_path)
-        # Keep max 10
-        self._recent_projects = self._recent_projects[:10]
+        self._recent_projects = self._recent_projects[:self.MAX_RECENT_PROJECTS]
+        self._save_recent_projects()
+
+    def remove_recent(self, file_path: str):
+        """Remove a project path from the recent list."""
+        file_path = self._normalize_project_path(file_path)
+        if file_path in self._recent_projects:
+            self._recent_projects.remove(file_path)
+            self._save_recent_projects()
+
+    def clear_recent_projects(self):
+        """Clear all recent project entries."""
+        self._recent_projects.clear()
+        self._save_recent_projects()
+
+    def cleanup_recent_projects(self, save: bool = True):
+        """Remove invalid or duplicate entries from the recent list."""
+        cleaned: list[str] = []
+        for path in self._recent_projects:
+            normalized = self._normalize_project_path(path)
+            if normalized and os.path.exists(normalized) and normalized not in cleaned:
+                cleaned.append(normalized)
+
+        cleaned = cleaned[:self.MAX_RECENT_PROJECTS]
+        changed = cleaned != self._recent_projects
+        self._recent_projects = cleaned
+        if changed and save:
+            self._save_recent_projects()
 
     # -- Save --
 
@@ -99,6 +173,11 @@ class ProjectService:
 
     def load(self, file_path: str) -> ProjectItem | None:
         """Load a project from a file."""
+        file_path = self._normalize_project_path(file_path)
+        if not file_path or not os.path.exists(file_path):
+            self.remove_recent(file_path)
+            event_system.publish(EventType.MESSAGE_ERROR, sender=self, message=f"加载失败: 文件不存在 - {file_path}")
+            return None
         try:
             with open(file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)

@@ -13,13 +13,12 @@ Handles:
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from enum import Enum, auto
-from typing import Any
+from typing import Any, Callable
 
 from core.node_base import (
-    NodeBase, VisionNodeData, LinkData, Port, PortType, PortDock,
-    FlowableInvokeMode,
+    NodeBase, VisionNodeData, LinkData, PortDock,
 )
-from core.data_packet import FlowableResult, FlowableResultState
+from core.data_packet import FlowableResult
 from core.events import EventType, event_system
 
 
@@ -354,7 +353,7 @@ class WorkflowEngine:
             "links": [l.to_dict() for l in self._links],
         }
 
-    def from_dict(self, data: dict, node_factory: callable = None):
+    def from_dict(self, data: dict, node_factory: Callable[[str], NodeBase | None] | None = None):
         """Load a workflow from a dict.
 
         Args:
@@ -375,7 +374,10 @@ class WorkflowEngine:
                 node = None
             if node is None:
                 continue
-            node._id = node_data.get("id", node._id)
+            if hasattr(node, "restore_from_dict"):
+                node.restore_from_dict(node_data)
+            else:
+                node._id = node_data.get("id", node._id)
             node.diagram_data = self
             node_map[node._id] = node
             self._nodes[node._id] = node
@@ -389,6 +391,12 @@ class WorkflowEngine:
             to_node = self._nodes.get(link.to_node_id)
             from_node = self._nodes.get(link.from_node_id)
             if to_node and from_node:
+                from_port = next((p for p in from_node.ports if p.port_id == link.from_port_id), None)
+                to_port = next((p for p in to_node.ports if p.port_id == link.to_port_id), None)
+                if from_port is not None and link not in from_port.connected_links:
+                    from_port.connected_links.append(link)
+                if to_port is not None and link not in to_port.connected_links:
+                    to_port.connected_links.append(link)
                 if from_node not in to_node.from_node_datas:
                     to_node.from_node_datas.append(from_node)
                 if to_node not in from_node.to_node_datas:

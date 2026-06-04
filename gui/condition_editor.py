@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QComboBox,
     QDialog,
@@ -14,7 +13,6 @@ from PyQt5.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
-    QWidget,
 )
 
 from core.node_base import ConditionNodeData, VisionPropertyCondition
@@ -177,4 +175,5 @@ class ConditionEditorDialog(QDialog):
         if dialog.exec_() == QDialog.Accepted:
             return dialog.get_conditions()
         return None
+
 

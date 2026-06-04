@@ -22,16 +22,20 @@ Python replaces C# generics <T> with duck typing - image type is numpy.ndarray.
 
 from __future__ import annotations
 
+import importlib
 import time
 import uuid
 from abc import ABC, abstractmethod
 from enum import Enum, auto
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 import numpy as np
 
-from core.data_packet import FlowableResult, FlowableResultState, FlowableInvokeMode, VisionResultImage, DataPacket
+from core.data_packet import FlowableResult, FlowableInvokeMode, VisionResultImage
 from core.events import EventType, event_system
+
+if TYPE_CHECKING:
+    from core.workflow import WorkflowEngine
 
 
 # =============================================================================
@@ -221,7 +225,7 @@ class NodeBase(ABC):
         self._init_ports()
 
         # Diagram data
-        self._diagram_data: "WorkflowEngine | None" = None
+        self._diagram_data: WorkflowEngine | None = None
         self.from_node_datas: list[NodeBase] = []
         self.to_node_datas: list[NodeBase] = []
 
@@ -295,11 +299,11 @@ class NodeBase(ABC):
     # -- Diagram data binding --
 
     @property
-    def diagram_data(self) -> "WorkflowEngine | None":
+    def diagram_data(self) -> WorkflowEngine | None:
         return self._diagram_data
 
     @diagram_data.setter
-    def diagram_data(self, value: "WorkflowEngine | None"):
+    def diagram_data(self, value: WorkflowEngine | None):
         self._diagram_data = value
 
     def get_all_from_node_datas(self) -> list["NodeBase"]:
@@ -390,6 +394,110 @@ class NodeBase(ABC):
         """Set default values. Override in subclasses."""
         pass
 
+    @classmethod
+    def get_property_descriptors(cls) -> list[tuple[str, Property]]:
+        """Get Property descriptors declared on the class hierarchy."""
+        result: list[tuple[str, Property]] = []
+        seen: set[str] = set()
+        for owner in cls.__mro__:
+            if owner is object:
+                break
+            for name, desc in owner.__dict__.items():
+                if isinstance(desc, Property) and name not in seen:
+                    result.append((name, desc))
+                    seen.add(name)
+        return result
+
+    def _serialize_property_value(self, value: Any) -> Any:
+        if isinstance(value, Enum):
+            return {
+                "__enum__": f"{value.__class__.__module__}.{value.__class__.__name__}",
+                "name": value.name,
+            }
+        if isinstance(value, tuple):
+            return {"__tuple__": [self._serialize_property_value(v) for v in value]}
+        if isinstance(value, list):
+            return [self._serialize_property_value(v) for v in value]
+        if isinstance(value, dict):
+            return {k: self._serialize_property_value(v) for k, v in value.items()}
+        if value is None or isinstance(value, (str, int, float, bool)):
+            return value
+        if hasattr(value, "to_dict") and callable(value.to_dict):
+            return {
+                "__type__": value.__class__.__name__,
+                "data": value.to_dict(),
+            }
+        return value
+
+    def _deserialize_property_value(self, value: Any) -> Any:
+        if isinstance(value, list):
+            return [self._deserialize_property_value(v) for v in value]
+        if not isinstance(value, dict):
+            return value
+
+        if "__tuple__" in value:
+            return tuple(self._deserialize_property_value(v) for v in value.get("__tuple__", []))
+
+        if "__enum__" in value:
+            enum_path = value.get("__enum__", "")
+            enum_name = value.get("name", "")
+            try:
+                module_name, class_name = enum_path.rsplit(".", 1)
+                enum_type = getattr(importlib.import_module(module_name), class_name)
+                return enum_type[enum_name]
+            except Exception:
+                return value
+
+        if "__type__" in value:
+            type_name = value.get("__type__", "")
+            data = value.get("data", {})
+            if type_name in {"ROIBase", "FromROI", "DrawROI", "InputROI"}:
+                return ROIBase.from_dict(data)
+
+        return {k: self._deserialize_property_value(v) for k, v in value.items()}
+
+    def _serialize_properties(self) -> dict[str, Any]:
+        properties: dict[str, Any] = {}
+        for name, desc in self.get_property_descriptors():
+            if desc.readonly:
+                continue
+            properties[name] = self._serialize_property_value(getattr(self, name, desc.default))
+        return properties
+
+    def restore_from_dict(self, data: dict) -> "NodeBase":
+        """Restore node state from serialized project data."""
+        self._id = data.get("id", self._id)
+        self.name = data.get("name", self.name)
+        self._title = data.get("title", "")
+        self._text = data.get("text", "")
+        self.width = data.get("width", 120.0)
+        self.height = data.get("height", 35.0)
+
+        invoke_mode_name = data.get("invoke_mode", "SEQUENTIAL")
+        try:
+            self.invoke_mode = FlowableInvokeMode[invoke_mode_name]
+        except KeyError:
+            self.invoke_mode = FlowableInvokeMode.SEQUENTIAL
+
+        ports_data = data.get("ports", [])
+        if ports_data:
+            self.ports = [Port.from_dict(port_data) for port_data in ports_data]
+        else:
+            for port in self.ports:
+                port.node_id = self._id
+
+        serialized_properties = data.get("properties", {})
+        property_map = dict(self.get_property_descriptors())
+        for name, raw_value in serialized_properties.items():
+            if name not in property_map:
+                continue
+            try:
+                setattr(self, name, self._deserialize_property_value(raw_value))
+            except Exception:
+                continue
+
+        return self
+
     def to_dict(self) -> dict:
         """Serialize node to dict for JSON project saving."""
         return {
@@ -402,6 +510,7 @@ class NodeBase(ABC):
             "height": self.height,
             "ports": [p.to_dict() for p in self.ports],
             "invoke_mode": self.invoke_mode.name,
+            "properties": self._serialize_properties(),
         }
 
     @classmethod
@@ -735,6 +844,22 @@ class ROIBase:
     def to_dict(self) -> dict:
         return {"type": self.__class__.__name__, "name": self.name}
 
+    @classmethod
+    def from_dict(cls, data: dict) -> "ROIBase":
+        roi_type = data.get("type", "ROIBase")
+        if roi_type == "DrawROI":
+            roi = DrawROI()
+            roi.rect = tuple(data.get("rect", roi.rect))
+            return roi
+        if roi_type == "InputROI":
+            roi = InputROI()
+            roi.x = int(data.get("x", roi.x))
+            roi.y = int(data.get("y", roi.y))
+            roi.width = int(data.get("width", roi.width))
+            roi.height = int(data.get("height", roi.height))
+            return roi
+        return FromROI()
+
 
 class FromROI(ROIBase):
     """ROI obtained from upstream node."""
@@ -750,6 +875,11 @@ class DrawROI(ROIBase):
         self.image_source: Any = None
         self.rect: tuple = (0, 0, 100, 100)  # x, y, w, h
 
+    def to_dict(self) -> dict:
+        data = super().to_dict()
+        data["rect"] = list(self.rect or (0, 0, 100, 100))
+        return data
+
 
 class InputROI(ROIBase):
     """ROI entered manually as numeric values."""
@@ -760,6 +890,16 @@ class InputROI(ROIBase):
         self.width: int = 100
         self.height: int = 100
 
+    def to_dict(self) -> dict:
+        data = super().to_dict()
+        data.update({
+            "x": self.x,
+            "y": self.y,
+            "width": self.width,
+            "height": self.height,
+        })
+        return data
+
 
 class ROINodeData(VisionNodeData):
     """Adds ROI support to vision nodes.
@@ -767,9 +907,6 @@ class ROINodeData(VisionNodeData):
     Ported from C# ROINodeData<T>.
     Supports three ROI modes: FromROI (upstream), DrawROI (interactive), InputROI (manual).
     """
-
-    roi = Property(None, name="ROI范围", group=PropertyGroupNames.BASE_PARAMETERS,
-                   description="设置ROI区域", order=1000)
 
     def __init__(self):
         super().__init__()
@@ -808,6 +945,29 @@ class ROINodeData(VisionNodeData):
         result = super().invoke(previors, diagram)
         self.draw_roi.image_source = self._result_image_source
         return result
+
+    def to_dict(self) -> dict:
+        data = super().to_dict()
+        data["roi"] = self._roi.to_dict() if self._roi is not None else None
+        return data
+
+    def restore_from_dict(self, data: dict) -> "ROINodeData":
+        super().restore_from_dict(data)
+        roi_data = data.get("roi")
+        if roi_data:
+            self._roi = ROIBase.from_dict(roi_data)
+        if isinstance(self._roi, DrawROI):
+            self.draw_roi.rect = tuple(self._roi.rect)
+            self._roi = self.draw_roi
+        elif isinstance(self._roi, InputROI):
+            self.input_roi.x = int(self._roi.x)
+            self.input_roi.y = int(self._roi.y)
+            self.input_roi.width = int(self._roi.width)
+            self.input_roi.height = int(self._roi.height)
+            self._roi = self.input_roi
+        else:
+            self._roi = self.from_roi
+        return self
 
 
 # =============================================================================
@@ -1068,15 +1228,44 @@ class ConditionNodeData(VisionNodeData):
                 matches.append(cond)
         return matches
 
+    def get_condition_candidates(self) -> list[tuple[str, Any]]:
+        """Collect editable/evaluable upstream result entries for the condition editor."""
+        candidates: list[tuple[str, Any]] = []
+        seen: set[str] = set()
+
+        for node in self.from_node_datas:
+            if not isinstance(node, VisionNodeData):
+                continue
+
+            node_name = node.name or type(node).__name__
+            for prop_name, prop_desc in node.get_property_descriptors():
+                is_candidate = (
+                    prop_name.endswith("_result")
+                    or prop_desc.group == PropertyGroupNames.RESULT_PARAMETERS
+                )
+                if not is_candidate:
+                    continue
+
+                key = f"{node_name}.{prop_name}"
+                if key in seen:
+                    continue
+
+                seen.add(key)
+                candidates.append((key, getattr(node, prop_name, None)))
+
+            if node.message and f"{node_name}.message" not in seen:
+                seen.add(f"{node_name}.message")
+                candidates.append((f"{node_name}.message", node.message))
+
+        return candidates
+
+    def collect_upstream_results(self) -> dict[str, Any]:
+        """Snapshot current upstream result values for condition evaluation/testing."""
+        return dict(self.get_condition_candidates())
+
     def invoke(self, previors: LinkData | None, diagram: "WorkflowEngine") -> FlowableResult:
         """Execute conditional branching logic."""
-        # Gather upstream results
-        upstream_results = {}
-        for node in self.from_node_datas:
-            if isinstance(node, VisionNodeData):
-                for prop_name in dir(node):
-                    if prop_name.endswith("_result"):
-                        upstream_results[f"{node.name}.{prop_name}"] = getattr(node, prop_name, None)
+        upstream_results = self.collect_upstream_results()
 
         # Evaluate conditions
         matches = self.evaluate_conditions(upstream_results)
@@ -1099,11 +1288,10 @@ class ConditionNodeData(VisionNodeData):
         data["conditions"] = [c.to_dict() for c in self._conditions]
         return data
 
-    @classmethod
-    def from_dict(cls, data: dict) -> "ConditionNodeData":
-        node = super().from_dict(data)
-        node._conditions = [VisionPropertyCondition.from_dict(c) for c in data.get("conditions", [])]
-        return node
+    def restore_from_dict(self, data: dict) -> "ConditionNodeData":
+        super().restore_from_dict(data)
+        self._conditions = [VisionPropertyCondition.from_dict(c) for c in data.get("conditions", [])]
+        return self
 
 
 class VisionPropertyCondition:
@@ -1112,12 +1300,27 @@ class VisionPropertyCondition:
     Ported from C# VisionPropertyConditionPrensenter.
     """
 
+    SUPPORTED_OPERATORS = (">", "<", ">=", "<=", "==", "!=", "contains", "not contains")
+
     def __init__(self, property_name: str = "", operator: str = ">",
-                 threshold: float = 0.0, output_node_id: str = ""):
+                 threshold: Any = 0.0, output_node_id: str = ""):
         self.property_name = property_name
         self.operator = operator
         self.threshold = threshold
         self.output_node_id = output_node_id
+
+    def _coerce_bool(self, value: Any) -> bool:
+        if isinstance(value, bool):
+            return value
+        text = str(value).strip().lower()
+        return text in {"1", "true", "yes", "y", "on", "是"}
+
+    def _coerce_number(self, value: Any) -> float:
+        return float(str(value).strip())
+
+    def display_text(self) -> str:
+        target = f" → {self.output_node_id}" if self.output_node_id else ""
+        return f"{self.property_name} {self.operator} {self.threshold}{target}"
 
     def evaluate(self, upstream_results: dict[str, Any]) -> bool:
         """Check if this condition matches the upstream results."""
@@ -1125,22 +1328,41 @@ class VisionPropertyCondition:
         if value is None:
             return False
 
-        ops = {
+        numeric_ops = {
             ">": lambda a, b: a > b,
             "<": lambda a, b: a < b,
             ">=": lambda a, b: a >= b,
             "<=": lambda a, b: a <= b,
+        }
+        text_ops = {
             "==": lambda a, b: a == b,
             "!=": lambda a, b: a != b,
+            "contains": lambda a, b: str(b) in str(a),
+            "not contains": lambda a, b: str(b) not in str(a),
         }
-        op_func = ops.get(self.operator)
+
+        if self.operator in numeric_ops:
+            try:
+                return numeric_ops[self.operator](self._coerce_number(value), self._coerce_number(self.threshold))
+            except (ValueError, TypeError):
+                return False
+
+        if self.operator in {"==", "!="}:
+            if isinstance(value, bool):
+                compare_value = self._coerce_bool(self.threshold)
+            else:
+                try:
+                    compare_value = self._coerce_number(self.threshold)
+                    value = self._coerce_number(value)
+                except (ValueError, TypeError):
+                    compare_value = str(self.threshold)
+                    value = str(value)
+            return text_ops[self.operator](value, compare_value)
+
+        op_func = text_ops.get(self.operator)
         if op_func is None:
             return False
-
-        try:
-            return op_func(float(value), self.threshold)
-        except (ValueError, TypeError):
-            return False
+        return op_func(value, self.threshold)
 
     def to_dict(self) -> dict:
         return {

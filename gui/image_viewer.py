@@ -4,13 +4,14 @@ Provides: mouse wheel zoom, middle/right drag pan, fit-to-window, pixel info,
 overlay layers (ROI boxes, detection boxes, text labels).
 """
 
+import cv2
 import numpy as np
 from PyQt5.QtWidgets import (QGraphicsView, QGraphicsScene, QGraphicsPixmapItem,
-                              QGraphicsRectItem, QGraphicsTextItem, QWidget,
+                              QWidget,
                               QVBoxLayout, QLabel, QHBoxLayout)
 from PyQt5.QtCore import Qt, QRectF, QPointF, pyqtSignal
 from PyQt5.QtGui import (QPixmap, QImage, QPen, QColor, QBrush, QPainter,
-                          QWheelEvent, QMouseEvent, QFont, QTransform)
+                          QWheelEvent, QMouseEvent, QFont)
 
 
 def numpy_to_qimage(array: np.ndarray) -> QImage:
@@ -53,6 +54,8 @@ class ImageViewer(QGraphicsView):
     pixel_clicked = pyqtSignal(int, int, object)  # x, y, pixel_value
     mouse_moved = pyqtSignal(int, int)             # x, y in image coords
     zoom_changed = pyqtSignal(float)                # zoom factor
+    color_picked = pyqtSignal(object)               # dict: rgb/bgr/hsv/hex/x/y
+    roi_picked = pyqtSignal(tuple)                  # (x, y, w, h)
 
     MIN_ZOOM = 0.01
     MAX_ZOOM = 50.0
@@ -76,6 +79,11 @@ class ImageViewer(QGraphicsView):
         self._pan_start: QPointF | None = None
         self._image: np.ndarray | None = None
         self._fit_to_window = True
+        self._color_pick_mode = False
+        self._roi_pick_mode = False
+        self._roi_drag_start: QPointF | None = None
+        self._roi_pick_item = None
+        self._roi_overlay_items: list = []
 
         # View settings
         self.setRenderHints(QPainter.Antialiasing | QPainter.SmoothPixmapTransform)
@@ -98,6 +106,7 @@ class ImageViewer(QGraphicsView):
     def set_image(self, image: np.ndarray | QPixmap | None):
         """Set the displayed image."""
         self.clear_overlays()
+        self.clear_roi_rect()
 
         if image is None:
             self._pixmap_item.setPixmap(QPixmap())
@@ -184,6 +193,21 @@ class ImageViewer(QGraphicsView):
     # -- Pan --
 
     def mousePressEvent(self, event: QMouseEvent):
+        if event.button() == Qt.LeftButton and self._roi_pick_mode and not self._pixmap_item.pixmap().isNull():
+            self._roi_drag_start = self.mapToScene(event.pos())
+            if self._roi_pick_item is None:
+                pen = QPen(QColor(0, 120, 212), 2)
+                pen.setStyle(Qt.DashLine)
+                self._roi_pick_item = self._scene.addRect(QRectF(), pen)
+                self._roi_pick_item.setZValue(50)
+            self._roi_pick_item.setRect(QRectF(self._roi_drag_start, self._roi_drag_start))
+            event.accept()
+            return
+        if event.button() == Qt.LeftButton and self._color_pick_mode:
+            self._emit_pixel_pos(event.pos())
+            self._emit_color_info(event.pos())
+            event.accept()
+            return
         if event.button() in (Qt.MiddleButton, Qt.RightButton):
             self._pan_start = event.pos()
             self.setCursor(Qt.ClosedHandCursor)
@@ -192,6 +216,13 @@ class ImageViewer(QGraphicsView):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: QMouseEvent):
+        if self._roi_drag_start is not None and self._roi_pick_mode:
+            current_pos = self.mapToScene(event.pos())
+            rect = QRectF(self._roi_drag_start, current_pos).normalized()
+            if self._roi_pick_item is not None:
+                self._roi_pick_item.setRect(rect)
+            event.accept()
+            return
         if self._pan_start is not None:
             delta = event.pos() - self._pan_start
             self._pan_start = event.pos()
@@ -206,6 +237,19 @@ class ImageViewer(QGraphicsView):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent):
+        if event.button() == Qt.LeftButton and self._roi_drag_start is not None and self._roi_pick_mode:
+            current_pos = self.mapToScene(event.pos())
+            rect = QRectF(self._roi_drag_start, current_pos).normalized()
+            self._roi_drag_start = None
+            roi_rect = self._scene_rect_to_tuple(rect)
+            self.set_roi_rect(roi_rect)
+            if self._roi_pick_item is not None:
+                self._scene.removeItem(self._roi_pick_item)
+                self._roi_pick_item = None
+            if roi_rect[2] > 0 and roi_rect[3] > 0:
+                self.roi_picked.emit(roi_rect)
+            event.accept()
+            return
         if event.button() in (Qt.MiddleButton, Qt.RightButton):
             self._pan_start = None
             self.setCursor(Qt.ArrowCursor)
@@ -224,6 +268,100 @@ class ImageViewer(QGraphicsView):
         if self._image is not None and 0 <= y < self._image.shape[0] and 0 <= x < self._image.shape[1]:
             pixel_val = self._image[y, x].tolist()
             self.pixel_clicked.emit(x, y, pixel_val)
+
+    def _emit_color_info(self, pos: QPointF):
+        """Emit a richer color payload for image color pickers."""
+        scene_pos = self.mapToScene(pos)
+        x, y = int(scene_pos.x()), int(scene_pos.y())
+        self.pick_color_at(x, y)
+
+    def pick_color_at(self, x: int, y: int) -> dict | None:
+        """Pick a color directly from image coordinates."""
+        if self._image is None or not (0 <= y < self._image.shape[0] and 0 <= x < self._image.shape[1]):
+            return
+
+        pixel = self._image[y, x]
+        if np.isscalar(pixel):
+            gray = int(pixel)
+            bgr = (gray, gray, gray)
+        else:
+            values = [int(v) for v in pixel.tolist()]
+            if len(values) >= 3:
+                bgr = tuple(values[:3])
+            elif len(values) == 1:
+                bgr = (values[0], values[0], values[0])
+            else:
+                return
+
+        hsv = cv2.cvtColor(np.array([[bgr]], dtype=np.uint8), cv2.COLOR_BGR2HSV)[0, 0].tolist()
+        rgb = (bgr[2], bgr[1], bgr[0])
+        payload = {
+            "x": x,
+            "y": y,
+            "bgr": bgr,
+            "rgb": rgb,
+            "hsv": tuple(int(v) for v in hsv),
+            "hex": "#{:02X}{:02X}{:02X}".format(*rgb),
+        }
+        self.color_picked.emit(payload)
+        return payload
+
+    def _scene_rect_to_tuple(self, rect: QRectF) -> tuple[int, int, int, int]:
+        if self._image is None:
+            return (int(rect.x()), int(rect.y()), int(rect.width()), int(rect.height()))
+
+        max_w = self._image.shape[1]
+        max_h = self._image.shape[0]
+        x1 = max(0, min(int(round(rect.left())), max_w))
+        y1 = max(0, min(int(round(rect.top())), max_h))
+        x2 = max(0, min(int(round(rect.right())), max_w))
+        y2 = max(0, min(int(round(rect.bottom())), max_h))
+        return (x1, y1, max(0, x2 - x1), max(0, y2 - y1))
+
+    def set_color_pick_mode(self, enabled: bool):
+        self._color_pick_mode = enabled
+        if enabled:
+            self.setCursor(Qt.CrossCursor)
+        elif self._pan_start is None:
+            self.setCursor(Qt.ArrowCursor)
+
+    def set_roi_pick_mode(self, enabled: bool):
+        self._roi_pick_mode = enabled
+        if not enabled:
+            self._roi_drag_start = None
+            if self._roi_pick_item is not None:
+                self._scene.removeItem(self._roi_pick_item)
+                self._roi_pick_item = None
+        self.setCursor(Qt.CrossCursor if enabled else Qt.ArrowCursor)
+
+    def clear_roi_rect(self):
+        for item in self._roi_overlay_items:
+            self._scene.removeItem(item)
+        self._roi_overlay_items.clear()
+
+    def set_roi_rect(self, rect: tuple[int, int, int, int] | None,
+                     label: str = "ROI",
+                     color: QColor = QColor(0, 120, 212)):
+        self.clear_roi_rect()
+        if rect is None:
+            return
+
+        x, y, w, h = rect
+        if w <= 0 or h <= 0:
+            return
+
+        pen = QPen(color, 2)
+        pen.setStyle(Qt.DashLine)
+        item = self._scene.addRect(x, y, w, h, pen)
+        item.setZValue(40)
+        self._roi_overlay_items.append(item)
+
+        if label:
+            text = self._scene.addText(label, QFont("Segoe UI", 10))
+            text.setPos(x, max(0, y - 20))
+            text.setDefaultTextColor(color)
+            text.setZValue(41)
+            self._roi_overlay_items.append(text)
 
     # -- Overlays --
 
@@ -349,6 +487,14 @@ class ImageViewerPanel(QWidget):
         if image is not None:
             h, w = image.shape[:2]
             self.size_label.setText(f"尺寸: {w} x {h}")
+        else:
+            self.size_label.setText("尺寸: -")
+
+    def set_roi_rect(self, rect: tuple[int, int, int, int] | None, label: str = "ROI"):
+        self.viewer.set_roi_rect(rect, label=label)
+
+    def clear_roi_rect(self):
+        self.viewer.clear_roi_rect()
 
     def _on_mouse_moved(self, x: int, y: int):
         self.pos_label.setText(f"位置: ({x}, {y})")

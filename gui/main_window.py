@@ -19,21 +19,20 @@ Layout:
   └─────────────────────────────────────────────────────┘
 """
 
-from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-                              QSplitter, QDockWidget, QMenuBar, QMenu, QAction,
+from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout,
+                              QSplitter, QAction,
                               QToolBar, QStatusBar, QLabel, QTabWidget,
                               QMessageBox, QFileDialog, QApplication,
-                              QPushButton, QFrame, QSizePolicy)
-from PyQt5.QtCore import Qt, QSize, pyqtSignal
-from PyQt5.QtGui import QIcon, QFont, QColor, QPalette
+                              QPushButton, QFrame)
+from PyQt5.QtCore import Qt, QSize
 
-from core.node_base import NodeBase, VisionNodeData, SrcFilesVisionNodeData
+from core.node_base import NodeBase, VisionNodeData, SrcFilesVisionNodeData, ROINodeData
 from core.workflow import WorkflowEngine
 from core.project import project_service
 from core.events import EventType, event_system
 from core.registry import node_registry
 
-from gui.theme import theme_manager, ThemeColors
+from gui.theme import theme_manager
 from gui.toolbox_panel import ToolboxPanel
 from gui.property_panel import PropertyPanel
 from gui.result_panel import ResultPanel
@@ -179,12 +178,25 @@ class MainWindow(QMainWindow):
     def _update_recent_menu(self):
         """Update the recent projects submenu."""
         self.recent_menu.clear()
+        project_service.cleanup_recent_projects()
+
+        if not project_service.recent_projects:
+            empty_action = QAction("(无最近项目)", self)
+            empty_action.setEnabled(False)
+            self.recent_menu.addAction(empty_action)
+            return
+
         for path in project_service.recent_projects:
             import os
             action = QAction(os.path.basename(path), self)
             action.setToolTip(path)
             action.triggered.connect(lambda checked, p=path: self._open_project(p))
             self.recent_menu.addAction(action)
+
+        self.recent_menu.addSeparator()
+        clear_action = QAction("清空最近项目", self)
+        clear_action.triggered.connect(project_service.clear_recent_projects)
+        self.recent_menu.addAction(clear_action)
 
     # -- Toolbar --
 
@@ -322,6 +334,7 @@ class MainWindow(QMainWindow):
         self.property_panel.property_changed.connect(self._on_property_changed)
         self.diagram_editor.node_selected.connect(self._on_editor_node_selected)
         self.diagram_editor.node_deselected.connect(lambda: self._select_node(None))
+        self.property_panel.set_image_viewer(self.image_panel.viewer)
 
     # -- Status Bar --
 
@@ -452,6 +465,13 @@ class MainWindow(QMainWindow):
             self.image_panel.set_image(node.mat)
         elif isinstance(node, VisionNodeData) and node._result_image_source is not None:
             self.image_panel.set_image(node._result_image_source)
+        else:
+            self.image_panel.set_image(None)
+
+        if isinstance(node, ROINodeData):
+            self.image_panel.set_roi_rect(node.get_active_roi_rect(), label=node.roi.name)
+        else:
+            self.image_panel.clear_roi_rect()
 
     def _on_node_type_selected(self, type_name: str):
         """Create a node from the toolbox and add it to the diagram."""
@@ -482,6 +502,8 @@ class MainWindow(QMainWindow):
     def _on_property_changed(self, name: str, old_value, new_value):
         """Handle property changes from the property panel."""
         if self._selected_node:
+            if isinstance(self._selected_node, ROINodeData):
+                self.image_panel.set_roi_rect(self._selected_node.get_active_roi_rect(), label=self._selected_node.roi.name)
             event_system.publish(EventType.NODE_PROPERTY_CHANGED,
                                sender=self._selected_node,
                                name=name, old=old_value, new=new_value)
@@ -508,6 +530,13 @@ class MainWindow(QMainWindow):
 
     def _open_project(self, path: str):
         """Load a project from a file path."""
+        import os
+
+        if not path or not os.path.exists(path):
+            project_service.remove_recent(path)
+            QMessageBox.warning(self, "打开失败", f"项目文件不存在：\n{path}")
+            return
+
         project = project_service.load(path)
         if project:
             self._workflow = project.workflow
