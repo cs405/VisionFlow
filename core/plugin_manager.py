@@ -79,6 +79,8 @@ class PluginManager:
     def _register_module_classes(self, module):
         """Register all NodeBase subclasses found in a module."""
         for name, obj in inspect.getmembers(module, inspect.isclass):
+            if name.startswith("_"):
+                continue
             if not issubclass(obj, NodeBase) or obj is NodeBase:
                 continue
             if getattr(obj, '__abstract__', False) or inspect.isabstract(obj):

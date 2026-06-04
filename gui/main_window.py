@@ -1,43 +1,21 @@
-"""Main window — 100% WPF MainWindow.xaml pixel-level alignment.
+"""Main window aligned toward WPF `MainWindow.xaml` region semantics.
 
-Ported from:
-  - H.App.VisionMaster.OpenCV/MainWindow.xaml(.cs)
-  - H.Windows.Main/MainWindow
-
-WPF-aligned layout:
-  ┌── CAPTION (66px, 2-row UniformGrid) ───────────────────────────────────────┐
-  │ Row1: [◆ VF] 文件 编辑 运行 系统 帮助   项目名称：xxx    [⚙][🎨][ℹ][📖][_][□][✕] │
-  │ Row2: [新建][打开][保存]│[▶运行][■停止]│[放大][缩小][适应][1:1]│[↩][↪] │ 项目名│
-  ├── LEFT ───────────┬── CENTER ────────────────────┬── RIGHT ────────────────┤
-  │ 流程资源 (Tab)     │ TabControl [图像|模块结果]    │ 流程图  [+]             │
-  │ ┌────────────────┐│ ┌──────────────────────────┐│ [Tab1][Tab2][×]         │
-  │ │ Tree/List view ││ │ 图像: Zoombox with       ││ ┌──────────────────────┐│
-  │ │ NodeGroups     ││ │  - ResultType overlay    ││ │ DiagramEditorWidget  ││
-  │ │ ★ Favorites    ││ │  - File info bar         ││ │ (Flow Chart Canvas)  ││
-  │ │ 🔍 Search      ││ │ 模块结果: PropertyPanel  ││ │ - Nodes + Edges      ││
-  │ │ Stats footer   ││ └──────────────────────────┘│ │ - Zoom/Pan           ││
-  │ └────────────────┘│ FlowResourcePanel (底)      │ │ - Minimap            ││
-  │ 日志 (Tab)         │                            │ └──────────────────────┘│
-  │                    │                            │ ▶开始 ■停止 ↺           │
-  ├────────────────────┴────────────────────────────┴──────────────────────────┤
-  │ BOTTOM TABS (collapsible): [历史结果 | 当前模块结果 | 帮助]          ⇄ ▼  │
-  ├────────────────────────────────────────────────────────────────────────────┤
-  │ ● 空闲 │ 就绪                              │ 节点: 0 │ 15:30:00          │
-  └────────────────────────────────────────────────────────────────────────────┘
+重点对齐：
+  - 左：流程资源 / 日志
+  - 中：图像 / 模块结果 + 底部历史/当前/帮助
+  - 右：流程图多标签画布
 """
 
 import os
 from datetime import datetime
 
-from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-                              QSplitter, QAction, QActionGroup,
-                              QToolBar, QStatusBar, QLabel, QTabWidget,
-                              QMessageBox, QFileDialog, QApplication,
-                              QPushButton, QFrame, QMenuBar, QMenu,
-                               QToolButton, QSizePolicy, QShortcut,
-                              QDockWidget, QTextEdit)
-from PyQt5.QtCore import Qt, QSize, QTimer, QSettings, pyqtSignal
-from PyQt5.QtGui import QFont, QKeySequence, QColor, QIcon, QPixmap
+from PyQt5.QtWidgets import (
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QAction,
+    QLabel, QTabWidget, QMessageBox, QFileDialog, QApplication,
+    QPushButton, QFrame, QMenuBar, QMenu, QLineEdit, QStackedWidget
+)
+from PyQt5.QtCore import Qt, QTimer, QSettings
+from PyQt5.QtGui import QIcon, QPixmap
 
 from core.node_base import NodeBase, VisionNodeData, SrcFilesVisionNodeData, ROINodeData
 from core.workflow import WorkflowEngine
@@ -50,7 +28,6 @@ from gui.toolbox_panel import ToolboxPanel
 from gui.property_panel import PropertyPanel
 from gui.result_panel import ResultPanel
 from gui.image_viewer import ImageViewerPanel
-from gui.dock_manager import DockManager
 from gui.log_panel import LogPanel
 from gui.flow_resource_panel import FlowResourcePanel
 from gui.node_editor.editor_widget import DiagramEditorWidget
@@ -58,78 +35,92 @@ from gui.start_page import StartPage
 from gui.help_panel import HelpPanel
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# Panel state persistence
-# ═══════════════════════════════════════════════════════════════════════════
-
 class PanelState:
-    """QSettings-backed persistent panel dimensions."""
     GRP = "PanelState"
 
     def __init__(self):
         self.s = QSettings()
 
-    def _k(self, key): return f"{self.GRP}/{key}"
-    def get_i(self, k, d=0): return int(self.s.value(self._k(k), d) or d)
-    def set_i(self, k, v): self.s.setValue(self._k(k), v)
-    def get_b(self, k, d=True):
-        v = self.s.value(self._k(k), d)
-        return str(v).lower() == "true" if isinstance(v, str) else bool(v) if v is not None else d
-    def set_b(self, k, v): self.s.setValue(self._k(k), "true" if v else "false")
+    def _k(self, key):
+        return f"{self.GRP}/{key}"
+
+    def get_i(self, key, default=0):
+        return int(self.s.value(self._k(key), default) or default)
+
+    def set_i(self, key, value):
+        self.s.setValue(self._k(key), value)
+
+    def get_b(self, key, default=True):
+        value = self.s.value(self._k(key), default)
+        return str(value).lower() == "true" if isinstance(value, str) else bool(value) if value is not None else default
+
+    def set_b(self, key, value):
+        self.s.setValue(self._k(key), "true" if value else "false")
 
 
 _ps = PanelState()
 
-# ═══════════════════════════════════════════════════════════════════════════
-# Helper widgets
-# ═══════════════════════════════════════════════════════════════════════════
 
 class _Sep(QFrame):
-    def __init__(self, v=True):
+    def __init__(self, vertical=True):
         super().__init__()
-        self.setFrameShape(QFrame.VLine if v else QFrame.HLine)
+        self.setFrameShape(QFrame.VLine if vertical else QFrame.HLine)
         self.setStyleSheet("color: #505050;")
-        self.setFixedWidth(1) if v else self.setFixedHeight(1)
+        if vertical:
+            self.setFixedWidth(1)
+        else:
+            self.setFixedHeight(1)
 
 
-def _hsep(): return _Sep(True)
-def _vsep(): return _Sep(False)
+def _hsep():
+    return _Sep(True)
 
 
 _CMD_BTN = """
-    QPushButton { background: transparent; border: 1px solid #505050;
-                  border-radius: 3px; padding: 3px 10px; color: #dcdcdc; font-size: 11px; }
+    QPushButton {
+        background: transparent;
+        border: 1px solid #505050;
+        border-radius: 3px;
+        padding: 3px 10px;
+        color: #dcdcdc;
+        font-size: 11px;
+    }
     QPushButton:hover { background: #3e3e42; border-color: #0078d4; }
     QPushButton:pressed { background: #0078d4; }
 """
 
 _TAB_STYLE = """
     QTabWidget::pane { border: 1px solid #3f3f46; background: #252526; }
-    QTabBar::tab { background: #2d2d30; color: #dcdcdc; padding: 6px 12px;
-                   border: none; border-bottom: 2px solid transparent; }
+    QTabBar::tab {
+        background: #2d2d30;
+        color: #dcdcdc;
+        padding: 6px 12px;
+        border: none;
+        border-bottom: 2px solid transparent;
+    }
     QTabBar::tab:selected { background: #252526; border-bottom: 2px solid #0078d4; }
     QTabBar::tab:hover { background: #3e3e42; }
 """
 
-# ═══════════════════════════════════════════════════════════════════════════
-# MainWindow
-# ═══════════════════════════════════════════════════════════════════════════
 
 class MainWindow(QMainWindow):
-    """Main application window matching WPF VisionMaster layout exactly."""
-
-    # ── Construction ──────────────────────────────────────────────────
+    """主窗口：按 WPF `MainWindow.xaml` 的区域语义重构。"""
 
     def __init__(self):
         super().__init__()
         self._workflow: WorkflowEngine | None = None
         self._selected_node: NodeBase | None = None
-        self._diagram_tabs: dict[str, WorkflowEngine] = {}
-        self._project_loaded: bool = False
+        self._diagram_editor: DiagramEditorWidget | None = None
+        self._diagram_pages: dict[str, QWidget] = {}
+        self._project_loaded = False
+        self._left_panel_visible = True
+        self._right_panel_visible = True
+        self._saved_left_width = _ps.get_i("left_width", 280)
+        self._saved_right_width = _ps.get_i("right_width", 420)
 
         self._setup_window()
         self._setup_caption_bar()
-        self._setup_central_area()
+        self._setup_main_surface()
         self._setup_status_bar()
         self._wire_signals()
         self._connect_events()
@@ -138,490 +129,330 @@ class MainWindow(QMainWindow):
         self._clock.timeout.connect(self._update_clock)
         self._clock.start(1000)
 
-        # Show start page initially (no project auto-created)
         self._show_start_page()
 
-    # ── Window ────────────────────────────────────────────────────────
-
     def _setup_window(self):
-        self.setWindowTitle("VisionFlow - 视觉流程编辑器")
-        w = _ps.get_i("window_width", 1400)
-        h = _ps.get_i("window_height", 900)
-        self.resize(w, h)
-        self.setMinimumSize(1024, 640)
+        self.setWindowTitle("VisionFlow — VisionFlow")
+        width = _ps.get_i("window_width", 1460)
+        height = _ps.get_i("window_height", 900)
+        self.resize(width, height)
+        self.setMinimumSize(1180, 720)
         self.setPalette(theme_manager.colors.to_palette())
         self.setStyleSheet(theme_manager.get_stylesheet())
         icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "icons", "logo.ico")
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
-        screen = QApplication.primaryScreen().geometry()
-        self.move((screen.width() - w) // 2, (screen.height() - h) // 2)
-
-    def closeEvent(self, ev):
-        _ps.set_i("window_width", self.width())
-        _ps.set_i("window_height", self.height())
-        if hasattr(self, '_bottom_splitter'):
-            sizes = self._bottom_splitter.sizes()
-            if len(sizes) >= 2:
-                _ps.set_i("bottom_height", sizes[1])
-        self._clock.stop()
-        super().closeEvent(ev)
-
-    # ── Caption Bar (WPF double-row: Row1=Menu+Title+Actions, Row2=CommandBar) ──
+        screen = QApplication.primaryScreen()
+        if screen is not None:
+            geometry = screen.geometry()
+            self.move((geometry.width() - width) // 2, (geometry.height() - height) // 2)
 
     def _setup_caption_bar(self):
-        """WPF-aligned 2-row caption: Row1 menus + project name + action buttons,
-        Row2 command bar (New/Open/Save | Run/Stop | Zoom | Undo/Redo)."""
         bar = QWidget()
         bar.setFixedHeight(66)
         bar.setStyleSheet("background: #1e1e1e; border-bottom: 1px solid #3f3f46;")
-        main_lo = QVBoxLayout(bar); main_lo.setContentsMargins(0, 0, 0, 0); main_lo.setSpacing(0)
+        main_layout = QVBoxLayout(bar)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
-        # ── Row 1: Logo + Menu + Project Name + Action buttons ──
-        r1 = QWidget()
-        r1.setFixedHeight(32)
-        r1_lo = QHBoxLayout(r1); r1_lo.setContentsMargins(8, 0, 0, 0); r1_lo.setSpacing(0)
+        row1 = QWidget()
+        row1.setFixedHeight(32)
+        row1_layout = QHBoxLayout(row1)
+        row1_layout.setContentsMargins(8, 0, 0, 0)
+        row1_layout.setSpacing(0)
 
         logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "icons", "logo.png")
         if os.path.exists(logo_path):
             logo = QLabel()
             logo.setPixmap(QPixmap(logo_path).scaled(18, 18, Qt.KeepAspectRatio, Qt.SmoothTransformation))
             logo.setStyleSheet("padding: 0 6px 0 0;")
-            r1_lo.addWidget(logo)
-        else:
-            r1_lo.addWidget(self._lbl(" ◆", "#0078d4", 16))
-        r1_lo.addWidget(self._lbl("VisionFlow", "#dcdcdc", 13, bold=True, pad="0 8px"))
+            row1_layout.addWidget(logo)
+        row1_layout.addWidget(self._lbl("VisionFlow", "#dcdcdc", 13, bold=True, pad="0 10px 0 2px"))
 
-        mb = QMenuBar()
-        mb.setStyleSheet("""
-            QMenuBar { background: transparent; color: #dcdcdc; padding: 0; }
-            QMenuBar::item { padding: 6px 12px; background: transparent; }
-            QMenuBar::item:selected { background: #3e3e42; }
-            QMenu { background: #2d2d30; color: #dcdcdc; border: 1px solid #505050; }
-            QMenu::item { padding: 6px 30px 6px 16px; }
-            QMenu::item:selected { background: #0078d4; }
-            QMenu::separator { height: 1px; background: #505050; margin: 4px 10px; }
-        """)
-        self._build_menus(mb)
-        r1_lo.addWidget(mb, 1)
+        menu_bar = QMenuBar()
+        menu_bar.setStyleSheet(
+            "QMenuBar { background: transparent; color: #dcdcdc; padding: 0; }"
+            "QMenuBar::item { padding: 6px 12px; background: transparent; }"
+            "QMenuBar::item:selected { background: #3e3e42; }"
+            "QMenu { background: #2d2d30; color: #dcdcdc; border: 1px solid #505050; }"
+            "QMenu::item { padding: 6px 30px 6px 16px; }"
+            "QMenu::item:selected { background: #0078d4; }"
+            "QMenu::separator { height: 1px; background: #505050; margin: 4px 10px; }"
+        )
+        self._build_menus(menu_bar)
+        row1_layout.addWidget(menu_bar, 1)
 
-        proj_prefix = self._lbl("项目名称：", "#c8c8c8", 11, pad="0 4px")
-        r1_lo.addWidget(proj_prefix)
-        self._cap_proj_lbl = self._lbl("新建项目", "#0078d4", 12, bold=True, pad="0 12px")
-        r1_lo.addWidget(self._cap_proj_lbl)
-        r1_lo.addWidget(_hsep())
+        row1_layout.addWidget(self._lbl("项目名称：", "#c8c8c8", 11, pad="0 4px"))
+        self._cap_proj_lbl = self._lbl("无项目", "#0078d4", 12, bold=True, pad="0 12px")
+        row1_layout.addWidget(self._cap_proj_lbl)
+        row1_layout.addWidget(_hsep())
 
-        # Action buttons (WPF: Theme, Setting, About, Guide)
-        ab_style = """
-            QPushButton { background: transparent; border: none; color: #999; font-size: 13px; padding: 0 8px; }
-            QPushButton:hover { background: #3e3e42; color: #dcdcdc; }
-        """
+        action_style = (
+            "QPushButton { background: transparent; border: none; color: #999; font-size: 13px; padding: 0 8px; }"
+            "QPushButton:hover { background: #3e3e42; color: #dcdcdc; }"
+        )
         for icon, tip in [("⚙", "设置"), ("🎨", "主题"), ("ℹ", "关于"), ("📖", "帮助")]:
-            ab = QPushButton(icon); ab.setStyleSheet(ab_style); ab.setToolTip(tip)
-            r1_lo.addWidget(ab)
+            button = QPushButton(icon)
+            button.setToolTip(tip)
+            button.setStyleSheet(action_style)
+            if tip == "关于":
+                button.clicked.connect(self._on_about)
+            row1_layout.addWidget(button)
 
-        # Window controls
-        ws = """
-            QPushButton { background: transparent; border: none; color: #999; font-size: 12px; padding: 0 14px; }
-            QPushButton:hover { background: #3e3e42; color: #dcdcdc; }
-            QPushButton#cb:hover { background: #e81123; color: white; }
-        """
-        for t, s in [("─", self.showMinimized), ("□", self._toggle_max), ("✕", self.close)]:
-            b = QPushButton(t); b.setStyleSheet(ws)
-            if t == "✕": b.setObjectName("cb")
-            b.clicked.connect(s); r1_lo.addWidget(b)
+        window_style = (
+            "QPushButton { background: transparent; border: none; color: #999; font-size: 12px; padding: 0 14px; }"
+            "QPushButton:hover { background: #3e3e42; color: #dcdcdc; }"
+            "QPushButton#close_btn:hover { background: #e81123; color: white; }"
+        )
+        for text, slot in [("─", self.showMinimized), ("□", self._toggle_max), ("✕", self.close)]:
+            button = QPushButton(text)
+            button.setStyleSheet(window_style)
+            if text == "✕":
+                button.setObjectName("close_btn")
+            button.clicked.connect(slot)
+            row1_layout.addWidget(button)
 
-        main_lo.addWidget(r1)
+        main_layout.addWidget(row1)
 
-        # ── Row 2: Command Bar (matching WPF second caption row) ──
-        r2 = QWidget()
-        r2.setStyleSheet("background: #2d2d30; border-top: 1px solid #3f3f46;")
-        clo = QHBoxLayout(r2); clo.setContentsMargins(8, 2, 8, 2); clo.setSpacing(4)
+        row2 = QWidget()
+        row2.setStyleSheet("background: #2d2d30; border-top: 1px solid #3f3f46;")
+        row2_layout = QHBoxLayout(row2)
+        row2_layout.setContentsMargins(8, 2, 8, 2)
+        row2_layout.setSpacing(4)
 
-        for t, s in [("新建", self._on_new_project), ("打开", self._on_open_project),
-                      ("保存", self._on_save_project)]:
-            b = QPushButton(t); b.setStyleSheet(_CMD_BTN); b.clicked.connect(s); clo.addWidget(b)
-        clo.addWidget(_hsep())
+        for text, slot in [
+            ("新建", self._on_new_project),
+            ("打开", self._on_open_project),
+            ("保存", self._on_save_project),
+        ]:
+            button = QPushButton(text)
+            button.setStyleSheet(_CMD_BTN)
+            button.clicked.connect(slot)
+            row2_layout.addWidget(button)
+        row2_layout.addWidget(_hsep())
 
-        self._run_btn = QPushButton("▶ 运行"); self._run_btn.setStyleSheet(_CMD_BTN.replace("#0078d4", "#4caf50"))
-        self._run_btn.clicked.connect(self._on_run_workflow); clo.addWidget(self._run_btn)
-        self._stop_btn = QPushButton("■ 停止"); self._stop_btn.setStyleSheet(_CMD_BTN.replace("#0078d4", "#f44336"))
-        self._stop_btn.clicked.connect(self._on_stop_workflow); clo.addWidget(self._stop_btn)
-        clo.addWidget(_hsep())
+        self._run_btn = QPushButton("▶ 运行")
+        self._run_btn.setStyleSheet(_CMD_BTN)
+        self._run_btn.clicked.connect(self._on_run_workflow)
+        row2_layout.addWidget(self._run_btn)
 
-        for t, s in [("放大", lambda: self._active_visual_target().zoom_in()),
-                      ("缩小", lambda: self._active_visual_target().zoom_out()),
-                      ("适应", lambda: self._active_visual_target().fit_to_window()),
-                      ("1:1", lambda: self._active_visual_target().zoom_to_100())]:
-            b = QPushButton(t); b.setStyleSheet(_CMD_BTN); b.clicked.connect(s); clo.addWidget(b)
-        clo.addWidget(_hsep())
+        self._stop_btn = QPushButton("■ 停止")
+        self._stop_btn.setStyleSheet(_CMD_BTN)
+        self._stop_btn.clicked.connect(self._on_stop_workflow)
+        row2_layout.addWidget(self._stop_btn)
+        row2_layout.addWidget(_hsep())
 
-        undo_btn = QPushButton("↩ 撤销"); undo_btn.setStyleSheet(_CMD_BTN); undo_btn.clicked.connect(self._on_undo_diagram); clo.addWidget(undo_btn)
-        redo_btn = QPushButton("↪ 重做"); redo_btn.setStyleSheet(_CMD_BTN); redo_btn.clicked.connect(self._on_redo_diagram); clo.addWidget(redo_btn)
+        for text, slot in [
+            ("放大", lambda: self._active_visual_target().zoom_in()),
+            ("缩小", lambda: self._active_visual_target().zoom_out()),
+            ("适应", lambda: self._active_visual_target().fit_to_window()),
+            ("1:1", lambda: self._active_visual_target().zoom_to_100()),
+        ]:
+            button = QPushButton(text)
+            button.setStyleSheet(_CMD_BTN)
+            button.clicked.connect(slot)
+            row2_layout.addWidget(button)
+        row2_layout.addWidget(_hsep())
 
-        clo.addStretch()
-        self._cmd_proj_lbl = self._lbl("新建项目", "#0078d4", 12, bold=True, pad="0 8px")
-        clo.addWidget(self._cmd_proj_lbl)
+        undo_btn = QPushButton("↩ 撤销")
+        undo_btn.setStyleSheet(_CMD_BTN)
+        undo_btn.clicked.connect(self._on_undo_diagram)
+        row2_layout.addWidget(undo_btn)
 
-        main_lo.addWidget(r2)
+        redo_btn = QPushButton("↪ 重做")
+        redo_btn.setStyleSheet(_CMD_BTN)
+        redo_btn.clicked.connect(self._on_redo_diagram)
+        row2_layout.addWidget(redo_btn)
+
+        row2_layout.addStretch(1)
+        self._cmd_proj_lbl = self._lbl("无流程图", "#0078d4", 12, bold=True, pad="0 8px")
+        row2_layout.addWidget(self._cmd_proj_lbl)
+
+        main_layout.addWidget(row2)
         self.setMenuWidget(bar)
 
-    def _lbl(self, t, c, fs, bold=False, pad=""):
-        l = QLabel(t)
-        l.setStyleSheet(f"color: {c}; font-size: {fs}px; {'font-weight: bold;' if bold else ''} padding: {pad};")
-        return l
+    def _setup_main_surface(self):
+        root = QWidget()
+        root_layout = QVBoxLayout(root)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
 
-    def _toggle_max(self):
-        self.showNormal() if self.isMaximized() else self.showMaximized()
-
-    # ── Menus ─────────────────────────────────────────────────────────
-
-    def _build_menus(self, mb: QMenuBar):
-        # File
-        fm = mb.addMenu("文件(&F)")
-        for t, s, sc in [("新建项目(&N)", self._on_new_project, "Ctrl+N"),
-                          ("打开项目(&O)...", self._on_open_project, "Ctrl+O"),
-                          ("保存项目(&S)", self._on_save_project, "Ctrl+S"),
-                          ("另存为(&A)...", self._on_save_as_project, "Ctrl+Shift+S")]:
-            a = QAction(t, self); a.setShortcut(sc); a.triggered.connect(s); fm.addAction(a)
-        fm.addSeparator()
-        self._recent_menu = fm.addMenu("最近的项目(&R)")
-        self._recent_menu.aboutToShow.connect(self._refresh_recent)
-        fm.addSeparator()
-        a = QAction("退出(&X)", self); a.setShortcut("Alt+F4"); a.triggered.connect(self.close); fm.addAction(a)
-
-        # Edit
-        em = mb.addMenu("编辑(&E)")
-        for t, sc in [("撤销(&U)", "Ctrl+Z"), ("重做(&R)", "Ctrl+Y")]:
-            a = QAction(t, self); a.setShortcut(sc); em.addAction(a)
-        em.addSeparator()
-        for t, sc in [("删除选中(&D)", "Delete"), ("全选(&A)", "Ctrl+A")]:
-            a = QAction(t, self); a.setShortcut(sc); em.addAction(a)
-
-        # Run
-        rm = mb.addMenu("运行(&R)")
-        for t, sc, s in [("运行流程(&F)", "F5", self._on_run_workflow),
-                          ("停止(&S)", "Shift+F5", self._on_stop_workflow),
-                          ("单步执行(&T)", "F10", None)]:
-            a = QAction(t, self)
-            a.setShortcut(sc)
-            if s:
-                a.triggered.connect(s)
-            rm.addAction(a)
-
-        # System
-        sm = mb.addMenu("系统(&S)")
-        sm.addAction("设置(&S)...")
-        sm.addAction("主题设置(&T)")
-        sm.addSeparator()
-        a = QAction("切换工具箱", self); a.setCheckable(True); a.setChecked(True); sm.addAction(a)
-        a = QAction("切换属性面板", self); a.setCheckable(True); a.setChecked(True); sm.addAction(a)
-        sm.addSeparator()
-        sm.addAction("流程功能列表")
-
-        # Help
-        hm = mb.addMenu("帮助(&H)")
-        hm.addAction("使用指南(&G)")
-        hm.addAction("检查更新(&U)")
-        hm.addSeparator()
-        a = QAction("关于 VisionFlow(&A)", self); a.triggered.connect(self._on_about); hm.addAction(a)
-        hm.addAction("联系我们(&C)")
-
-    def _refresh_recent(self):
-        self._recent_menu.clear()
-        project_service.cleanup_recent_projects()
-        if not project_service.recent_projects:
-            a = QAction("(无最近项目)", self); a.setEnabled(False); self._recent_menu.addAction(a); return
-        for p in project_service.recent_projects:
-            a = QAction(os.path.basename(p), self); a.setToolTip(p)
-            a.triggered.connect(lambda c, pp=p: self._open_project(pp)); self._recent_menu.addAction(a)
-        self._recent_menu.addSeparator()
-        a = QAction("清空最近项目", self); a.triggered.connect(project_service.clear_recent_projects)
-        self._recent_menu.addAction(a)
-
-    # ── Command Bar ───────────────────────────────────────────────────
-
-    # ── Central Area ──────────────────────────────────────────────────
-
-    def _setup_central_area(self):
-        """Build content with QDockWidget left/right + center (top+bottom splitter)."""
-        from PyQt5.QtWidgets import QStackedWidget
-        # ── CENTER widget (vertical splitter: top area | bottom result) ──
-        cw = QWidget()
-        root = QVBoxLayout(cw); root.setContentsMargins(0, 0, 0, 0); root.setSpacing(0)
-
-        self._bottom_splitter = QSplitter(Qt.Vertical)
-        self._bottom_splitter.setHandleWidth(2)
-        self._bottom_splitter.setStyleSheet("QSplitter::handle { background: #505050; }")
-
-        self._setup_center_panel()    # diagram editor / image viewer / module results
-
-        # Stacked widget to switch between start page and editor
-        self._center_stack = QStackedWidget()
+        self._root_stack = QStackedWidget()
         self._start_page = StartPage()
         self._start_page.new_project_requested.connect(self._on_new_project)
         self._start_page.open_project_requested.connect(self._on_open_project)
         self._start_page.project_open_requested.connect(self._open_project)
-        self._center_stack.addWidget(self._start_page)
-        self._center_stack.addWidget(self._center_widget)
-        self._center_stack.setCurrentIndex(0)  # start page visible initially
+        self._root_stack.addWidget(self._start_page)
 
-        self._bottom_splitter.addWidget(self._center_stack)
+        self._editor_surface = QWidget()
+        editor_layout = QVBoxLayout(self._editor_surface)
+        editor_layout.setContentsMargins(0, 0, 0, 0)
+        editor_layout.setSpacing(0)
 
-        # Bottom: tabbed result area
-        self._setup_bottom_panel()
-        bh = _ps.get_i("bottom_height", 160)
-        self._bottom_splitter.setSizes([self.height() - bh - 80, bh])
+        self._workspace_splitter = QSplitter(Qt.Horizontal)
+        self._workspace_splitter.setHandleWidth(2)
+        self._workspace_splitter.setStyleSheet("QSplitter::handle { background: #505050; }")
 
-        root.addWidget(self._bottom_splitter, 1)
-        self.setCentralWidget(cw)
+        self._left_tabs = self._build_left_panel()
+        self._workspace_splitter.addWidget(self._left_tabs)
 
-        # ── QDockWidget-based LEFT & RIGHT panels ──
-        self._dock_mgr = DockManager(self)
+        self._center_right_splitter = QSplitter(Qt.Horizontal)
+        self._center_right_splitter.setHandleWidth(2)
+        self._center_right_splitter.setStyleSheet("QSplitter::handle { background: #505050; }")
 
-        # Left dock: flow resources + log (matching WPF "流程资源" GroupBox)
-        lw = QTabWidget()
-        lw.setStyleSheet(_TAB_STYLE)
+        self._center_splitter = QSplitter(Qt.Vertical)
+        self._center_splitter.setHandleWidth(2)
+        self._center_splitter.setStyleSheet("QSplitter::handle { background: #505050; }")
+        self._center_splitter.addWidget(self._build_center_panel())
+        self._center_splitter.addWidget(self._build_bottom_panel())
+        self._center_right_splitter.addWidget(self._center_splitter)
+
+        self._right_panel = self._build_right_panel()
+        self._center_right_splitter.addWidget(self._right_panel)
+
+        self._workspace_splitter.addWidget(self._center_right_splitter)
+        editor_layout.addWidget(self._workspace_splitter, 1)
+
+        self._root_stack.addWidget(self._editor_surface)
+        root_layout.addWidget(self._root_stack, 1)
+        self.setCentralWidget(root)
+
+        self._apply_splitter_state()
+
+    def _build_left_panel(self):
+        tabs = QTabWidget()
+        tabs.setStyleSheet(_TAB_STYLE)
         self._toolbox = ToolboxPanel()
-        lw.addTab(self._toolbox, "流程资源")
+        tabs.addTab(self._toolbox, "流程资源")
         self._log_panel = LogPanel()
-        lw.addTab(self._log_panel, "日志")
-        self._dock_mgr.register("left_toolbox", "流程资源 / 日志", lw,
-                                Qt.LeftDockWidgetArea, True, 260, True, False)
-        self._dock_mgr.attach("left_toolbox")
+        tabs.addTab(self._log_panel, "日志")
+        tabs.setMinimumWidth(210)
+        return tabs
 
-        # Right dock: diagram flow tabs
-        self._setup_right_panel()
-        self._dock_mgr.register("right_diagram", "流程图标签", self._diagram_right_widget,
-                                Qt.RightDockWidgetArea, True, 280, True, False)
-        self._dock_mgr.attach("right_diagram")
-
-        # Restore saved dock state
-        self._dock_mgr.restore_state()
-
-    def closeEvent(self, ev):
-        self._dock_mgr.save_state()
-        _ps.set_i("window_width", self.width())
-        _ps.set_i("window_height", self.height())
-        if hasattr(self, '_bottom_splitter'):
-            sizes = self._bottom_splitter.sizes()
-            if len(sizes) >= 2:
-                _ps.set_i("bottom_height", sizes[1])
-        self._clock.stop()
-        super().closeEvent(ev)
-
-    # ── CENTER PANEL (Image Preview | Module Results — matching WPF [图像][模块结果] tabs) ──
-
-    def _setup_center_panel(self):
-        """Center: Image viewer + module result parameters + image source list.
-
-        Exact WPF alignment:
-          - Top: TabControl [图像 | 模块结果]
-          - Bottom: Expander for image/video source file list
-        """
-        w = QWidget()
-        lo = QVBoxLayout(w); lo.setContentsMargins(0, 0, 0, 0); lo.setSpacing(0)
+    def _build_center_panel(self):
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
         self._center_tabs = QTabWidget()
         self._center_tabs.setStyleSheet(_TAB_STYLE)
-        self._center_tabs.setTabPosition(QTabWidget.North)
 
-        # Tab "图像" — Zoombox with image + overlays (matching WPF 图像 tab)
         self._img_panel = ImageViewerPanel()
         self._center_tabs.addTab(self._img_panel, "图像")
 
-        # Tab "模块结果" — Property form + result panel (matching WPF 模块结果 tab)
+        module_page = QWidget()
+        module_layout = QVBoxLayout(module_page)
+        module_layout.setContentsMargins(0, 0, 0, 0)
+        module_layout.setSpacing(0)
+
+        self._module_result_title = QLabel("模块名称 <未选择>")
+        self._module_result_title.setStyleSheet(
+            "background: #2d2d30; color: #dcdcdc; padding: 8px 10px;"
+            "font-size: 12px; font-weight: bold; border-bottom: 1px solid #3f3f46;"
+        )
+        module_layout.addWidget(self._module_result_title)
+
         self._property_panel = PropertyPanel()
-        self._center_tabs.addTab(self._property_panel, "模块结果")
+        module_layout.addWidget(self._property_panel, 1)
+        self._center_tabs.addTab(module_page, "模块结果")
 
-        lo.addWidget(self._center_tabs, 1)
+        layout.addWidget(self._center_tabs, 1)
 
-        # Image/video source file list at bottom (matching WPF Expander with horizontal ListBox)
         self._resource_panel = FlowResourcePanel()
         self._resource_panel.setFixedHeight(118)
         self._resource_panel.setVisible(False)
-        lo.addWidget(self._resource_panel)
+        layout.addWidget(self._resource_panel)
+        return panel
 
-        self._center_widget = w
-
-    # ── RIGHT PANEL (Diagram Flow Tabs) ──────────────────────────────
-
-    def _setup_right_panel(self):
-        """Right side: Diagram tab bar + Flow chart canvas (matching WPF TabControl + Zoombox)."""
-        w = QWidget()
-        lo = QVBoxLayout(w); lo.setContentsMargins(0, 0, 0, 0); lo.setSpacing(0)
-
-        # Header row with diagram icon + add button (matching WPF tab header panel)
-        header = QWidget()
-        header.setFixedHeight(30)
-        header.setStyleSheet("background: #2d2d30; border-bottom: 1px solid #3f3f46;")
-        hl = QHBoxLayout(header); hl.setContentsMargins(8, 0, 4, 0); hl.setSpacing(4)
-
-        icon_lbl = QLabel("")
-        icon_lbl.setStyleSheet("color: #4caf50; font-size: 13px;")
-        hl.addWidget(icon_lbl)
-        title_lbl = QLabel("流程图")
-        title_lbl.setStyleSheet("color: #dcdcdc; font-size: 12px; font-weight: bold;")
-        hl.addWidget(title_lbl, 1)
-
-        add_btn = QPushButton("+")
-        add_btn.setFixedSize(24, 24)
-        add_btn.setToolTip("新建流程图")
-        add_btn.setStyleSheet("QPushButton { background: transparent; border: 1px solid #505050; border-radius: 2px; color: #dcdcdc; font-size: 14px; font-weight: bold; } QPushButton:hover { background: #3e3e42; border-color: #0078d4; }")
-        add_btn.clicked.connect(self._on_add_diagram)
-        hl.addWidget(add_btn)
-        lo.addWidget(header)
-
-        # Diagram tab bar
-        self._diagram_tab_widget = QTabWidget()
-        self._diagram_tab_widget.setStyleSheet(_TAB_STYLE)
-        self._diagram_tab_widget.setTabsClosable(True)
-        self._diagram_tab_widget.tabCloseRequested.connect(self._on_close_diagram_tab)
-        self._diagram_tab_widget.currentChanged.connect(self._on_diagram_tab_changed)
-        lo.addWidget(self._diagram_tab_widget)
-
-        # Flow chart canvas — the main DiagramEditor (matching WPF Zoombox + DiagramPresenter)
-        self._diagram_editor = DiagramEditorWidget()
-        lo.addWidget(self._diagram_editor, 1)
-
-        # Run controls row at bottom (matching WPF per-tab ▶ ■ ↺ buttons)
-        ctrl = QWidget()
-        ctrl.setFixedHeight(32)
-        ctrl.setStyleSheet("background: #2d2d30; border-top: 1px solid #3f3f46;")
-        clo = QHBoxLayout(ctrl); clo.setContentsMargins(4, 0, 4, 0); clo.setSpacing(4)
-
-        for t, s in [("▶ 开始", self._on_run_workflow), ("■ 停止", self._on_stop_workflow),
-                      ("↺ 重置", self._on_reset_workflow_view)]:
-            b = QPushButton(t)
-            b.setStyleSheet(_CMD_BTN)
-            if s:
-                b.clicked.connect(s)
-            clo.addWidget(b)
-        clo.addStretch()
-
-        lo.addWidget(ctrl)
-        self._diagram_right_widget = w
-
-    def _on_add_diagram(self):
-        """Add a new diagram to the project (mirrors WPF AddDiagramCommand)."""
-        p = project_service.current_project
-        if p:
-            self._sync_workflow_to_project()
-            d = p.add_diagram()
-            self._bind_project_diagram(p)
-            self._log_panel.info(f"新建流程图: {d.name}")
-        else:
-            name = f"流程图{self._diagram_tab_widget.count()+1}"
-            self._diagram_tab_widget.addTab(QLabel(name), name)
-
-    def _on_close_diagram_tab(self, idx):
-        """Remove a diagram from the project (mirrors WPF DeleteDiagramCommand)."""
-        p = project_service.current_project
-        if p:
-            self._sync_workflow_to_project()
-            if 0 <= idx < len(p.diagrams):
-                d = p.diagrams[idx]
-                if p.delete_diagram(d):
-                    self._bind_project_diagram(p)
-                    self._log_panel.info(f"已删除流程图: {d.name}")
-        else:
-            if self._diagram_tab_widget.count() > 1:
-                self._diagram_tab_widget.removeTab(idx)
-
-    def _on_diagram_tab_changed(self, idx):
-        """Switch selected diagram when tab changes."""
-        p = project_service.current_project
-        if p and 0 <= idx < len(p.diagrams):
-            self._sync_workflow_to_project()
-            p.selected_diagram_index = idx
-            d = p.selected_diagram
-            if d and d.workflow:
-                self._workflow = d.workflow
-                self._diagram_editor.bind_workflow(self._workflow)
-            self._sync_proj_labels(p)
-
-    # ── BOTTOM PANEL (History | Current Results | Help) ──────────────
-
-    def _setup_bottom_panel(self):
-        """Bottom tabbed area matching WPF's History/Current/Help tabs exactly."""
+    def _build_bottom_panel(self):
         self._bottom_tabs = QTabWidget()
         self._bottom_tabs.setStyleSheet(_TAB_STYLE)
-        self._bottom_tabs.setMinimumHeight(100)
+        self._bottom_tabs.setMinimumHeight(120)
 
         self._result_panel = ResultPanel()
         self._result_panel.set_image_viewer(self._img_panel.viewer)
         self._result_panel.node_jump_requested.connect(self._jump_to_node)
         self._bottom_tabs.addTab(self._result_panel._history_table, "历史结果")
         self._bottom_tabs.addTab(self._result_panel._current_table, "当前模块结果")
+
         self._help_panel = HelpPanel()
         self._bottom_tabs.addTab(self._help_panel, "帮助")
 
-        # Toggle button to collapse bottom panel
         self._bottom_visible = True
         self._bottom_toggle = QPushButton("▼")
         self._bottom_toggle.setFixedSize(24, 18)
-        self._bottom_toggle.setStyleSheet("QPushButton { background: #2d2d30; border: 1px solid #3f3f46; color: #999; font-size: 9px; } QPushButton:hover { color: #dcdcdc; }")
+        self._bottom_toggle.setStyleSheet(
+            "QPushButton { background: #2d2d30; border: 1px solid #3f3f46; color: #999; font-size: 9px; }"
+            "QPushButton:hover { color: #dcdcdc; }"
+        )
         self._bottom_toggle.clicked.connect(self._toggle_bottom)
         self._bottom_tabs.setCornerWidget(self._bottom_toggle, Qt.TopLeftCorner)
+        return self._bottom_tabs
 
-        self._bottom_splitter.addWidget(self._bottom_tabs)
+    def _build_right_panel(self):
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-    def _toggle_bottom(self):
-        sizes = self._bottom_splitter.sizes()
-        if len(sizes) < 2: return
-        if self._bottom_visible:
-            _ps.set_i("bottom_height_saved", sizes[1])
-            self._bottom_splitter.setSizes([sizes[0] + sizes[1], 0])
-            self._bottom_toggle.setText("▲")
-        else:
-            saved = _ps.get_i("bottom_height_saved", 160)
-            total = sum(sizes)
-            bh = min(saved, total - 200)
-            self._bottom_splitter.setSizes([total - bh, bh])
-            self._bottom_toggle.setText("▼")
-        self._bottom_visible = not self._bottom_visible
+        self._diagram_tab_widget = QTabWidget()
+        self._diagram_tab_widget.setStyleSheet(_TAB_STYLE)
+        self._diagram_tab_widget.setTabsClosable(True)
+        self._diagram_tab_widget.tabCloseRequested.connect(self._on_close_diagram_tab)
+        self._diagram_tab_widget.currentChanged.connect(self._on_diagram_tab_changed)
+        self._diagram_tab_widget.setDocumentMode(True)
+        layout.addWidget(self._diagram_tab_widget, 1)
 
-    def _on_history_double_click(self, row, col):
-        """Double-click history entry to jump to the source node."""
-        item = self._result_panel._history_table.item(row, 0) if hasattr(self, '_result_panel') else None
-        if item:
-            node_id = item.data(Qt.UserRole)
-            if node_id:
-                self._jump_to_node(node_id)
-
-    # ── Status Bar ────────────────────────────────────────────────────
+        corner = QWidget()
+        corner_layout = QHBoxLayout(corner)
+        corner_layout.setContentsMargins(4, 0, 4, 0)
+        corner_layout.setSpacing(4)
+        for text, tip, slot in [
+            ("+", "新建流程图", self._on_add_diagram),
+            ("▶", "启动当前流程图", self._on_run_workflow),
+            ("■", "停止当前流程图", self._on_stop_workflow),
+            ("↺", "重置当前流程图视图", self._on_reset_workflow_view),
+        ]:
+            button = QPushButton(text)
+            button.setFixedSize(24, 24)
+            button.setToolTip(tip)
+            button.setStyleSheet(
+                "QPushButton { background: transparent; border: 1px solid #505050; border-radius: 2px; color: #dcdcdc; }"
+                "QPushButton:hover { background: #3e3e42; border-color: #0078d4; }"
+            )
+            button.clicked.connect(slot)
+            corner_layout.addWidget(button)
+        self._diagram_tab_widget.setCornerWidget(corner, Qt.TopRightCorner)
+        return panel
 
     def _setup_status_bar(self):
-        sb = QStatusBar()
-        sb.setStyleSheet("QStatusBar { background: #007acc; color: white; padding: 2px 8px; font-size: 11px; } QStatusBar::item { border: none; }")
-        self.setStatusBar(sb)
+        status = self.statusBar()
+        status.setStyleSheet(
+            "QStatusBar { background: #007acc; color: white; padding: 2px 8px; font-size: 11px; }"
+            "QStatusBar::item { border: none; }"
+        )
 
-        self._state_lbl = QLabel("● 空闲"); self._state_lbl.setStyleSheet("color: #4caf50; font-weight: bold;")
-        sb.addWidget(self._state_lbl)
-        sb.addWidget(_hsep())
-        self._msg_lbl = QLabel("就绪"); sb.addWidget(self._msg_lbl, 1)
-        sb.addWidget(_hsep())
-        self._node_cnt_lbl = QLabel("节点: 0"); sb.addPermanentWidget(self._node_cnt_lbl)
-        self._time_lbl = QLabel(""); sb.addPermanentWidget(self._time_lbl)
+        self._state_lbl = QLabel("● 空闲")
+        self._state_lbl.setStyleSheet("color: #4caf50; font-weight: bold;")
+        status.addWidget(self._state_lbl)
+        status.addWidget(_hsep())
 
-    def _update_clock(self):
-        self._time_lbl.setText(datetime.now().strftime("%H:%M:%S"))
+        self._msg_lbl = QLabel("就绪")
+        status.addWidget(self._msg_lbl, 1)
+        status.addWidget(_hsep())
 
-    # ── Signal Wiring ─────────────────────────────────────────────────
+        self._node_cnt_lbl = QLabel("节点: 0")
+        status.addPermanentWidget(self._node_cnt_lbl)
+        self._time_lbl = QLabel("")
+        status.addPermanentWidget(self._time_lbl)
 
     def _wire_signals(self):
         self._toolbox.node_type_selected.connect(self._on_node_type_selected)
         self._property_panel.property_changed.connect(self._on_property_changed)
-        self._diagram_editor.node_selected.connect(self._on_editor_node_selected)
-        self._diagram_editor.node_deselected.connect(lambda: self._select_node(None))
         self._property_panel.set_image_viewer(self._img_panel.viewer)
-        # Log panel: jump to node on entry click
         self._log_panel.node_jump_requested.connect(self._jump_to_node)
-        # Result panel: also support node jump from history
-        if hasattr(self, '_history_table'):
-            pass  # history click handled in _on_history_double_click
-
-    # ── Events ────────────────────────────────────────────────────────
+        self._resource_panel.file_selected.connect(self._on_resource_file_selected)
 
     def _connect_events(self):
         event_system.subscribe(EventType.NODE_SELECTED, self._on_ev_node_sel)
@@ -632,58 +463,274 @@ class MainWindow(QMainWindow):
         event_system.subscribe(EventType.PROJECT_LOADED, self._on_proj_load)
         event_system.subscribe(EventType.PROJECT_SAVED, self._on_proj_save)
 
-    def _on_ev_node_sel(self, s, **kw):
-        self._select_node(kw.get("node", s))
+    def closeEvent(self, event):
+        self._sync_workflow_to_project()
+        _ps.set_i("window_width", self.width())
+        _ps.set_i("window_height", self.height())
+        if hasattr(self, "_workspace_splitter"):
+            outer_sizes = self._workspace_splitter.sizes()
+            if len(outer_sizes) >= 2 and self._left_panel_visible:
+                _ps.set_i("left_width", outer_sizes[0])
+            inner_sizes = self._center_right_splitter.sizes()
+            if len(inner_sizes) >= 2 and self._right_panel_visible:
+                _ps.set_i("right_width", inner_sizes[1])
+            center_sizes = self._center_splitter.sizes()
+            if len(center_sizes) >= 2:
+                _ps.set_i("bottom_height", center_sizes[1])
+        _ps.set_b("left_visible", self._left_panel_visible)
+        _ps.set_b("right_visible", self._right_panel_visible)
+        self._clock.stop()
+        super().closeEvent(event)
 
-    def _on_ev_diag_chg(self, s, **kw):
-        if self._workflow:
-            self._node_cnt_lbl.setText(f"节点: {len(self._workflow.get_all_nodes())}")
+    def _apply_splitter_state(self):
+        left_width = _ps.get_i("left_width", 280)
+        right_width = _ps.get_i("right_width", 420)
+        bottom_height = _ps.get_i("bottom_height", 180)
 
-    def _on_wf_start(self, s, **kw):
-        self._state_lbl.setText("● 运行中"); self._state_lbl.setStyleSheet("color: #2196f3; font-weight: bold;")
-        self._msg_lbl.setText("流程运行中..."); self._run_btn.setEnabled(False)
+        self._workspace_splitter.setSizes([left_width, max(800, self.width() - left_width)])
+        self._center_right_splitter.setSizes([max(500, self.width() - left_width - right_width), right_width])
+        self._center_splitter.setSizes([max(380, self.height() - bottom_height - 140), bottom_height])
 
-    def _on_wf_done(self, s, **kw):
-        self._state_lbl.setText("● 完成"); self._state_lbl.setStyleSheet("color: #4caf50; font-weight: bold;")
-        self._msg_lbl.setText("流程执行完成"); self._run_btn.setEnabled(True)
+        self._left_panel_visible = _ps.get_b("left_visible", True)
+        self._right_panel_visible = _ps.get_b("right_visible", True)
+        if not self._left_panel_visible:
+            self.toggle_left_panel()
+        if not self._right_panel_visible:
+            self.toggle_right_panel()
 
-    def _on_wf_err(self, s, **kw):
-        self._state_lbl.setText("● 错误"); self._state_lbl.setStyleSheet("color: #f44336; font-weight: bold;")
-        r = kw.get("result"); self._msg_lbl.setText(str(r) if r else "流程错误"); self._run_btn.setEnabled(True)
+    def _lbl(self, text, color, size, bold=False, pad=""):
+        label = QLabel(text)
+        label.setStyleSheet(
+            f"color: {color}; font-size: {size}px; {'font-weight: bold;' if bold else ''} padding: {pad};"
+        )
+        return label
 
-    def _on_proj_load(self, s, **kw):
-        p = kw.get("project")
-        if p:
-            self._bind_project_diagram(p)
-            self._select_node(None)
+    def _toggle_max(self):
+        self.showNormal() if self.isMaximized() else self.showMaximized()
 
-    def _on_proj_save(self, s, **kw):
-        p = kw.get("project")
-        if p: self._sync_proj_labels(p)
+    def _build_menus(self, menu_bar: QMenuBar):
+        file_menu = menu_bar.addMenu("文件(&F)")
+        for text, slot, shortcut in [
+            ("新建项目(&N)", self._on_new_project, "Ctrl+N"),
+            ("打开项目(&O)...", self._on_open_project, "Ctrl+O"),
+            ("保存项目(&S)", self._on_save_project, "Ctrl+S"),
+            ("另存为(&A)...", self._on_save_as_project, "Ctrl+Shift+S"),
+        ]:
+            action = QAction(text, self)
+            action.setShortcut(shortcut)
+            action.triggered.connect(slot)
+            file_menu.addAction(action)
+        file_menu.addSeparator()
+        self._recent_menu = file_menu.addMenu("最近的项目(&R)")
+        self._recent_menu.aboutToShow.connect(self._refresh_recent)
+        file_menu.addSeparator()
+        exit_action = QAction("退出(&X)", self)
+        exit_action.setShortcut("Alt+F4")
+        exit_action.triggered.connect(self.close)
+        file_menu.addAction(exit_action)
 
-    def _sync_proj_labels(self, p):
-        n = p.display_name
-        self._cap_proj_lbl.setText(f"  {n}  ")
-        self._cmd_proj_lbl.setText(n)
+        edit_menu = menu_bar.addMenu("编辑(&E)")
+        undo_action = QAction("撤销(&U)", self)
+        undo_action.setShortcut("Ctrl+Z")
+        undo_action.triggered.connect(self._on_undo_diagram)
+        edit_menu.addAction(undo_action)
+        redo_action = QAction("重做(&R)", self)
+        redo_action.setShortcut("Ctrl+Y")
+        redo_action.triggered.connect(self._on_redo_diagram)
+        edit_menu.addAction(redo_action)
 
-    # ── Node Selection ────────────────────────────────────────────────
+        run_menu = menu_bar.addMenu("运行(&R)")
+        run_action = QAction("运行流程(&F)", self)
+        run_action.setShortcut("F5")
+        run_action.triggered.connect(self._on_run_workflow)
+        run_menu.addAction(run_action)
+        stop_action = QAction("停止(&S)", self)
+        stop_action.setShortcut("Shift+F5")
+        stop_action.triggered.connect(self._on_stop_workflow)
+        run_menu.addAction(stop_action)
+
+        system_menu = menu_bar.addMenu("系统(&S)")
+        left_toggle = QAction("切换左侧流程资源", self)
+        left_toggle.triggered.connect(self.toggle_left_panel)
+        system_menu.addAction(left_toggle)
+        right_toggle = QAction("切换右侧流程图", self)
+        right_toggle.triggered.connect(self.toggle_right_panel)
+        system_menu.addAction(right_toggle)
+
+        help_menu = menu_bar.addMenu("帮助(&H)")
+        guide_action = QAction("使用指南(&G)", self)
+        help_menu.addAction(guide_action)
+        help_menu.addSeparator()
+        about_action = QAction("关于 VisionFlow(&A)", self)
+        about_action.triggered.connect(self._on_about)
+        help_menu.addAction(about_action)
+
+    def _refresh_recent(self):
+        self._recent_menu.clear()
+        project_service.cleanup_recent_projects()
+        if not project_service.recent_projects:
+            empty_action = QAction("(无最近项目)", self)
+            empty_action.setEnabled(False)
+            self._recent_menu.addAction(empty_action)
+            return
+        for path in project_service.recent_projects:
+            action = QAction(os.path.basename(path), self)
+            action.setToolTip(path)
+            action.triggered.connect(lambda checked=False, current_path=path: self._open_project(current_path))
+            self._recent_menu.addAction(action)
+        self._recent_menu.addSeparator()
+        clear_action = QAction("清空最近项目", self)
+        clear_action.triggered.connect(project_service.clear_recent_projects)
+        self._recent_menu.addAction(clear_action)
+
+    def _wire_diagram_editor(self, editor: DiagramEditorWidget):
+        editor.node_selected.connect(self._on_editor_node_selected)
+        editor.node_deselected.connect(lambda: self._select_node(None))
+        editor.scene.status_message.connect(self._on_editor_status)
+
+    def _create_diagram_page(self, diagram: DiagramData) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        editor = DiagramEditorWidget()
+        self._wire_diagram_editor(editor)
+        if diagram.workflow is None:
+            diagram.workflow = WorkflowEngine(name=diagram.name)
+        editor.bind_workflow(diagram.workflow)
+        layout.addWidget(editor, 1)
+        page.diagram_id = diagram.id
+        page.workflow = diagram.workflow
+        page.editor = editor
+        return page
+
+    def _show_start_page(self):
+        self._root_stack.setCurrentWidget(self._start_page)
+        self._start_page.refresh_recent(project_service)
+        self._project_loaded = False
+        self._workflow = None
+        self._diagram_editor = None
+        self._select_node(None)
+        self._sync_proj_labels(None)
+
+    def _show_editor(self):
+        self._root_stack.setCurrentWidget(self._editor_surface)
+        self._project_loaded = True
+
+    def _bind_project_diagram(self, project: ProjectItem):
+        if not project.diagrams:
+            project.add_diagram(project.name)
+        self._refresh_diagram_tabs(project)
+        self._show_editor()
+        self._sync_proj_labels(project)
+        self._select_node(None)
+
+    def _refresh_diagram_tabs(self, project: ProjectItem):
+        self._diagram_pages.clear()
+        self._diagram_tab_widget.blockSignals(True)
+        self._diagram_tab_widget.clear()
+        for diagram in project.diagrams:
+            page = self._create_diagram_page(diagram)
+            self._diagram_pages[diagram.id] = page
+            self._diagram_tab_widget.addTab(page, diagram.name)
+        target_index = max(0, min(project.selected_diagram_index, self._diagram_tab_widget.count() - 1))
+        if self._diagram_tab_widget.count() > 0:
+            self._diagram_tab_widget.setCurrentIndex(target_index)
+        self._diagram_tab_widget.blockSignals(False)
+        self._on_diagram_tab_changed(target_index)
+
+    def _current_diagram_page(self):
+        page = self._diagram_tab_widget.currentWidget()
+        return page if page is not None else None
+
+    def _current_diagram_editor(self) -> DiagramEditorWidget | None:
+        page = self._current_diagram_page()
+        return getattr(page, "editor", None) if page is not None else None
+
+    def _current_diagram_data(self) -> DiagramData | None:
+        project = project_service.current_project
+        if project is None:
+            return None
+        return project.selected_diagram
+
+    def _on_add_diagram(self):
+        project = project_service.current_project
+        if project is None:
+            project = project_service.new_project()
+        self._sync_workflow_to_project()
+        diagram = project.add_diagram()
+        self._refresh_diagram_tabs(project)
+        self._log_panel.info(f"新建流程图: {diagram.name}")
+        self._sync_proj_labels(project)
+
+    def _on_close_diagram_tab(self, index: int):
+        project = project_service.current_project
+        if project is None:
+            return
+        self._sync_workflow_to_project()
+        if 0 <= index < len(project.diagrams):
+            diagram = project.diagrams[index]
+            if project.delete_diagram(diagram):
+                self._refresh_diagram_tabs(project)
+                self._log_panel.info(f"已删除流程图: {diagram.name}")
+            else:
+                self._log_panel.warning("至少需要保留一个流程图")
+        self._sync_proj_labels(project)
+
+    def _on_diagram_tab_changed(self, index: int):
+        project = project_service.current_project
+        if project is None or not (0 <= index < len(project.diagrams)):
+            self._workflow = None
+            self._diagram_editor = None
+            return
+        project.selected_diagram_index = index
+        diagram = project.selected_diagram
+        page = self._current_diagram_page()
+        self._workflow = diagram.workflow if diagram else None
+        self._diagram_editor = getattr(page, "editor", None)
+        self._node_cnt_lbl.setText(f"节点: {len(self._workflow.get_all_nodes()) if self._workflow else 0}")
+        self._sync_proj_labels(project)
+
+    def _sync_proj_labels(self, project: ProjectItem | None):
+        if project is None:
+            project_name = "无项目"
+            diagram_name = "无流程图"
+            self.setWindowTitle("VisionFlow — VisionFlow")
+        else:
+            project_name = project.display_name
+            diagram_name = project.selected_diagram.display_name if project.selected_diagram else "无流程图"
+            self.setWindowTitle(f"{project_name} — VisionFlow")
+        if hasattr(self, "_cap_proj_lbl"):
+            self._cap_proj_lbl.setText(project_name)
+        if hasattr(self, "_cmd_proj_lbl"):
+            self._cmd_proj_lbl.setText(diagram_name)
+
+    def _sync_workflow_to_project(self):
+        project = project_service.current_project
+        if project is None:
+            return
+        for index, diagram in enumerate(project.diagrams):
+            if index < self._diagram_tab_widget.count():
+                page = self._diagram_tab_widget.widget(index)
+                editor = getattr(page, "editor", None)
+                if editor is not None:
+                    editor.save_to_workflow()
+                    diagram.workflow = editor._workflow
 
     def _select_node(self, node: NodeBase | None):
         self._selected_node = node
-
-        # Property panel (center tab "模块结果")
         self._property_panel.set_node(node)
+        self._help_panel.set_node(node)
+        self._module_result_title.setText(f"模块名称 <{node.name}>" if node else "模块名称 <未选择>")
+        self._result_panel.show_node_results(node if isinstance(node, VisionNodeData) else None)
 
-        self._populate_help(node)
-
-        # Flow resource panel visibility
         if isinstance(node, SrcFilesVisionNodeData):
             self._resource_panel.set_node(node)
             self._resource_panel.setVisible(True)
         else:
             self._resource_panel.setVisible(False)
+            self._resource_panel.set_node(None)
 
-        # Image viewer
         if isinstance(node, VisionNodeData) and node.mat is not None:
             self._img_panel.set_image(node.mat)
         elif isinstance(node, VisionNodeData) and node._result_image_source is not None:
@@ -696,231 +743,274 @@ class MainWindow(QMainWindow):
         else:
             self._img_panel.clear_roi_rect()
 
-    def _populate_help(self, node):
-        self._help_panel.set_node(node)
-
-    # ── Node Type Selected (Toolbox → Canvas) ────────────────────────
-
-    def _on_node_type_selected(self, tn: str):
-        if not self._workflow: return
-        n = node_registry.create(tn)
-        if n:
-            g = self._get_group(tn)
-            self._diagram_editor.add_node(n, group_name=g)
-            self._log_panel.info(f"添加节点: {n.name}")
+    def _on_node_type_selected(self, type_name: str):
+        if not self._workflow:
+            return
+        node = node_registry.create(type_name)
+        editor = self._current_diagram_editor()
+        if node is not None and editor is not None:
+            editor.add_node(node, group_name=self._get_group(type_name))
+            self._log_panel.info(f"添加节点: {node.name}")
             self._node_cnt_lbl.setText(f"节点: {len(self._workflow.get_all_nodes())}")
 
-    def _on_editor_node_selected(self, nd: NodeBase):
-        self._select_node(nd)
+    def _on_editor_node_selected(self, node_data: NodeBase):
+        self._select_node(node_data)
 
-    def _get_group(self, tn: str) -> str:
+    def _on_editor_status(self, message: str):
+        self._msg_lbl.setText(message)
+
+    def _get_group(self, type_name: str) -> str:
         from core.node_group import node_data_group_manager
-        for g in node_data_group_manager.get_all_groups():
-            for nt in g.node_types:
-                if nt.__name__ == tn: return g.name
+        for group in node_data_group_manager.get_all_groups():
+            for node_type in group.node_types:
+                if node_type.__name__ == type_name:
+                    return group.name
         return ""
 
     def _on_property_changed(self, name, old, new):
         if self._selected_node:
             if isinstance(self._selected_node, ROINodeData):
-                self._img_panel.set_roi_rect(self._selected_node.get_active_roi_rect(),
-                                              label=self._selected_node.roi.name)
-            event_system.publish(EventType.NODE_PROPERTY_CHANGED,
-                                 sender=self._selected_node, name=name, old=old, new=new)
+                self._img_panel.set_roi_rect(self._selected_node.get_active_roi_rect(), label=self._selected_node.roi.name)
+            event_system.publish(EventType.NODE_PROPERTY_CHANGED, sender=self._selected_node, name=name, old=old, new=new)
 
-    # ── Project Ops ───────────────────────────────────────────────────
+    def _on_ev_node_sel(self, sender, **kwargs):
+        self._select_node(kwargs.get("node", sender))
 
-    def _show_start_page(self):
-        """Show the welcome/start page, hide editor."""
-        if hasattr(self, '_center_stack'):
-            self._center_stack.setCurrentIndex(0)
-        self._start_page.refresh_recent(project_service)
-        self._project_loaded = False
-        self._sync_proj_labels(None)
+    def _on_ev_diag_chg(self, sender, **kwargs):
+        if self._workflow:
+            self._node_cnt_lbl.setText(f"节点: {len(self._workflow.get_all_nodes())}")
 
-    def _show_editor(self):
-        """Switch from start page to editor view."""
-        if hasattr(self, '_center_stack'):
-            self._center_stack.setCurrentIndex(1)
-        self._project_loaded = True
+    def _on_wf_start(self, sender, **kwargs):
+        self._state_lbl.setText("● 运行中")
+        self._state_lbl.setStyleSheet("color: #2196f3; font-weight: bold;")
+        self._msg_lbl.setText("流程运行中...")
+        self._run_btn.setEnabled(False)
 
-    def _bind_project_diagram(self, project: ProjectItem):
-        """Bind the selected diagram's workflow to the editor."""
-        d = project.selected_diagram
-        if d and d.workflow is None:
-            d.workflow = WorkflowEngine(name=d.name)
-        self._refresh_diagram_tabs(project)
-        if d and d.workflow:
-            self._workflow = d.workflow
-            self._diagram_editor.bind_workflow(self._workflow)
-        self._show_editor()
-        self._sync_proj_labels(project)
+    def _on_wf_done(self, sender, **kwargs):
+        self._state_lbl.setText("● 完成")
+        self._state_lbl.setStyleSheet("color: #4caf50; font-weight: bold;")
+        self._msg_lbl.setText("流程执行完成")
+        self._run_btn.setEnabled(True)
 
-    def _refresh_diagram_tabs(self, project: ProjectItem):
-        """Sync the right-side tab widget with project diagrams."""
-        tw = self._diagram_tab_widget
-        tw.blockSignals(True)
-        while tw.count() > 1:
-            tw.removeTab(0)
-        if tw.count() == 1:
-            tw.removeTab(0)
-        for i, d in enumerate(project.diagrams):
-            tw.addTab(QWidget(), d.name)
-            if i == project.selected_diagram_index:
-                tw.setCurrentIndex(i)
-        tw.blockSignals(False)
+    def _on_wf_err(self, sender, **kwargs):
+        self._state_lbl.setText("● 错误")
+        self._state_lbl.setStyleSheet("color: #f44336; font-weight: bold;")
+        result = kwargs.get("result")
+        self._msg_lbl.setText(str(result) if result else "流程错误")
+        self._run_btn.setEnabled(True)
+
+    def _on_proj_load(self, sender, **kwargs):
+        project = kwargs.get("project")
+        if project:
+            self._bind_project_diagram(project)
+
+    def _on_proj_save(self, sender, **kwargs):
+        project = kwargs.get("project")
+        if project:
+            self._sync_proj_labels(project)
+
+    def _update_clock(self):
+        self._time_lbl.setText(datetime.now().strftime("%H:%M:%S"))
 
     def _on_new_project(self):
-        p = project_service.new_project()
-        self._bind_project_diagram(p)
-        self._select_node(None)
+        project = project_service.new_project()
+        self._bind_project_diagram(project)
         self._log_panel.info("新建项目")
 
     def _on_open_project(self):
-        p, _ = QFileDialog.getOpenFileName(self, "打开项目", "", project_service.FILE_FILTER)
-        if p: self._open_project(p)
+        path, _ = QFileDialog.getOpenFileName(self, "打开项目", "", project_service.FILE_FILTER)
+        if path:
+            self._open_project(path)
 
     def _open_project(self, path: str):
         if not path or not os.path.exists(path):
             project_service.remove_recent(path)
-            QMessageBox.warning(self, "打开失败", f"文件不存在: {path}"); return
-        p = project_service.load(path)
-        if p:
-            self._bind_project_diagram(p)
-            self._select_node(None)
+            QMessageBox.warning(self, "打开失败", f"文件不存在: {path}")
+            return
+        project = project_service.load(path)
+        if project:
+            self._bind_project_diagram(project)
             self._log_panel.success(f"已打开: {path}")
 
-    def open_project(self, fp: str): self._open_project(fp)
+    def open_project(self, file_path: str):
+        self._open_project(file_path)
 
     def _on_save_project(self):
-        if project_service.current_project:
-            if project_service.current_project.is_saved:
-                project_service.save(); self._log_panel.success("项目已保存")
-            else: self._on_save_as_project()
+        project = project_service.current_project
+        if project is None:
+            return
+        self._sync_workflow_to_project()
+        if project.is_saved:
+            if project_service.save(project):
+                self._log_panel.success("项目已保存")
+        else:
+            self._on_save_as_project()
 
     def _on_save_as_project(self):
-        p = project_service.current_project or project_service.new_project()
-        path, _ = QFileDialog.getSaveFileName(self, "另存为...", f"{p.display_name}.json", project_service.FILE_FILTER)
+        project = project_service.current_project or project_service.new_project()
+        path, _ = QFileDialog.getSaveFileName(self, "另存为...", f"{project.display_name}.json", project_service.FILE_FILTER)
         if path:
             self._sync_workflow_to_project()
-            project_service.save_as(p, path); self._log_panel.success(f"已保存至: {path}")
-
-    def _sync_workflow_to_project(self):
-        """Save editor state back to the current project diagram."""
-        p = project_service.current_project
-        if p and p.selected_diagram and self._workflow:
-            self._diagram_editor.save_to_workflow()
-            p.selected_diagram.workflow = self._workflow
-
-    def _sync_proj_labels(self, project: ProjectItem | None):
-        """Update caption and command bar project labels."""
-        if project is None:
-            name = "VisionFlow"
-            dname = "无项目"
-        else:
-            name = project.display_name
-            sd = project.selected_diagram
-            dname = sd.name if sd else name
-        self.setWindowTitle(f"{name} — VisionFlow")
-        if hasattr(self, '_cap_proj_lbl'):
-            self._cap_proj_lbl.setText(dname)
-        if hasattr(self, '_cmd_proj_lbl'):
-            self._cmd_proj_lbl.setText(dname)
-
-    # ── Workflow Ops ──────────────────────────────────────────────────
+            if project_service.save_as(project, path):
+                self._log_panel.success(f"已保存至: {path}")
+                self._sync_proj_labels(project)
 
     def _on_run_workflow(self):
-        if not self._workflow: return
+        if not self._workflow:
+            return
+        self._sync_workflow_to_project()
         self._log_panel.info("开始执行流程...")
-        r = self._workflow.execute()
-        if r.is_ok: self._log_panel.success(f"流程完成: {r.message}")
-        elif r.is_error: self._log_panel.error(f"流程错误: {r.message}")
+        result = self._workflow.execute()
+        if result.is_ok:
+            self._log_panel.success(f"流程完成: {result.message}")
+        elif result.is_error:
+            self._log_panel.error(f"流程错误: {result.message}")
 
     def _on_stop_workflow(self):
-        if self._workflow: self._workflow.stop(); self._log_panel.warning("流程已停止")
+        if self._workflow:
+            self._workflow.stop()
+            self._log_panel.warning("流程已停止")
 
     def _jump_to_node(self, node_id: str):
-        """Jump to and select a node by its ID."""
-        if self._workflow:
-            node = self._workflow.get_node_by_id(node_id)
-            if node:
-                self._select_node(node)
-                self._center_tabs.setCurrentIndex(0)  # switch to image preview tab
+        project = project_service.current_project
+        if project is None:
+            return
+        for index, diagram in enumerate(project.diagrams):
+            workflow = diagram.workflow
+            if workflow and workflow.get_node_by_id(node_id):
+                self._diagram_tab_widget.setCurrentIndex(index)
+                editor = self._current_diagram_editor()
+                if editor is None:
+                    return
+                item = editor.scene.get_node_item(node_id)
+                if item is not None:
+                    editor.scene.clearSelection()
+                    item.setSelected(True)
+                    editor.view.centerOn(item)
+                    self._select_node(item.node_data)
+                return
 
-    # ── Panel Toggle ──────────────────────────────────────────────────
+    def _on_resource_file_selected(self, path: str):
+        if not path:
+            return
+        try:
+            import cv2
+            image = cv2.imread(path, cv2.IMREAD_COLOR)
+            if image is not None:
+                self._img_panel.set_image(image)
+                self._center_tabs.setCurrentIndex(0)
+        except Exception:
+            pass
 
     def toggle_left_panel(self):
-        if hasattr(self, '_dock_mgr'):
-            self._dock_mgr.toggle("left_toolbox")
+        if self._left_panel_visible:
+            sizes = self._workspace_splitter.sizes()
+            if sizes:
+                self._saved_left_width = max(0, sizes[0])
+            self._left_tabs.setVisible(False)
+            self._workspace_splitter.setSizes([0, max(1, sum(sizes))])
+            self._left_panel_visible = False
+        else:
+            self._left_tabs.setVisible(True)
+            total = max(self.width(), 1200)
+            left = self._saved_left_width or _ps.get_i("left_width", 280)
+            self._workspace_splitter.setSizes([left, max(800, total - left)])
+            self._left_panel_visible = True
 
     def toggle_right_panel(self):
-        if hasattr(self, '_dock_mgr'):
-            self._dock_mgr.toggle("right_diagram")
+        if self._right_panel_visible:
+            sizes = self._center_right_splitter.sizes()
+            if len(sizes) >= 2:
+                self._saved_right_width = max(0, sizes[1])
+            self._right_panel.setVisible(False)
+            self._center_right_splitter.setSizes([max(1, sum(sizes)), 0])
+            self._right_panel_visible = False
+        else:
+            self._right_panel.setVisible(True)
+            total = max(self.width() - (_ps.get_i("left_width", 280) if self._left_panel_visible else 0), 900)
+            right = self._saved_right_width or _ps.get_i("right_width", 420)
+            self._center_right_splitter.setSizes([max(500, total - right), right])
+            self._right_panel_visible = True
 
     @property
     def active_workflow(self) -> WorkflowEngine | None:
         return self._workflow
 
     def add_diagram_tab(self, name: str, workflow: WorkflowEngine):
-        """Add a diagram tab manually (public API for backward compat)."""
-        self._diagram_tabs[name] = workflow
-        p = project_service.current_project
-        if p:
-            d = DiagramData(name=name)
-            d.workflow = workflow
-            p.diagrams.append(d)
-            p.selected_diagram_index = len(p.diagrams) - 1
-        self._diagram_tab_widget.addTab(QWidget(), name)
-        self._diagram_tab_widget.setCurrentIndex(self._diagram_tab_widget.count() - 1)
+        project = project_service.current_project
+        if project is None:
+            project = project_service.new_project()
+        diagram = DiagramData(name=name)
+        diagram.workflow = workflow
+        project.diagrams.append(diagram)
+        project.selected_diagram_index = len(project.diagrams) - 1
+        self._refresh_diagram_tabs(project)
         return name
 
     def remove_diagram_tab(self, name: str):
-        """Remove a diagram tab by name."""
-        p = project_service.current_project
-        if p:
-            for i, d in enumerate(p.diagrams):
-                if d.name == name:
-                    p.delete_diagram(d)
-                    break
-        for i in range(self._diagram_tab_widget.count()):
-            if self._diagram_tab_widget.tabText(i) == name:
-                self._diagram_tab_widget.removeTab(i)
+        project = project_service.current_project
+        if project is None:
+            return
+        for diagram in list(project.diagrams):
+            if diagram.name == name:
+                project.delete_diagram(diagram)
                 break
+        self._refresh_diagram_tabs(project)
 
     def switch_to_diagram(self, name_or_index: str | int):
-        """Switch to diagram by name or index."""
         if isinstance(name_or_index, int):
-            idx = name_or_index
-        else:
-            idx = -1
-            for i in range(self._diagram_tab_widget.count()):
-                if self._diagram_tab_widget.tabText(i) == name_or_index:
-                    idx = i
-                    break
-        if 0 <= idx < self._diagram_tab_widget.count():
-            self._diagram_tab_widget.setCurrentIndex(idx)
+            if 0 <= name_or_index < self._diagram_tab_widget.count():
+                self._diagram_tab_widget.setCurrentIndex(name_or_index)
+            return
+        for index in range(self._diagram_tab_widget.count()):
+            if self._diagram_tab_widget.tabText(index) == name_or_index:
+                self._diagram_tab_widget.setCurrentIndex(index)
+                return
 
     def _active_visual_target(self):
-        return self._diagram_editor.view
+        if self._center_tabs.currentIndex() == 0:
+            return self._img_panel.viewer
+        editor = self._current_diagram_editor()
+        return editor.view if editor is not None else self._img_panel.viewer
 
     def _on_reset_workflow_view(self):
-        if self._workflow:
-            self._diagram_editor.bind_workflow(self._workflow)
+        editor = self._current_diagram_editor()
+        if editor is not None and self._workflow is not None:
+            editor.bind_workflow(self._workflow)
             self._log_panel.info("已重置当前流程图视图")
 
     def _on_undo_diagram(self):
-        if hasattr(self, '_diagram_editor'):
-            self._diagram_editor._on_undo()
+        editor = self._current_diagram_editor()
+        if editor is not None:
+            editor._on_undo()
 
     def _on_redo_diagram(self):
-        if hasattr(self, '_diagram_editor'):
-            self._diagram_editor._on_redo()
+        editor = self._current_diagram_editor()
+        if editor is not None:
+            editor._on_redo()
 
-    # ── Help ──────────────────────────────────────────────────────────
+    def _toggle_bottom(self):
+        sizes = self._center_splitter.sizes()
+        if len(sizes) < 2:
+            return
+        if self._bottom_visible:
+            _ps.set_i("bottom_height_saved", sizes[1])
+            self._center_splitter.setSizes([sizes[0] + sizes[1], 0])
+            self._bottom_toggle.setText("▲")
+        else:
+            saved = _ps.get_i("bottom_height_saved", 180)
+            total = sum(sizes)
+            height = min(saved, total - 220)
+            self._center_splitter.setSizes([total - height, height])
+            self._bottom_toggle.setText("▼")
+        self._bottom_visible = not self._bottom_visible
 
     def _on_about(self):
-        QMessageBox.about(self, "关于 VisionFlow",
-                          "<h2>VisionFlow 2.0</h2><p>视觉流程编辑器</p>"
-                          "<p>移植自 WPF-VisionMaster (HeBianGu)</p>"
-                          "<p>使用 Python + PyQt5 + OpenCV</p><hr>"
-                          "<p>开源项目 | MIT License</p>")
+        QMessageBox.about(
+            self,
+            "关于 VisionFlow",
+            "<h2>VisionFlow 2.0</h2><p>视觉流程编辑器</p>"
+            "<p>移植自 WPF-VisionMaster (HeBianGu)</p>"
+            "<p>使用 Python + PyQt5 + OpenCV</p><hr>"
+            "<p>当前版本仍在持续做 WPF 对齐修复。</p>",
+        )

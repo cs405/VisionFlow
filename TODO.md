@@ -1,7 +1,7 @@
 ### TODO 状态修正建议（已按本轮审计口径修正）
 
 - `P0`：**基础骨架已完成，WPF 行为对齐度约 70%**
-- `P1`：**主窗口已完成一轮按 `MainWindow.xaml` 分区对齐修复，但仍未达到逐像素/逐交互 100% 一致；对齐度约 100%**
+- `P1`：**主窗口已完成第二轮按 `MainWindow.xaml` 区域语义重构；左/中/右三区、图标化节点栏、中文节点名、拖拽到画布、多流程图独立画布已修复，但仍未达到逐像素/逐交互 100% 一致；对齐度约 82%**
 - `P2`：**基础节点编辑器可运行；本轮修复后核心交互稳定性明显提升，但仍未达到 WPF Presenter / Workflow 完整交互；对齐度约 68%**
 - `P3`：**节点目录与大部分类别已落地，但“节点存在”不等于与 WPF 结果、帮助、参数、资源、示例完全一致；对齐度约 55%**
 - `P4`：**项目系统已有多流程图/最近项目基础，但模板、运行模式、默认项目数量与 WPF 仍不一致；对齐度约 40%**
@@ -16,56 +16,56 @@
 #### P1-1 主窗口布局
 - **C# 源**: `MainWindow.xaml`, `H.Windows.Main`
 - **当前 Python 文件**: `gui/main_window.py`, `gui/theme.py`, `main.py`
-- **真实状态**: 🟡 部分完成（本轮已按 WPF 主窗口主要区域重排）
-- **进度(审计估算)**: 72%
+- **真实状态**: 🟡 部分完成（本轮已按 WPF 的左资源 / 中图像结果 / 右流程图三栏语义重构）
+- **进度(审计估算)**: 82%
 - **本轮已真实落地（2026-06-04）**:
-  - Caption 区：`gui/main_window.py` 已接入 `assets/icons/logo.png` / `logo.ico`，标题栏改为更接近 WPF 的 `logo + 应用名 + 菜单 + 项目名称 + 窗口控制` 结构。
-  - Command Bar 区：项目操作 / 运行控制 / 缩放控制 / 撤销重做已按区域分组；缩放按钮会根据当前主视图切到流程编辑区或图像预览区。
-  - Center 区：保留 `流程编辑 / 图像预览 / 模块结果` 三个主要页签，其中“模块结果”改为 `属性面板 + ResultPanel` 横向联动，更贴近 WPF “图像/模块结果”信息分区。
-  - Bottom 区：底部 `历史结果 / 当前模块结果 / 帮助` 已真实接入 `ResultPanel` 的历史表/当前结果表，结构上已与 WPF 底部三页签对应。
-  - Right 区：右侧流程图标签页现在会随项目 `add_diagram()` 正常增长；新建流程图默认附带 `WorkflowEngine`，切换/保存前可调用 `save_to_workflow()` 同步场景状态。
-  - 资源区：底部图像源/视频源资源栏继续保留，并在源节点选中时显示；已与主窗口的节点选择联动。
-  - 可用性修复：修复了 `MainWindow` 中对不存在的 `workflow.get_node()` / `editor.save_to_workflow()` 的调用问题，节点跳转改为走 `get_node_by_id()`。
+  - Caption 区：`gui/main_window.py` 保持双层标题结构，继续对齐 `logo + 应用名 + 菜单 + 项目名称 + 窗口控制`。
+  - 主体布局：主窗口已从 `QDockWidget` 近似结构改为显式 `QSplitter` 三栏布局：左侧 `流程资源/日志`、中间 `图像/模块结果 + 底部结果`、右侧 `流程图多标签画布`，不再把流程图区与图像结果区混放。
+  - Right 区：右侧每个流程图 Tab 现在拥有独立 `DiagramEditorWidget`，切换流程图时不会共用同一个占位编辑器；已通过多流程图切换 smoke test。
+  - Left 区：`gui/toolbox_panel.py` 已从树/文件夹式列表改为图标卡片式节点栏；节点显示优先使用节点实例的中文 `name`，不再默认暴露英文类名。
+  - 节点拖拽：左侧图标节点现支持原生拖拽到右侧画布，`DiagramEditorView.dropEvent` → `node_dropped` → `AddNodeCommand` 链路已通过 smoke test，节点可真实落到画布上。
+  - Bottom 区：底部 `历史结果 / 当前模块结果 / 帮助` 三页签继续保留并联动节点跳转。
+  - 资源区：图像/视频源资源条仍位于中间图像区底部，选中源节点时显示；和 WPF 的图像源区域语义一致。
+  - 可用性修复：修复 `SrcFilesVisionNodeData` 初始化顺序问题，解决 `CameraCaptureNodeData` 等源节点实例化/拖拽时崩溃，连带修复左栏中文节点名提取。
 - **当前仍未做到 100% 对齐（未做 / 待做）**:
-  - 右侧流程图区仍不是 WPF 的真实 `RunView + Zoombox + TabControl.ContentTemplate` 呈现；目前右侧页签内容仍是简化占位，不是最终流程图运行视图。
-  - 中央区域仍保留了 Python 版 `流程编辑` 独立页签；而 WPF 是“右侧多流程图 + 中央图像/结果”的更强分区，尚未完全同构。
-  - 左侧 `流程资源 / 流程功能列表` 的双视图切换尚未严格按 WPF 区域复刻；目前仍主要是 `Toolbox + Log` 的 Python 化布局。
-  - WPF 中图像区顶部/底部的结果类型角标、文件信息条、运行态提示条、帮助呈现器等细节尚未逐项补齐。
-  - 流程图 Tab Header 仍缺少 WPF 的内嵌启动/停止/重置图标按钮、双击编辑命名、上下文命令菜单等交互细节。
-  - `GridSplitterBox`、Dock、Guide、Theme token、字体/边距/边框粗细等视觉细节仍未做到逐像素一致。
+  - 左侧节点栏虽然已改为图标卡片 + 中文名 + 拖拽，但仍不是 WPF `GetNodeDataGroupsItemsControlPresenter` 的原始 FontIcon/Presenter 模板；图标资源、间距、hover 动画、窄栏上下文模式未逐像素复刻。
+  - 右侧流程图区虽然已是多 Tab 独立画布，但仍未完整实现 WPF 中 Tab Header 内嵌的启动/停止/重置按钮、编辑名称输入框、上下文菜单与 `Zoombox.ContentTemplate` 风格。
+  - 中间图像区尚未完整补齐 WPF 中的结果类型角标、底部文件信息黑色半透明条、图像源索引提示、运行消息条等细节。
+  - `GridSplitterBox` 的伸缩逻辑、最小宽度阈值切换、Guide/Theme token、字体、边框粗细、Tab 视觉仍与 WPF 有差距。
+  - 尚未做截图级对比与字体部署修正；当前环境存在 Qt 字体目录警告，因此不能声称“像素级 100% 一致”。
 - **完成标记**: 部分完成
 
 #### P1-2 可停靠面板系统
 - **C# 源**: `H.Controls.GridSplitterBox`, `H.Controls.Dock`
 - **当前 Python 文件**: `gui/main_window.py`, `gui/dock_manager.py`
-- **真实状态**: 🟢 已完成
-- **进度(审计估算)**: 100%
-- **已落地**: `QSplitter` 三栏布局可折叠面板、`DockManager` 统一管理面板显隐/停靠/尺寸恢复、`QSettings` 持久化面板状态。
+- **真实状态**: 🟡 部分完成
+- **进度(审计估算)**: 65%
+- **已落地**: 现已改为显式 `QSplitter` 三栏/上下分割，支持左右区域显隐与尺寸持久化，比此前 `DockWidget` 近似实现更接近 WPF `GridSplitterBox`。
 - **2026-06-04 修复内容**:
-  - 新增 `gui/dock_manager.py`，实现 `DockManager` 面板管理器与 `DockPanelInfo` 元数据模型
-  - 支持面板注册/显示/隐藏/切换/宽度持久化
-  - `main_window.py` 内置 `CollapsiblePanel` 组件实现折叠/展开动画
-  - `toggle_left_panel()`/`toggle_right_panel()` 公共API
-  - 新增 `DockManager` 基于 QDockWidget 的浮动/停靠/tabify 管理
-  - QSettings 持久化面板状态与主窗 dock state
-  - `main_window.py` 集成 DockManager，左右面板使用 QDockWidget(可浮动/停靠/关闭)
-- **完成标记**: ✅ 已完成
+  - 去除“P1-2 已 100% 完成”的旧结论；当前实现重点转为 `MainWindow.xaml` 的显式分区语义，而不是通用 Dock 浮动。
+  - `gui/main_window.py` 现使用主水平 splitter + 中右 splitter + 中部垂直 splitter，支持左右区显隐与底部结果区折叠。
+  - `QSettings` 持久化窗口尺寸、左右宽度、底部高度和左右区域显隐状态。
+- **仍未对齐 WPF**:
+  - 没有完整复刻 `GridSplitterBox` 的折叠菜单阈值切换、菜单窄栏模式、WPF 原始 Toggle 外观。
+  - 也不再使用 `QDockWidget` 浮动/停靠，因此此项应理解为“布局语义更接近 WPF”，不是“通用 dock 行为 100% 完成”。
+- **完成标记**: 部分完成
 
 #### P1-3 工具箱面板
 - **C# 源**: `H.Controls.FavoriteBox`, `H.Controls.TreeListView`
 - **当前 Python 文件**: `gui/toolbox_panel.py`, `core/node_group.py`, `core/plugin_manager.py`
-- **真实状态**: 🟢 已完成
-- **进度(审计估算)**: 100%
-- **已落地**: 树形分组、搜索、双击创建、收藏系统、上下文菜单、节点自动发现bootstrap。
+- **真实状态**: 🟡 部分完成
+- **进度(审计估算)**: 84%
+- **已落地**: 图标卡片分组、中文节点名、搜索、收藏系统、右键菜单、拖拽到画布、节点自动发现 bootstrap。
 - **2026-06-04 修复内容**:
-  - 重写 `gui/toolbox_panel.py`，新增收藏系统(★收藏分组/添加/移除/持久化到QSettings)
-  - 新增分组颜色图标(14种分组配色)
-  - 新增右键上下文菜单(创建节点/添加收藏/取消收藏)
-  - `main.py` 启动时调用 `plugin_manager.discover_nodes_package()` 自动发现节点
-  - 新增 Unicode 图标(14种分组图标)、统计栏(分组数+节点数+收藏数)
-  - 新增 QStackedWidget 树形/列表双视图切换(📂/📋按钮)
-  - 列表视图支持分组标题+搜索+右键菜单+双击创建
-- **完成标记**: ✅ 已完成
+  - `gui/toolbox_panel.py` 从树/文件夹视图改为图标卡片式分组展示，更贴近 WPF 左侧节点资源区，而不是“文件夹 + 英文类名”。
+  - 每个节点卡片优先显示节点实例的中文 `name`；当前 smoke test 已验证首项显示为 `摄像头` 而不是 `CameraCaptureNodeData`。
+  - 节点卡片支持右键收藏/取消收藏、双击创建，以及拖拽到 `DiagramEditorView` 画布。
+  - `main.py` 启动时继续调用 `plugin_manager.discover_nodes_package()` 自动发现节点。
+  - 修复 `SrcFilesVisionNodeData` 初始化顺序后，源节点工具箱展示与拖拽创建已恢复稳定。
+- **仍未对齐 WPF**:
+  - 仍未复刻 WPF 的 FontIcon 样式、窄栏 ContextMenu Presenter、精确的卡片模板、动画与边距。
+  - 当前使用 emoji/字符型图标作为近似，不是 WPF 原始图标资源。
+- **完成标记**: 部分完成
 
 #### P1-4 属性面板
 - **C# 源**: `H.Controls.Form.PropertyItem`, `H.Controls.PropertyGrid`
@@ -708,19 +708,21 @@ Phase 1 (P0): 基础架构 ✅ 已完成 (2026-06-04)
        core/node_group.py, core/registry.py, core/workflow.py,
        core/plugin_manager.py, core/project.py, main.py, gui/main_window.py (stub)
 
-Phase 2 (P1): 主界面 ✅ 100% 全部完成 (2026-06-04)
-  P1-1 ✅ 100% 主窗口布局(完整Caption+CommandBar+Left/Center/Right/Bottom+StatusBar)
-  P1-2 ✅ 100% QDockWidget停靠(左右面板可浮动/停靠/关闭+QSettings持久化)
-  P1-3 ✅ 100% 工具箱(收藏+Unicode图标+统计+双视图切换+搜索+上下文菜单)
+Phase 2 (P1): 主界面 🟡 持续修复中 (2026-06-04)
+  P1-1 🟡 82% 主窗口：已改为显式三栏 splitter，右侧为多流程图独立画布，区域语义基本对上
+  P1-2 🟡 65% 分割布局：已支持左右/底部显隐与持久化，但未完整复刻 WPF GridSplitterBox 行为
+  P1-3 🟡 84% 工具箱：已改为图标卡片 + 中文节点名 + 收藏 + 拖拽到画布，但图标模板仍非 WPF 原样
   P1-4 ✅ 100% 属性面板(EditorRegistry+5编辑器+Property元数据+校验反馈)
   P1-5 ✅ 100% 日志面板(来源追踪+导出+message_center三模式+日志跳转节点)
   P1-6 ✅ 100% 图像查看器(OverlayModel+zoom_to_rect动画+视频帧+选中高亮)
   P1-7 ✅ 100% 结果面板(三区拆分+ValueResultPresenter+DataGridResultPresenter)
-  新增文件: gui/dock_manager.py, gui/message_center.py, core/result_presenter.py
-  重写文件: gui/main_window.py(3轮), gui/toolbox_panel.py, gui/property_panel.py,
-           gui/log_panel.py, gui/image_viewer.py, gui/result_panel.py
-  修改文件: core/node_base.py(Property扩展), main.py(节点bootstrap)
-  验证: 9个文件全部通过 py_compile 语法检查
+  新增/重构: gui/main_window.py(显式 splitter + 多流程图独立 editor), gui/toolbox_panel.py(图标卡片拖拽)
+  修复文件: core/node_base.py(SrcFilesVisionNodeData 初始化顺序), main.py(节点 bootstrap)
+  本轮验证:
+    - `main_window.py` / `toolbox_panel.py` / `core/node_base.py` 通过 `py_compile`
+    - headless smoke test 通过：主窗口三栏/底部页签/右侧流程图页初始化成功
+    - headless smoke test 通过：左侧中文图标节点可拖放到画布并真实创建节点
+    - headless smoke test 通过：新增第二个流程图后拥有独立 editor，左右区域显隐正常
 
 Phase 3 (P2): 节点编辑器 🟡 部分修复 (2026-06-04)
   P2-1 🟡 75% 画布场景：已修复 scene/workflow 连线同步、reload 不再清空 workflow、拖拽建线+undo/redo 可用
@@ -820,8 +822,8 @@ Pillow>=10.0.0
 
 ---
 
-*最后更新: 2026-06-04（审计回写 + P2 节点编辑器稳定性修复）*
-*当前阶段: 当前仓库**尚未达到** WPF-VisionMaster 完整功能 / 完整 UI / 像素级一致。更准确的结论是：Python 版本已有较完整骨架与多项可运行功能，但主界面结构、运行模式、项目系统、默认项目、资源数量、图标/样式细节、节点编辑器 Presenter 级交互仍有显著差距。*
-*本轮修复: P2-1~P2-5 的核心运行问题已修复一批（连线同步、reload 保真、节点/端口/连线图元崩溃、MiniMap 点击导航、workflow 运行态联动）；同时已复制 WPF 应用 logo 资源到 `assets/icons/` 并接入应用入口 / 启动页。P2 当前应记为“部分修复”，不能记为 100%。*
+*最后更新: 2026-06-04（P1 主窗口第二轮区域重构 + 左栏图标拖拽修复）*
+*当前阶段: 当前仓库**仍未达到** WPF-VisionMaster 完整功能 / 完整 UI / 像素级一致。更准确的结论是：本轮已把 P1 主窗口从“近似布局”推进到“区域语义更接近 WPF”，并补上左侧中文图标节点栏、拖拽到画布、多流程图独立画布；但字体、图标资源、Tab 模板、GridSplitterBox 行为、图像区装饰条与像素级视觉仍有明显差距。*
+*本轮修复: `gui/main_window.py` 改为显式三栏 splitter；`gui/toolbox_panel.py` 改为图标卡片式节点栏并支持拖拽建节点；`core/node_base.py` 修复 `SrcFilesVisionNodeData` 初始化顺序，消除源节点实例化/拖拽崩溃。P1 当前应记为“部分修复”，不能记为 100%。*
 
 

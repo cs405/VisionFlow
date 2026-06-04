@@ -233,6 +233,9 @@ class NodeBase(ABC):
         self._text = ""
         self._title = ""
 
+        # Property change callbacks
+        self._property_callbacks: dict[str, list[Callable]] = {}
+
         # Styling (from StyleNodeDataBase)
         self.width: float = 120.0
         self.height: float = 35.0
@@ -261,9 +264,6 @@ class NodeBase(ABC):
 
         # Order for toolbox sorting
         self.order: int = 0
-
-        # Property change callbacks
-        self._property_callbacks: dict[str, list[Callable]] = {}
 
         self.load_default()
 
@@ -1073,9 +1073,9 @@ class SrcFilesVisionNodeData(ROINodeData):
     src_file_path = Property("", name="当前文件", group=PropertyGroupNames.RUN_PARAMETERS)
 
     def __init__(self):
+        self.src_file_paths: list[str] = []
         super().__init__()
         self.use_start = True  # This node can be a flow start node
-        self.src_file_paths: list[str] = []
 
     def add_files_from_folder(self, folder_path: str, image_extensions: tuple = None):
         """Add all image files from a folder."""
