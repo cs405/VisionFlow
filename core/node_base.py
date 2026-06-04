@@ -62,16 +62,36 @@ class Property:
         [Display(Name="...", GroupName="...")]
         [DefaultValue(...)]
         public T PropertyName { get => _field; set { _field=value; RaisePropertyChanged(); } }
+
+    Extended metadata for the property panel:
+      - editor: str | None  -> hint for custom editor ("color", "roi", "file", "slider", "choices")
+      - choices: list | None -> dropdown choices
+      - min_val / max_val: range constraints
+      - validator: callable | None -> validation function (value) -> (bool, str)
+      - step: float -> step for spin boxes
+      - decimals: int -> decimal places for float display
     """
 
     def __init__(self, default: Any = None, *, name: str = "", group: str = "",
-                 description: str = "", readonly: bool = False, order: int = 0):
+                 description: str = "", readonly: bool = False, order: int = 0,
+                 editor: str = "", choices: list = None,
+                 min_val: Any = None, max_val: Any = None,
+                 validator: callable = None,
+                 step: float = 0.1, decimals: int = 3):
         self.default = default
         self.display_name = name
         self.group = group
         self.description = description
         self.readonly = readonly
         self.order = order
+        # Extended metadata
+        self.editor = editor
+        self.choices = choices or []
+        self.min_val = min_val
+        self.max_val = max_val
+        self.validator = validator
+        self.step = step
+        self.decimals = decimals
 
     def __set_name__(self, owner, name):
         self.attr_name = f"_{name}"

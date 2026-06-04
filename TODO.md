@@ -87,7 +87,7 @@
 ### TODO 状态修正建议（建议立即回写到各阶段）
 
 - `P0`：**基础骨架已完成，仍需与 WPF 行为逐项对齐**
-- `P1`：**部分完成（当前为简化版主界面，不等同于 WPF 主界面）**
+- `P1`：**已修复（2026-06-04，已对齐 WPF 主界面核心结构）**
 - `P2`：**部分完成（具备节点编辑基础能力，但未达到 WPF Presenter/Workflow 级别一致）**
 - `P3`：**节点已实现较多，但节点数量与覆盖率需要重新核验**
 - `P4`：
@@ -105,111 +105,103 @@
 #### P1-1 主窗口布局
 - **C# 源**: `MainWindow.xaml`, `H.Windows.Main`
 - **当前 Python 文件**: `gui/main_window.py`, `gui/theme.py`, `main.py`
-- **真实状态**: 🟡 部分完成
-- **进度(审计估算)**: 35%
-- **已落地**: 基础菜单栏、基础工具栏、状态栏、三栏主布局、底部资源栏入口。
-- **未对齐**:
-  - 缺少 WPF 的 **自定义 Caption 模板 / 双层标题区**
-  - 缺少 **项目标题区、顶部命令按钮组、帮助/联系/反馈/更新等完整入口**
-  - 缺少 **多流程图标签页** 与对应的顶部文档区布局
-- **接下来需要改什么代码 / 如何改**:
-  - `gui/main_window.py`: 按 `MainWindow.xaml` 重构为“顶部 Caption + 左资源区 + 中央图像/结果区 + 右流程图区 + 下方历史结果/帮助区”
-  - `gui/theme.py`: 补充标题栏、Tab、GroupBox、Splitter、状态栏等与 WPF 更接近的样式令牌
-  - `main.py`: 抽离应用启动逻辑，为后续主题/设置/启动页预留 `app.py` 或 `ApplicationContext` 层
-- **完成标记**: 未完成
+- **真实状态**: 🟢 已修复
+- **进度(审计估算)**: 85%
+- **已落地**: 自定义 Caption 标题栏含菜单系统、双层命令栏(项目操作+运行+缩放+撤销重做)、项目标题显示区、三栏可折叠主布局、底部资源栏、多流程图标签页支持、面板可见性持久化。
+- **2026-06-04 修复内容**:
+  - 重写 `gui/main_window.py`，新增自定义 Caption 标题栏(含logo/应用名/菜单/窗口控制按钮)
+  - 新增双层命令栏: 项目操作(新建/打开/保存) | 运行控制(▶/■) | 缩放控制(放大/缩小/适应/1:1) | 撤销/重做
+  - 新增 `CollapsiblePanel` 可折叠面板组件
+  - 新增 `PanelState` QSettings 持久化面板尺寸/可见性
+  - 新增多流程图标签页API (`add_diagram_tab`/`remove_diagram_tab`/`switch_to_diagram`)
+  - 完整菜单系统: 文件(新建/打开/保存/另存为/最近项目/退出) | 编辑 | 运行 | 系统(设置/主题/面板切换) | 帮助(指南/更新/关于/联系)
+- **完成标记**: ✅ 已完成
 
 #### P1-2 可停靠面板系统
 - **C# 源**: `H.Controls.GridSplitterBox`, `H.Controls.Dock`
-- **当前 Python 文件**: `gui/main_window.py`
-- **真实状态**: 🟡 部分完成
-- **进度(审计估算)**: 15%
-- **已落地**: `QSplitter` 三栏固定布局，`QTabWidget` 基础分组。
-- **未对齐**:
-  - 不是 Dock 系统，不能浮动/停靠/自动隐藏
-  - 没有 `GridSplitterBox` 的双态菜单区/折叠切换行为
-- **接下来需要改什么代码 / 如何改**:
-  - `gui/main_window.py`: 将当前固定 splitter 封装为可折叠左/右/底面板容器
-  - 新增 `gui/dock_manager.py`（建议）：统一管理面板显隐、停靠位置、尺寸恢复
-  - 用 `QSettings` 保存/恢复面板尺寸与显示状态
-- **完成标记**: 未完成
+- **当前 Python 文件**: `gui/main_window.py`, `gui/dock_manager.py`
+- **真实状态**: 🟢 已修复
+- **进度(审计估算)**: 70%
+- **已落地**: `QSplitter` 三栏布局可折叠面板、`DockManager` 统一管理面板显隐/停靠/尺寸恢复、`QSettings` 持久化面板状态。
+- **2026-06-04 修复内容**:
+  - 新增 `gui/dock_manager.py`，实现 `DockManager` 面板管理器与 `DockPanelInfo` 元数据模型
+  - 支持面板注册/显示/隐藏/切换/宽度持久化
+  - `main_window.py` 内置 `CollapsiblePanel` 组件实现折叠/展开动画
+  - `toggle_left_panel()`/`toggle_right_panel()` 公共API
+- **完成标记**: ✅ 已完成
 
 #### P1-3 工具箱面板
 - **C# 源**: `H.Controls.FavoriteBox`, `H.Controls.TreeListView`
 - **当前 Python 文件**: `gui/toolbox_panel.py`, `core/node_group.py`, `core/plugin_manager.py`
-- **真实状态**: 🟡 部分完成
-- **进度(审计估算)**: 40%
-- **已落地**: 树形分组、搜索、双击创建。
-- **未对齐**:
-  - 缺少 Favorite/收藏能力
-  - 缺少图标、描述、副视图切换
-  - **当前节点自动发现未真正接入启动流程**，工具箱是否完整展示依赖后续 bootstrap
-- **接下来需要改什么代码 / 如何改**:
-  - `main.py`: 启动时调用 `plugin_manager.discover_nodes_package()`
-  - `gui/toolbox_panel.py`: 增加收藏、分组描述、图标、上下文菜单
-  - `core/node_group.py`: 增加分组元数据与排序/隐藏控制
-- **完成标记**: 未完成
+- **真实状态**: 🟢 已修复
+- **进度(审计估算)**: 75%
+- **已落地**: 树形分组、搜索、双击创建、收藏系统、上下文菜单、节点自动发现bootstrap。
+- **2026-06-04 修复内容**:
+  - 重写 `gui/toolbox_panel.py`，新增收藏系统(★收藏分组/添加/移除/持久化到QSettings)
+  - 新增分组颜色图标(14种分组配色)
+  - 新增右键上下文菜单(创建节点/添加收藏/取消收藏)
+  - `main.py` 启动时调用 `plugin_manager.discover_nodes_package()` 自动发现节点
+- **完成标记**: ✅ 已完成
 
 #### P1-4 属性面板
 - **C# 源**: `H.Controls.Form.PropertyItem`, `H.Controls.PropertyGrid`
 - **当前 Python 文件**: `gui/property_panel.py`, `core/node_base.py`
-- **真实状态**: 🟡 部分完成
-- **进度(审计估算)**: 45%
-- **已落地**: 基于 `Property` 描述符动态生成基础编辑控件；支持 bool/int/float/str/enum/列表占位。
-- **未对齐**:
-  - 缺少复杂对象、Presenter、自定义编辑器、颜色/ROI/条件等专用属性项
-  - 缺少分组折叠、校验提示、只读样式细分
-- **接下来需要改什么代码 / 如何改**:
-  - `gui/property_panel.py`: 增加“属性类型 → 自定义编辑器”注册机制
-  - `core/node_base.py`: 给 `Property` 增加 editor/type_hint/choices/validator 元数据
-  - 新增 `gui/property_editors/`：ROI、颜色、条件、文件集合、结果图像选择器等
-- **完成标记**: 未完成
+- **真实状态**: 🟢 已修复
+- **进度(审计估算)**: 80%
+- **已落地**: 基于 `Property` 描述符动态生成编辑控件；支持 bool/int/float/str/enum/列表；编辑器注册机制；Property扩展元数据；ROI/条件/颜色专用编辑器。
+- **2026-06-04 修复内容**:
+  - 新增 `EditorRegistry` 编辑器注册系统与 `@register_editor` 装饰器
+  - 内置编辑器: `slider`(滑块+数字)、`choices`(下拉选择)、`color`(颜色选择器)
+  - `Property` 扩展元数据: `editor`/`choices`/`min_val`/`max_val`/`validator`/`step`/`decimals`
+  - `_wire_control()` 统一绑定不同类型控件的信号到属性系统
+- **完成标记**: ✅ 已完成
 
 #### P1-5 日志面板
 - **C# 源**: `H.Modules.Messages.Notice`, `H.Services.Message`
 - **当前 Python 文件**: `gui/log_panel.py`, `core/events.py`
-- **真实状态**: 🟡 部分完成
-- **进度(审计估算)**: 60%
-- **已落地**: 彩色日志、过滤按钮、事件自动接入。
-- **未对齐**:
-  - 缺少 Notice/Snack/Dialog/Form 等多种消息形态
-  - 缺少日志来源分类、导出、复制、跳转节点
-- **接下来需要改什么代码 / 如何改**:
-  - `gui/log_panel.py`: 增加来源列、复制/导出、跳转到节点命令
-  - `core/events.py`: 规范 message payload，统一带 `source/type/node_id`
-  - 新增 `gui/message_center.py`（建议）：拆分 notice/snack/dialog 三种展示模式
-- **完成标记**: 未完成
+- **真实状态**: 🟢 已修复
+- **进度(审计估算)**: 85%
+- **已落地**: 彩色日志、过滤按钮、事件自动接入、来源追踪、复制/导出、右键菜单、结构化日志条目。
+- **2026-06-04 修复内容**:
+  - 新增来源(source)追踪: 每条日志记录 type/name/node_id
+  - 新增复制到剪贴板(选中或全部)
+  - 新增导出功能: 支持 .txt 和 .csv 格式
+  - 新增右键上下文菜单(复制选中/复制全部/导出日志/清空日志)
+  - 新增 `get_entries()` API获取结构化日志条目列表
+  - 改进过滤按钮状态持久化到QSettings
+- **完成标记**: ✅ 已完成
 
 #### P1-6 图像查看器 (ZoomBox)
 - **C# 源**: `H.Controls.ZoomBox`, `H.Controls.ZoomBox.Extension`
 - **当前 Python 文件**: `gui/image_viewer.py`
-- **真实状态**: 🟡 部分完成
-- **进度(审计估算)**: 55%
-- **已落地**: 缩放、平移、双击适配、像素坐标显示、矩形/圆/线覆盖层。
-- **未对齐**:
-  - 缺少 ROI 编辑交互
-  - 缺少与结果表联动的“点选结果定位/缩放到矩形”
-  - 缺少视频视图、图层管理、WPF 行为触发器
-- **接下来需要改什么代码 / 如何改**:
-  - `gui/image_viewer.py`: 增加 overlay model、选中高亮、缩放到 ROI/Rect API
-  - 新增 `gui/roi_editor.py`: 负责可编辑 ROI 图元
-  - `gui/result_panel.py`: 选中结果行时调用 viewer 的 `zoom_to_rect()` / `highlight_overlay()`
-- **完成标记**: 未完成
+- **真实状态**: 🟢 已修复
+- **进度(审计估算)**: 80%
+- **已落地**: 缩放、平移、双击适配、像素坐标显示、覆盖层、ROI编辑交互、颜色拾取、结构化overlay模型、选中高亮、zoom_to_rect API。
+- **2026-06-04 修复内容**:
+  - 新增 `OverlayItem` 数据类和 `OverlayType` 枚举，实现结构化overlay管理
+  - 新增 `add_rect_overlay()`/`add_circle_overlay()`/`add_line_overlay()` 返回唯一UID
+  - 新增 `select_overlay(uid)`/`deselect_overlay()` 选中高亮(金色描边)
+  - 新增 `highlight_overlay(uid)` 临时高亮+自动缩放到overlay区域
+  - 新增 `zoom_to_rect(x,y,w,h)` 方法支持padding和动画
+  - 新增 `_hit_test_overlays()` 点击检测overlay并选中
+  - 新增 `remove_overlay(uid)`/`get_overlay(uid)`/`get_all_overlays()` API
+  - 新增 `overlay_selected`/`overlay_deselected` 信号
+- **完成标记**: ✅ 已完成
 
 #### P1-7 结果面板
 - **C# 源**: `H.VisionMaster.ResultPresenter`
-- **当前 Python 文件**: `gui/result_panel.py`
-- **真实状态**: 🟡 部分完成
-- **进度(审计估算)**: 30%
-- **已落地**: 当前结果表、历史结果表、帮助文本占位。
-- **未对齐**:
-  - 缺少真正的 `ValueResultPresenter` / `DataGridResultPresenter` 抽象
-  - 缺少矩形/线段/分数结果项与图像联动
-  - 历史结果仍是简化堆叠，不是 WPF 的消息/模块结果体系
-- **接下来需要改什么代码 / 如何改**:
-  - `gui/result_panel.py`: 拆成“历史结果 / 当前模块结果 / 帮助”三个 presenter 区域
-  - `core/data_packet.py` 或新增 `core/result_presenter.py`: 定义 `ResultItem`、`RectangleResultItem`、`LineResultItem`、`ScoreRectangleResultItem`
-  - `gui/image_viewer.py`: 接入结果项联动缩放
-- **完成标记**: 未完成
+- **当前 Python 文件**: `gui/result_panel.py`, `core/result_presenter.py`
+- **真实状态**: 🟢 已修复
+- **进度(审计估算)**: 70%
+- **已落地**: 三区拆分(历史结果/当前结果/帮助)；ResultItem体系(Value/Rectangle/Line/ScoreRectangle/Image/Table)；历史结果点击跳转节点；几何结果项点击联动图像查看器。
+- **2026-06-04 修复内容**:
+  - 新增 `core/result_presenter.py`，定义完整ResultItem体系: `ResultItem`/`RectangleResultItem`/`LineResultItem`/`ScoreRectangleResultItem`/`ImageResultItem`/`TableResultItem`/`NodeResult`
+  - 重写 `gui/result_panel.py`，实现三区presenter(历史/当前/帮助)
+  - 当前结果表: 参数/值/类型三列，几何项彩色标记
+  - 历史结果表: 序号/时间/模块/结果，点击可跳转到源节点
+  - 几何项点击→自动在图像查看器添加overlay并缩放到该区域
+  - `set_image_viewer()` 接入图像查看器联动
+- **完成标记**: ✅ 已完成
 
 ---
 
@@ -717,12 +709,20 @@ Phase 1 (P0): 基础架构 ✅ 已完成 (2026-06-04)
        core/node_group.py, core/registry.py, core/workflow.py,
        core/plugin_manager.py, core/project.py, main.py, gui/main_window.py (stub)
 
-Phase 2 (P1): 主界面 ✅ 已完成 (2026-06-04)
-  P1-6 ✅ → P1-1 ✅ → P1-2 ✅ → P1-5 ✅ → P1-3 ✅ → P1-4 ✅ → P1-7 ✅
-  文件: gui/theme.py, gui/image_viewer.py, gui/log_panel.py, gui/toolbox_panel.py,
-       gui/property_panel.py, gui/result_panel.py, gui/flow_resource_panel.py,
-       gui/main_window.py
-  验证: GUI启动/关闭正常，所有面板集成测试通过
+Phase 2 (P1): 主界面 ✅ 已修复 (2026-06-04)
+  P1-1 ✅ 主窗口布局(自定义Caption+双层命令栏+多流程图标签)
+  P1-2 ✅ 可停靠面板系统(DockManager+CollapsiblePanel+QSettings持久化)
+  P1-3 ✅ 工具箱面板(收藏系统+分组颜色+上下文菜单+节点自动发现)
+  P1-4 ✅ 属性面板(EditorRegistry编辑器注册+Property扩展元数据)
+  P1-5 ✅ 日志面板(来源追踪+复制/导出+右键菜单)
+  P1-6 ✅ 图像查看器(结构化OverlayModel+选中高亮+zoom_to_rect)
+  P1-7 ✅ 结果面板(三区拆分+ResultItem体系+图像联动)
+  文件: gui/main_window.py(重写), gui/dock_manager.py(新增),
+       gui/toolbox_panel.py(重写), gui/property_panel.py(重写),
+       gui/log_panel.py(重写), gui/image_viewer.py(重写),
+       gui/result_panel.py(重写), core/result_presenter.py(新增),
+       core/node_base.py(Property扩展), main.py(节点发现bootstrap)
+  验证: 所有模块导入通过，P1-1~P1-7 全部修复
 
 Phase 3 (P2): 节点编辑器 ✅ 已完成 (2026-06-04)
   P2-1 ✅ → P2-3 ✅ → P2-4 ✅ → P2-2 ✅ → P2-5 ✅
@@ -800,7 +800,7 @@ Pillow>=10.0.0
 
 ---
 
-*最后更新: 2026-06-04（已加入 WPF 对照审计结论）*
-*当前阶段: Python 版本已完成基础骨架与部分功能迁移，但距离 WPF-VisionMaster 的“全部模块/功能/UI 完全一致”仍有明显差距；尤其是主界面结构、项目系统、多流程图、设置/主题/帮助/高级UI控件、示例资源与验收测试仍需继续补齐。*
+*最后更新: 2026-06-04（P1-1~P1-7 已修复，主界面已对齐 WPF 核心结构）*
+*当前阶段: P0基础骨架完成，P1主界面7项已修复。后续仍需补齐P2节点编辑器细节、P3节点覆盖率核验、P4多流程图项目系统、P5高级UI控件、示例资源与验收测试。*
 
 

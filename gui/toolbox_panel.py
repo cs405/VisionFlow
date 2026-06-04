@@ -1,29 +1,59 @@
-"""Toolbox panel - tree/grid display of available nodes.
+"""Toolbox panel - tree/grid display of available nodes with favorites.
 
 Ported from H.Controls.FavoriteBox + H.Controls.TreeListView.
-Shows nodes grouped by category. Supports drag to canvas.
+Shows nodes grouped by category. Supports favorites, search, and context menu.
 """
 
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QTreeWidget, QTreeWidgetItem,
-                              QLineEdit, QHBoxLayout, QLabel, QApplication)
-from PyQt5.QtCore import Qt, pyqtSignal, QMimeData
-from PyQt5.QtGui import QDrag, QFont, QColor
+                              QLineEdit, QHBoxLayout, QLabel, QApplication,
+                              QMenu, QAction, QToolButton)
+from PyQt5.QtCore import Qt, pyqtSignal, QSettings
+from PyQt5.QtGui import QFont, QColor, QIcon
 
 from core.node_group import node_data_group_manager, NodeGroup
 from core.registry import node_registry
 
 
+# Group color indicators (matching WPF node group colors)
+GROUP_COLORS = {
+    "数据源": "#4a9eff",
+    "图像预处理": "#ff8c00",
+    "滤波模糊": "#9c27b0",
+    "图像分割": "#e91e63",
+    "形态学": "#00bcd4",
+    "条件": "#ff5722",
+    "模板匹配": "#4caf50",
+    "检测": "#f44336",
+    "特征提取": "#ff9800",
+    "其他": "#607d8b",
+    "视频": "#795548",
+    "输出": "#607d8b",
+    "ONNX": "#e91e63",
+    "网络通讯": "#795548",
+}
+
+
 class ToolboxPanel(QWidget):
     """Left panel showing available node types in categorized groups.
 
-    Supports dragging nodes onto the canvas to create them.
+    Features:
+      - Tree view with categorized groups
+      - Favorites section with persistent storage
+      - Search/filter
+      - Context menu (add to favorites, create node)
+      - Double-click to create node
     """
 
-    # Emitted when a node type is selected (for drag-drop or double-click creation)
     node_type_selected = pyqtSignal(str)  # node type name
+    favorites_changed = pyqtSignal()
+
+    FAVORITES_KEY = "Toolbox/Favorites"
+    FAVORITES_GROUP_NAME = "★ 收藏"
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._favorites: list[str] = []
+        self._load_favorites()
         self._setup_ui()
         self._load_groups()
 
@@ -32,32 +62,50 @@ class ToolboxPanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Title
-        title = QLabel("  流程功能列表")
-        title.setStyleSheet("""
-            QLabel {
-                background: #2d2d30;
-                color: #dcdcdc;
-                padding: 8px;
-                font-size: 13px;
-                font-weight: bold;
-                border-bottom: 1px solid #3f3f46;
-            }
-        """)
-        layout.addWidget(title)
+        # Title bar
+        header = QWidget()
+        header.setFixedHeight(32)
+        header.setStyleSheet("background: #2d2d30; border-bottom: 1px solid #3f3f46;")
+        h_layout = QHBoxLayout(header)
+        h_layout.setContentsMargins(8, 0, 4, 0)
+        h_layout.setSpacing(4)
+
+        title = QLabel("流程功能列表")
+        title.setStyleSheet("color: #dcdcdc; font-size: 12px; font-weight: bold;")
+        h_layout.addWidget(title, 1)
+
+        # View toggle buttons
+        btn_style = """
+            QToolButton { background: transparent; border: none; color: #999; padding: 2px 4px; }
+            QToolButton:hover { color: #dcdcdc; }
+            QToolButton:checked { color: #0078d4; }
+        """
+        self._tree_btn = QToolButton()
+        self._tree_btn.setText("📂")
+        self._tree_btn.setToolTip("树形视图")
+        self._tree_btn.setCheckable(True)
+        self._tree_btn.setChecked(True)
+        self._tree_btn.setStyleSheet(btn_style)
+        h_layout.addWidget(self._tree_btn)
+
+        refresh_btn = QToolButton()
+        refresh_btn.setText("↻")
+        refresh_btn.setToolTip("刷新列表")
+        refresh_btn.setStyleSheet(btn_style)
+        refresh_btn.clicked.connect(self.refresh)
+        h_layout.addWidget(refresh_btn)
+
+        layout.addWidget(header)
 
         # Search box
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText("搜索模块...")
         self.search_box.setStyleSheet("""
             QLineEdit {
-                background: #333337;
-                color: #dcdcdc;
-                border: none;
-                border-bottom: 1px solid #3f3f46;
-                padding: 6px 8px;
-                font-size: 12px;
+                background: #333337; color: #dcdcdc; border: none;
+                border-bottom: 1px solid #3f3f46; padding: 6px 8px; font-size: 12px;
             }
+            QLineEdit:focus { border-bottom: 1px solid #0078d4; }
         """)
         self.search_box.textChanged.connect(self._on_search)
         layout.addWidget(self.search_box)
@@ -65,50 +113,115 @@ class ToolboxPanel(QWidget):
         # Tree widget
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
-        self.tree.setIndentation(12)
+        self.tree.setIndentation(14)
         self.tree.setDragEnabled(True)
         self.tree.setDragDropMode(self.tree.DragOnly)
         self.tree.setFont(QFont("Segoe UI", 10))
+        self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tree.customContextMenuRequested.connect(self._on_context_menu)
         self.tree.itemDoubleClicked.connect(self._on_item_double_clicked)
         layout.addWidget(self.tree)
 
+    # ── Favorites ────────────────────────────────────────────────────
+
+    def _load_favorites(self):
+        settings = QSettings()
+        raw = settings.value(self.FAVORITES_KEY, [])
+        if isinstance(raw, str):
+            raw = [raw] if raw else []
+        self._favorites = list(raw) if raw else []
+
+    def _save_favorites(self):
+        settings = QSettings()
+        settings.setValue(self.FAVORITES_KEY, self._favorites)
+        settings.sync()
+        self.favorites_changed.emit()
+
+    def is_favorite(self, type_name: str) -> bool:
+        return type_name in self._favorites
+
+    def add_favorite(self, type_name: str):
+        if type_name and type_name not in self._favorites:
+            self._favorites.append(type_name)
+            self._save_favorites()
+            self._load_groups()
+
+    def remove_favorite(self, type_name: str):
+        if type_name in self._favorites:
+            self._favorites.remove(type_name)
+            self._save_favorites()
+            self._load_groups()
+
+    def toggle_favorite(self, type_name: str):
+        if self.is_favorite(type_name):
+            self.remove_favorite(type_name)
+        else:
+            self.add_favorite(type_name)
+
+    # ── Tree Population ──────────────────────────────────────────────
+
     def _load_groups(self):
-        """Load all node groups into the tree."""
+        """Load all node groups into the tree, favorites first."""
         self.tree.clear()
 
+        # Favorites section
+        if self._favorites:
+            fav_group = QTreeWidgetItem(self.tree)
+            fav_group.setText(0, self.FAVORITES_GROUP_NAME)
+            fav_group.setData(0, Qt.UserRole, "")
+            fav_group.setFlags(fav_group.flags() & ~Qt.ItemIsDragEnabled)
+            fav_font = QFont("Segoe UI", 10, QFont.Bold)
+            fav_group.setFont(0, fav_font)
+            fav_group.setForeground(0, QColor("#ffd700"))
+
+            for type_name in self._favorites:
+                node_type = node_registry.get_type(type_name)
+                if node_type:
+                    self._add_node_item(fav_group, node_type, is_fav=True)
+
+            fav_group.setExpanded(True)
+
+        # Regular groups
         for group in node_data_group_manager.get_all_groups():
             if not group.node_types:
                 continue
 
             group_item = QTreeWidgetItem(self.tree)
-            group_item.setText(0, f"{group.name}  ({len(group.node_types)})")
-            group_item.setData(0, Qt.UserRole, "")  # Empty = it's a group, not a node
+            count = len(group.node_types)
+            group_item.setText(0, f"{group.name}  ({count})")
+            group_item.setData(0, Qt.UserRole, "")  # empty = group
             group_item.setFlags(group_item.flags() & ~Qt.ItemIsDragEnabled)
 
-            # Style the group header
             font = QFont("Segoe UI", 10, QFont.Bold)
             group_item.setFont(0, font)
-            group_item.setForeground(0, QColor("#0078d4"))
+            color = GROUP_COLORS.get(group.name, "#dcdcdc")
+            group_item.setForeground(0, QColor(color))
 
             for node_type in group.node_types:
-                node_item = QTreeWidgetItem(group_item)
-                # display_name is a property descriptor on the class; use __name__ as fallback
-                dn = node_type.__name__
-                node_item.setText(0, dn)
-                node_item.setData(0, Qt.UserRole, node_type.__name__)
-                node_item.setToolTip(0, (node_type.__doc__ or '') or group.description)
-
-                # Color based on group category
-                node_item.setForeground(0, QColor("#dcdcdc"))
+                self._add_node_item(group_item, node_type)
 
             group_item.setExpanded(True)
 
+    def _add_node_item(self, parent: QTreeWidgetItem, node_type: type, is_fav: bool = False):
+        """Add a single node type entry under a group."""
+        dn = node_type.__name__
+        item = QTreeWidgetItem(parent)
+        item.setText(0, f"  {dn}")
+        item.setData(0, Qt.UserRole, node_type.__name__)
+        item.setToolTip(0, (node_type.__doc__ or "").strip() or dn)
+
+        # Visual distinction for favorites
+        if is_fav:
+            item.setForeground(0, QColor("#ffd700"))
+        else:
+            item.setForeground(0, QColor("#dcdcdc"))
+
+    # ── Search ───────────────────────────────────────────────────────
+
     def _on_search(self, text: str):
-        """Filter tree items by search text."""
         for i in range(self.tree.topLevelItemCount()):
             group_item = self.tree.topLevelItem(i)
             group_visible = False
-
             for j in range(group_item.childCount()):
                 child = group_item.child(j)
                 if not text or text.lower() in child.text(0).lower():
@@ -116,21 +229,55 @@ class ToolboxPanel(QWidget):
                     group_visible = True
                 else:
                     child.setHidden(True)
-
             group_item.setHidden(not group_visible)
 
+    # ── Context Menu ─────────────────────────────────────────────────
+
+    def _on_context_menu(self, pos):
+        item = self.tree.itemAt(pos)
+        if item is None:
+            return
+
+        type_name = item.data(0, Qt.UserRole)
+        if not type_name:
+            return  # it's a group header
+
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu { background: #2d2d30; color: #dcdcdc; border: 1px solid #505050; }
+            QMenu::item { padding: 6px 20px; }
+            QMenu::item:selected { background: #0078d4; }
+        """)
+
+        create_act = QAction("创建节点", self)
+        create_act.triggered.connect(lambda: self.node_type_selected.emit(type_name))
+        menu.addAction(create_act)
+
+        menu.addSeparator()
+
+        if self.is_favorite(type_name):
+            fav_act = QAction("★ 取消收藏", self)
+            fav_act.triggered.connect(lambda: self.remove_favorite(type_name))
+        else:
+            fav_act = QAction("☆ 添加到收藏", self)
+            fav_act.triggered.connect(lambda: self.add_favorite(type_name))
+        menu.addAction(fav_act)
+
+        menu.exec_(self.tree.viewport().mapToGlobal(pos))
+
+    # ── Actions ──────────────────────────────────────────────────────
+
     def _on_item_double_clicked(self, item: QTreeWidgetItem, column: int):
-        """Emit signal when a node item is double-clicked."""
         type_name = item.data(0, Qt.UserRole)
         if type_name:
             self.node_type_selected.emit(type_name)
 
     def refresh(self):
-        """Reload groups (e.g., after plugins are loaded)."""
+        """Reload groups (e.g., after plugin discovery)."""
+        self._load_favorites()
         self._load_groups()
 
     def get_selected_node_type(self) -> str | None:
-        """Get the currently selected node type name."""
         items = self.tree.selectedItems()
         if items:
             type_name = items[0].data(0, Qt.UserRole)
