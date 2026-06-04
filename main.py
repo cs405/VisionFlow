@@ -77,6 +77,10 @@ def run_gui(project_path: str = None):
     app.setStyle("Fusion")
     _apply_dark_theme(app)
 
+    # Bootstrap: auto-discover and register all nodes
+    from core.plugin_manager import plugin_manager
+    plugin_manager.discover_nodes_package()
+
     # Create and show main window
     from gui.main_window import MainWindow
     window = MainWindow()
