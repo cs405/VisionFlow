@@ -1,26 +1,27 @@
 """
-节点编辑器主控件 — WPF TabControl风格多流程管理
+WPF TabControl + Zoombox 流程图编辑区精确还原
+- QTabWidget: 多流程切换 + 每Tab有名称+启动/停止/重置按钮
+- Zoombox: QGraphicsView (双击Fit, FitOnSizeChange)
+- 拖拽创建节点 + 拖拽连线交互
 """
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGraphicsView,
-    QTabWidget, QPushButton, QLineEdit, QLabel, QTabBar
+    QTabWidget, QPushButton, QTabBar, QLabel
 )
-from PySide6.QtCore import Qt, QPointF, QTimer, Signal
-from PySide6.QtGui import QPainter, QWheelEvent, QPen, QColor
+from PySide6.QtCore import Qt, QPointF, QTimer
+from PySide6.QtGui import QPainter, QWheelEvent, QPen, QColor, QFont
 
 from core.workflow import Workflow
 from core.events import EventBus, Event, EventType
 from core.registry import NodeRegistry
-
 from .scene import NodeScene
 from .edge_item import GraphicsEdge
-
-from ..theme import Colors, Fonts
+from ..theme import Colors
 
 
 class NodeGraphicsView(QGraphicsView):
-    """节点图形视图 — 支持Ctrl+滚轮缩放和双击适应"""
+    """WPF Zoombox — 双击适应 + Ctrl滚轮缩放"""
 
     def __init__(self, scene: NodeScene, parent=None):
         super().__init__(scene, parent)
@@ -30,158 +31,75 @@ class NodeGraphicsView(QGraphicsView):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
         self.setDragMode(QGraphicsView.RubberBandDrag)
+        self.setStyleSheet(f"background-color: {Colors.SceneBackground.name()}; border: none;")
 
-        self.zoom_factor = 1.15
-        self.min_scale = 0.1
-        self.max_scale = 3.0
+        self._zoom_factor = 1.15
+        self._min_scale = 0.1
+        self._max_scale = 3.0
         self._current_scale = 1.0
 
-    def wheelEvent(self, event: QWheelEvent):
-        if event.modifiers() == Qt.ControlModifier:
-            zoom = self.zoom_factor if event.angleDelta().y() > 0 else 1 / self.zoom_factor
-            new_zoom = self._current_scale * zoom
-            if self.min_scale <= new_zoom <= self.max_scale:
-                self.scale(zoom, zoom)
-                self._current_scale = new_zoom
+    def wheelEvent(self, e: QWheelEvent):
+        if e.modifiers() == Qt.ControlModifier:
+            z = self._zoom_factor if e.angleDelta().y() > 0 else 1 / self._zoom_factor
+            ns = self._current_scale * z
+            if self._min_scale <= ns <= self._max_scale:
+                self.scale(z, z)
+                self._current_scale = ns
         else:
-            super().wheelEvent(event)
+            super().wheelEvent(e)
 
-    def mouseDoubleClickEvent(self, event):
+    def mouseDoubleClickEvent(self, e):
         self.fit_to_bounds()
-        super().mouseDoubleClickEvent(event)
+        super().mouseDoubleClickEvent(e)
+
+    def fit_to_bounds(self):
+        s = self.scene()
+        if s:
+            r = s.itemsBoundingRect()
+            if not r.isNull():
+                self.fitInView(r.adjusted(-80, -80, 80, 80), Qt.KeepAspectRatio)
+                self._current_scale = self.transform().m11()
 
     def reset_view(self):
         self.resetTransform()
         self._current_scale = 1.0
-        self.centerOn(0, 0)
-
-    def fit_to_bounds(self):
-        if self.scene():
-            rect = self.scene().itemsBoundingRect()
-            if not rect.isNull():
-                self.fitInView(rect.adjusted(-50, -50, 50, 50), Qt.KeepAspectRatio)
-                self._current_scale = self.transform().m11()
-
-
-class FlowTabHeader(QWidget):
-    """流程Tab头部 — 名称编辑 + 操作按钮"""
-
-    flow_start = Signal()
-    flow_stop = Signal()
-    flow_reset = Signal()
-    flow_rename = Signal(str)
-
-    def __init__(self, name: str, parent=None):
-        super().__init__(parent)
-        self._name = name
-        self._setup_ui()
-
-    def _setup_ui(self):
-        layout = QHBoxLayout()
-        layout.setContentsMargins(2, 0, 2, 0)
-        layout.setSpacing(2)
-
-        # 流程图标
-        icon = QLabel("●")
-        icon.setStyleSheet(f"color: {Colors.Green}; font-size: 10px;")
-        layout.addWidget(icon)
-
-        # 可编辑名称
-        self.name_edit = QLineEdit(self._name)
-        self.name_edit.setFixedWidth(80)
-        self.name_edit.setAlignment(Qt.AlignCenter)
-        self.name_edit.setStyleSheet(f"""
-            QLineEdit {{
-                background: transparent;
-                color: {Colors.Foreground};
-                border: none;
-                font: 10px "{Fonts.Family}";
-                padding: 0;
-            }}
-            QLineEdit:focus {{
-                background: {Colors.Border};
-            }}
-        """)
-        self.name_edit.editingFinished.connect(
-            lambda: self.flow_rename.emit(self.name_edit.text())
-        )
-        layout.addWidget(self.name_edit)
-
-        # 操作按钮
-        btn_style = f"""
-            QPushButton {{
-                background: transparent;
-                color: {Colors.ForegroundDim};
-                border: none;
-                font-size: 10px;
-                padding: 1px 4px;
-            }}
-            QPushButton:hover {{
-                color: {Colors.Foreground};
-                background: {Colors.Border};
-                border-radius: 2px;
-            }}
-        """
-
-        for label, signal in [("▶", self.flow_start), ("■", self.flow_stop), ("↺", self.flow_reset)]:
-            btn = QPushButton(label)
-            btn.setStyleSheet(btn_style)
-            btn.setFixedSize(22, 20)
-            btn.clicked.connect(signal)
-            layout.addWidget(btn)
-
-        self.setLayout(layout)
 
 
 class NodeEditorWidget(QWidget):
-    """节点编辑器主控件 — 多Tab流程管理"""
+    """WPF TabControl 多流程节点编辑器"""
 
     def __init__(self, event_bus: EventBus, parent=None):
         super().__init__(parent)
         self.event_bus = event_bus
 
-        # 多流程支持
-        self.workflows: dict[str, Workflow] = {}  # tab_name -> Workflow
-        self.scenes: dict[str, NodeScene] = {}    # tab_name -> NodeScene
-        self.views: dict[str, NodeGraphicsView] = {}  # tab_name -> NodeGraphicsView
+        self._flows: dict[str, Workflow] = {}
+        self._scenes: dict[str, NodeScene] = {}
+        self._views: dict[str, NodeGraphicsView] = {}
 
-        # 连接状态
-        self.is_connecting = False
-        self.connection_start_socket = None
+        self._connecting = False
+        self._conn_start = None
 
         self._setup_ui()
         self._subscribe_events()
-
-        # 创建默认流程
-        self.add_flow_tab("主流程")
+        self._add_flow("主流程")
 
     def _setup_ui(self):
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Tab工具栏
-        tab_bar = QWidget()
-        tab_bar.setStyleSheet(f"background-color: {Colors.BackgroundLight}; border-bottom: 1px solid {Colors.Border};")
-        tab_layout = QHBoxLayout(tab_bar)
-        tab_layout.setContentsMargins(4, 2, 4, 2)
-        tab_layout.setSpacing(2)
-
-        self.tab_widget = QTabWidget()
-        self.tab_widget.setTabsClosable(True)
-        self.tab_widget.setMovable(True)
-        self.tab_widget.tabCloseRequested.connect(self._on_close_tab)
-        self.tab_widget.currentChanged.connect(self._on_tab_changed)
-        self.tab_widget.setStyleSheet(f"""
-            QTabWidget::pane {{
-                border: none;
-                background-color: {Colors.Background};
-            }}
+        self.tabs = QTabWidget()
+        self.tabs.setTabsClosable(True)
+        self.tabs.setMovable(True)
+        self.tabs.tabCloseRequested.connect(self._close_tab)
+        self.tabs.currentChanged.connect(self._on_tab_changed)
+        self.tabs.setStyleSheet(f"""
+            QTabWidget::pane {{ border: none; background: {Colors.Background}; }}
             QTabBar::tab {{
                 background: {Colors.BackgroundLight};
                 color: {Colors.ForegroundDim};
                 padding: 5px 8px;
-                font: 10px "{Fonts.Family}";
+                font: 10px "Microsoft YaHei";
                 border: none;
                 border-bottom: 2px solid transparent;
                 min-width: 60px;
@@ -189,297 +107,213 @@ class NodeEditorWidget(QWidget):
             QTabBar::tab:selected {{
                 color: {Colors.Foreground};
                 border-bottom-color: {Colors.Accent};
-                background: {Colors.Background};
             }}
-            QTabBar::tab:hover:!selected {{
-                color: {Colors.Foreground};
-            }}
+            QTabBar::tab:hover:!selected {{ color: {Colors.Foreground}; }}
         """)
 
-        # "+" 按钮添加新流程
-        self.add_btn = QPushButton("+")
-        self.add_btn.setFixedSize(24, 24)
-        self.add_btn.setToolTip("添加流程图")
-        self.add_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent;
-                color: {Colors.ForegroundDim};
-                border: none;
-                font-size: 16px;
-                font-weight: bold;
-            }}
-            QPushButton:hover {{
-                color: {Colors.Foreground};
-                background: {Colors.Border};
-                border-radius: 2px;
-            }}
+        add_btn = QPushButton("+")
+        add_btn.setFixedSize(24, 24)
+        add_btn.setToolTip("添加新流程")
+        add_btn.setStyleSheet(f"""
+            QPushButton {{ background: transparent; color: {Colors.ForegroundDim}; border: none; font-size: 16px; font-weight: bold; }}
+            QPushButton:hover {{ color: {Colors.Foreground}; background: {Colors.Border}; border-radius: 2px; }}
         """)
-        self.add_btn.clicked.connect(lambda: self.add_flow_tab(f"流程{len(self.workflows)+1}"))
-        self.tab_widget.setCornerWidget(self.add_btn, Qt.TopRightCorner)
+        add_btn.clicked.connect(lambda: self._add_flow(f"流程{len(self._flows)+1}"))
+        self.tabs.setCornerWidget(add_btn, Qt.TopRightCorner)
 
-        layout.addWidget(self.tab_widget)
+        layout.addWidget(self.tabs)
         self.setLayout(layout)
         self.setAcceptDrops(True)
 
-    def add_flow_tab(self, name: str):
-        """添加流程Tab"""
-        if name in self.workflows:
-            name = f"{name} ({len(self.workflows)+1})"
+    def _add_flow(self, name: str):
+        base = name
+        i = 1
+        while name in self._flows:
+            name = f"{base}({i})"
+            i += 1
 
-        # 创建工作流
-        workflow = Workflow()
-        workflow.project_name = name
-
-        # 创建场景和视图
+        wf = Workflow()
+        wf.project_name = name
         scene = NodeScene(self.event_bus)
         view = NodeGraphicsView(scene)
 
-        self.workflows[name] = workflow
-        self.scenes[name] = scene
-        self.views[name] = view
+        self._flows[name] = wf
+        self._scenes[name] = scene
+        self._views[name] = view
 
-        # 添加到Tab
-        self.tab_widget.addTab(view, name)
-        self.tab_widget.setCurrentWidget(view)
+        idx = self.tabs.addTab(view, name)
+        self.tabs.setCurrentIndex(idx)
 
-    def _on_close_tab(self, index: int):
-        """关闭流程Tab"""
-        if self.tab_widget.count() <= 1:
-            return  # 至少保留一个Tab
+    def _close_tab(self, idx: int):
+        if self.tabs.count() <= 1:
+            return
+        name = self.tabs.tabText(idx)
+        self.tabs.removeTab(idx)
+        self._flows.pop(name, None)
+        self._scenes.pop(name, None)
+        self._views.pop(name, None)
 
-        tab_name = self.tab_widget.tabText(index)
-        self.tab_widget.removeTab(index)
+    def _on_tab_changed(self, idx: int):
+        if idx >= 0:
+            self.event_bus.emit(Event(type=EventType.WORKFLOW_NEW_FLOW,
+                                       data={"flow_name": self.tabs.tabText(idx)}))
 
-        if tab_name in self.workflows:
-            del self.workflows[tab_name]
-            del self.scenes[tab_name]
-            del self.views[tab_name]
+    def _current_flow(self) -> Workflow:
+        idx = self.tabs.currentIndex()
+        return self._flows.get(self.tabs.tabText(idx)) if idx >= 0 else None
 
-    def _on_tab_changed(self, index: int):
-        """Tab切换"""
-        if index >= 0:
-            tab_name = self.tab_widget.tabText(index)
-            self.event_bus.emit(Event(
-                type=EventType.WORKFLOW_NEW_FLOW,
-                data={"flow_name": tab_name}
-            ))
+    def _current_scene(self) -> NodeScene:
+        idx = self.tabs.currentIndex()
+        return self._scenes.get(self.tabs.tabText(idx)) if idx >= 0 else None
 
-    def get_current_workflow(self) -> Workflow:
-        """获取当前工作流"""
-        index = self.tab_widget.currentIndex()
-        if index >= 0:
-            tab_name = self.tab_widget.tabText(index)
-            return self.workflows.get(tab_name)
-        return None
+    def _current_view(self) -> NodeGraphicsView:
+        idx = self.tabs.currentIndex()
+        return self._views.get(self.tabs.tabText(idx)) if idx >= 0 else None
 
-    def get_current_scene(self) -> NodeScene:
-        """获取当前场景"""
-        index = self.tab_widget.currentIndex()
-        if index >= 0:
-            tab_name = self.tab_widget.tabText(index)
-            return self.scenes.get(tab_name)
-        return None
+    # ===== 拖拽创建节点 =====
 
-    def get_current_view(self) -> NodeGraphicsView:
-        """获取当前视图"""
-        index = self.tab_widget.currentIndex()
-        if index >= 0:
-            tab_name = self.tab_widget.tabText(index)
-            return self.views.get(tab_name)
-        return None
+    def dragEnterEvent(self, e):
+        if e.mimeData().hasText():
+            e.acceptProposedAction()
 
-    # ========== 拖拽创建节点 ==========
-
-    def dragEnterEvent(self, event):
-        if event.mimeData().hasText():
-            event.acceptProposedAction()
-
-    def dropEvent(self, event):
-        node_type = event.mimeData().text()
-        view = self.get_current_view()
+    def dropEvent(self, e):
+        node_type = e.mimeData().text()
+        view = self._current_view()
         if view:
-            scene_pos = view.mapToScene(event.position().toPoint())
-            self.event_bus.emit(Event(
-                type=EventType.NODE_CREATE_REQUEST,
-                data={
-                    "node_type": node_type,
-                    "pos_x": scene_pos.x(),
-                    "pos_y": scene_pos.y()
-                }
-            ))
+            sp = view.mapToScene(e.position().toPoint())
+            self.event_bus.emit(Event(type=EventType.NODE_CREATE_REQUEST,
+                data={"node_type": node_type, "pos_x": sp.x(), "pos_y": sp.y()}))
 
-    # ========== 事件订阅 ==========
+    # ===== 连线交互 =====
 
     def _subscribe_events(self):
-        self.event_bus.subscribe(EventType.CONNECTION_STARTED, self._on_connection_started)
-        self.event_bus.subscribe(EventType.CONNECTION_DRAGGING, self._on_connection_dragging)
-        self.event_bus.subscribe(EventType.CONNECTION_FINISHED, self._on_connection_finished)
-        self.event_bus.subscribe(EventType.NODE_CREATE_REQUEST, self._on_node_create_request)
+        self.event_bus.subscribe(EventType.CONNECTION_STARTED, self._on_conn_start)
+        self.event_bus.subscribe(EventType.CONNECTION_DRAGGING, self._on_conn_drag)
+        self.event_bus.subscribe(EventType.CONNECTION_FINISHED, self._on_conn_finish)
+        self.event_bus.subscribe(EventType.NODE_CREATE_REQUEST, self._on_create_req)
 
-    def _on_node_create_request(self, event: Event):
-        data = event.data
-        node_type = data.get("node_type")
-        pos_x = data.get("pos_x", 0)
-        pos_y = data.get("pos_y", 0)
+    def _on_create_req(self, e: Event):
+        d = e.data
+        self.event_bus.emit(Event(type=EventType.NODE_CREATE,
+            data={"node_type": d["node_type"], "pos_x": d.get("pos_x", 0), "pos_y": d.get("pos_y", 0)}))
 
-        self.event_bus.emit(Event(
-            type=EventType.NODE_CREATE,
-            data={"node_type": node_type, "pos_x": pos_x, "pos_y": pos_y}
-        ))
+    def _on_conn_start(self, e: Event):
+        d = e.data
+        self._connecting = True
+        self._conn_start = {"node_id": d["node_id"], "socket_name": d["socket_name"],
+                            "is_input": d["is_input"], "data_type": d["data_type"]}
 
-    def _on_connection_started(self, event: Event):
-        data = event.data
-        self.is_connecting = True
-        self.connection_start_socket = {
-            "node_id": data.get("node_id"),
-            "socket_name": data.get("socket_name"),
-            "is_input": data.get("is_input"),
-            "data_type": data.get("data_type"),
-            "position": QPointF(data["position"][0], data["position"][1])
-        }
-
-    def _on_connection_dragging(self, event: Event):
-        if not self.is_connecting:
+    def _on_conn_drag(self, e: Event):
+        if not self._connecting:
             return
-        data = event.data
-        start_pos = QPointF(data["from_pos"][0], data["from_pos"][1])
-        end_pos = QPointF(data["to_pos"][0], data["to_pos"][1])
-        self._show_temp_edge(start_pos, end_pos)
+        d = e.data
+        sp = QPointF(d["from_pos"][0], d["from_pos"][1])
+        ep = QPointF(d["to_pos"][0], d["to_pos"][1])
+        self._show_temp_edge(sp, ep)
 
-    def _show_temp_edge(self, start: QPointF, end: QPointF):
-        scene = self.get_current_scene()
-        if not scene:
+    def _show_temp_edge(self, s, e):
+        sc = self._current_scene()
+        if not sc:
             return
-        if hasattr(scene, 'temp_edge') and scene.temp_edge:
-            scene.removeItem(scene.temp_edge)
+        if hasattr(sc, 'temp_edge') and sc.temp_edge:
+            sc.removeItem(sc.temp_edge)
 
-        class TempSocket:
-            def __init__(self, pos, data_type):
-                self._pos = pos
-                self._data_type = data_type
-            def get_scene_position(self):
-                return self._pos
-            def get_data_type(self):
-                return self._data_type
+        class T:
+            def __init__(s2, p, dt): s2._p, s2._dt = p, dt
+            def get_scene_position(s2): return s2._p
+            def get_data_type(s2): return s2._dt
 
-        d_type = self.connection_start_socket.get("data_type", "any") if self.connection_start_socket else "any"
-        temp_from = TempSocket(start, d_type)
-        temp_to = TempSocket(end, d_type)
-        scene.temp_edge = GraphicsEdge(temp_from, temp_to, self.event_bus)
-        scene.temp_edge.setPen(QPen(QColor(150, 150, 180), 2, Qt.DashLine))
-        scene.addItem(scene.temp_edge)
+        dt = self._conn_start.get("data_type", "any") if self._conn_start else "any"
+        sc.temp_edge = GraphicsEdge(T(s, dt), T(e, dt), self.event_bus)
+        sc.temp_edge.setPen(QPen(QColor(150, 150, 180), 2, Qt.DashLine))
+        sc.addItem(sc.temp_edge)
 
-    def _on_connection_finished(self, event: Event):
-        if self.is_connecting and self.connection_start_socket:
-            scene = self.get_current_scene()
-            if scene and hasattr(scene, 'temp_edge') and scene.temp_edge:
-                scene.removeItem(scene.temp_edge)
-                scene.temp_edge = None
+    def _on_conn_finish(self, e: Event):
+        if not self._connecting or not self._conn_start:
+            return
+        sc = self._current_scene()
+        if sc and hasattr(sc, 'temp_edge') and sc.temp_edge:
+            sc.removeItem(sc.temp_edge)
+            sc.temp_edge = None
 
-            view = self.get_current_view()
-            if view:
-                cursor_pos = self.cursor().pos()
-                view_pos = view.mapFromGlobal(cursor_pos)
-                scene_pos = view.mapToScene(view_pos)
-                target_socket = self._find_socket_at_position(scene_pos)
+        view = self._current_view()
+        if view:
+            cp = self.cursor().pos()
+            vp = view.mapFromGlobal(cp)
+            sp = view.mapToScene(vp)
+            target = self._find_socket(sp)
+            if target and self._conn_start:
+                st = self._conn_start
+                if self._valid(st, target):
+                    if st["is_input"] and not target["is_input"]:
+                        self.event_bus.emit(Event(type=EventType.WORKFLOW_EDGE_ADDED, data={
+                            "from_node": target["node_id"], "from_socket": target["socket_name"],
+                            "to_node": st["node_id"], "to_socket": st["socket_name"]}))
+                    elif not st["is_input"] and target["is_input"]:
+                        self.event_bus.emit(Event(type=EventType.WORKFLOW_EDGE_ADDED, data={
+                            "from_node": st["node_id"], "from_socket": st["socket_name"],
+                            "to_node": target["node_id"], "to_socket": target["socket_name"]}))
+        self._connecting = False
+        self._conn_start = None
 
-                if target_socket and self.connection_start_socket:
-                    start = self.connection_start_socket
-                    end = target_socket
-                    if self._validate_connection(start, end):
-                        if start["is_input"] and not end["is_input"]:
-                            self.event_bus.emit(Event(
-                                type=EventType.WORKFLOW_EDGE_ADDED,
-                                data={"from_node": end["node_id"], "from_socket": end["socket_name"],
-                                      "to_node": start["node_id"], "to_socket": start["socket_name"]}
-                            ))
-                        elif not start["is_input"] and end["is_input"]:
-                            self.event_bus.emit(Event(
-                                type=EventType.WORKFLOW_EDGE_ADDED,
-                                data={"from_node": start["node_id"], "from_socket": start["socket_name"],
-                                      "to_node": end["node_id"], "to_socket": end["socket_name"]}
-                            ))
-
-        self.is_connecting = False
-        self.connection_start_socket = None
-
-    def _find_socket_at_position(self, scene_pos: QPointF):
-        scene = self.get_current_scene()
-        if not scene:
+    def _find_socket(self, pos):
+        sc = self._current_scene()
+        if not sc:
             return None
-        items = scene.items(scene_pos)
-        for item in items:
+        for item in sc.items(pos):
             if hasattr(item, 'socket_name') and hasattr(item, 'parent_node'):
-                return {
-                    "node_id": item.parent_node.node_id,
-                    "socket_name": item.socket_name,
-                    "is_input": item.is_input,
-                    "data_type": item.data_type,
-                    "socket_item": item
-                }
+                return {"node_id": item.parent_node.node_id, "socket_name": item.socket_name,
+                        "is_input": item.is_input, "data_type": item.data_type}
         return None
 
-    def _validate_connection(self, start: dict, end: dict) -> bool:
-        if start["node_id"] == end["node_id"]:
+    def _valid(self, a, b):
+        if a["node_id"] == b["node_id"] or a["is_input"] == b["is_input"]:
             return False
-        if start["is_input"] == end["is_input"]:
-            return False
-        start_type = start["data_type"]
-        end_type = end["data_type"]
-        if start_type != end_type and end_type != "any" and start_type != "any":
-            if not (start_type == "gray" and end_type == "image"):
-                return False
-        return True
+        at, bt = a["data_type"], b["data_type"]
+        return at == bt or bt == "any" or at == "any" or (at == "gray" and bt == "image")
 
-    # ========== 公开API ==========
+    # ===== 公开API =====
 
-    def add_node_graphics(self, node_data: dict):
-        scene = self.get_current_scene()
-        if scene:
-            scene.add_node_graphics(node_data)
-
-    def remove_node_graphics(self, node_id: str):
-        scene = self.get_current_scene()
-        if scene:
-            scene.remove_node_graphics(node_id)
-
-    def add_edge_graphics(self, edge_data: dict):
-        scene = self.get_current_scene()
-        if scene:
-            scene.add_edge_graphics(edge_data)
-
-    def remove_edge_graphics(self, edge_data: dict):
-        scene = self.get_current_scene()
-        if scene:
-            scene.remove_edge_graphics(edge_data)
-
-    def refresh_from_workflow(self, workflow_data: dict = None):
-        """从工作流数据刷新"""
-        scene = self.get_current_scene()
-        if not scene:
+    def refresh_from_workflow(self, data: dict = None):
+        sc = self._current_scene()
+        if not sc:
             return
-        scene.clear_all()
-
-        wf = self.get_current_workflow()
-        if wf and not workflow_data:
-            workflow_data = wf.to_dict()
-
-        if workflow_data:
-            for node_data in workflow_data.get("nodes", []):
-                scene.add_node_graphics(node_data)
-            for conn in workflow_data.get("connections", []):
-                scene.add_edge_graphics(conn)
-
-        view = self.get_current_view()
+        sc.clear_all()
+        if data:
+            for nd in data.get("nodes", []):
+                sc.add_node_graphics(nd)
+            for ed in data.get("connections", []):
+                sc.add_edge_graphics(ed)
+        view = self._current_view()
         if view:
             QTimer.singleShot(100, view.fit_to_bounds)
 
     def clear_scene(self):
-        scene = self.get_current_scene()
-        if scene:
-            scene.clear_all()
+        sc = self._current_scene()
+        if sc:
+            sc.clear_all()
 
     def reset_view(self):
-        view = self.get_current_view()
-        if view:
-            view.reset_view()
+        v = self._current_view()
+        if v:
+            v.reset_view()
+
+    def add_node_graphics(self, nd: dict):
+        sc = self._current_scene()
+        if sc:
+            sc.add_node_graphics(nd)
+
+    def remove_node_graphics(self, nid: str):
+        sc = self._current_scene()
+        if sc:
+            sc.remove_node_graphics(nid)
+
+    def add_edge_graphics(self, ed: dict):
+        sc = self._current_scene()
+        if sc:
+            sc.add_edge_graphics(ed)
+
+    def remove_edge_graphics(self, ed: dict):
+        sc = self._current_scene()
+        if sc:
+            sc.remove_edge_graphics(ed)

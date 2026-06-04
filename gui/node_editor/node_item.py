@@ -1,258 +1,212 @@
 """
-节点图形项 — WPF VisionMaster风格外观
-左侧状态条、选中高亮、悬停效果
+WPF StyleNodeDataBase 节点图形精确还原
+- 白色背景 + 圆角边框
+- 左侧状态条(30px, 运行中=蓝/成功=绿/错误=红/空闲=隐藏)
+- DockPanel: 图标(居中) + 文本(居中, 超长截断)
+- 悬停: 浅灰底+深色边框 | 选中: 浅灰底+橙色边框
 """
 
 from PySide6.QtWidgets import QGraphicsItem, QStyleOptionGraphicsItem
-from PySide6.QtCore import Qt, QRectF, QPointF
+from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import (
-    QBrush, QColor, QPen, QFont, QPainter, QPainterPath,
-    QLinearGradient, QGradient
+    QBrush, QColor, QPen, QFont, QPainter, QPainterPath
 )
 
 from core.events import EventBus, Event, EventType
-
 from .socket_item import GraphicsSocket
 
 
 class GraphicsNode(QGraphicsItem):
-    """WPF风格的图形节点"""
+    """WPF StyleNodeDataBase 节点"""
 
-    # 节点颜色方案 (WPF VisionMaster配色)
-    COLORS = {
-        "IO": {"bg": QColor(40, 60, 50), "header": QColor(60, 110, 70)},
-        "预处理": {"bg": QColor(45, 48, 58), "header": QColor(65, 70, 95)},
-        "特征检测": {"bg": QColor(55, 48, 45), "header": QColor(95, 65, 65)},
-        "匹配": {"bg": QColor(48, 48, 55), "header": QColor(75, 75, 95)},
-        "测量": {"bg": QColor(48, 55, 55), "header": QColor(65, 95, 95)},
-        "增强": {"bg": QColor(55, 48, 40), "header": QColor(95, 75, 55)},
-        "几何变换": {"bg": QColor(48, 48, 53), "header": QColor(75, 75, 85)},
-        "颜色处理": {"bg": QColor(52, 43, 52), "header": QColor(85, 65, 85)},
-        "default": {"bg": QColor(48, 48, 55), "header": QColor(65, 65, 95)}
+    # WPF节点分类颜色 (用于左侧色条和标题栏)
+    CATEGORY_COLORS = {
+        "IO": QColor("#3C8D40"),
+        "预处理": QColor("#5A5A8A"),
+        "特征检测": QColor("#8A5A5A"),
+        "匹配": QColor("#6A6A8A"),
+        "测量": QColor("#5A8A8A"),
+        "增强": QColor("#8A7A5A"),
+        "几何变换": QColor("#6A6A6A"),
+        "颜色处理": QColor("#7A5A7A"),
+        "通用": QColor("#6A6A7A"),
     }
 
-    # 状态颜色
     STATE_COLORS = {
-        "Running": QColor("#2196F3"),   # 蓝色
-        "Success": QColor("#4CAF50"),   # 绿色
-        "Error": QColor("#F44336"),     # 红色
+        "Running": QColor("#2196F3"),
+        "Success": QColor("#4CAF50"),
+        "Error": QColor("#F44336"),
     }
 
     def __init__(self, node_data: dict, event_bus: EventBus, parent=None):
         super().__init__(parent)
-
         self.node_id = node_data.get("id", "")
         self.node_name = node_data.get("name", "Node")
-        self.category = node_data.get("category", "default")
+        self.category = node_data.get("category", "通用")
         self.inputs = node_data.get("inputs", [])
         self.outputs = node_data.get("outputs", [])
         self.parameters = node_data.get("parameters", [])
-
         self.event_bus = event_bus
 
-        # 尺寸
-        self.width = 180
-        self.height = 80
-        self.header_height = 34
-        self.status_bar_width = 6
+        # WPF节点尺寸
+        self.width = 160
+        self.header_h = 28
+        self.status_w = 8       # 左侧状态条宽度
+        self.socket_area_top = self.header_h
+        self.socket_spacing = 22
+        self.padding_v = 8
 
-        # 端口
         self.input_sockets = []
         self.output_sockets = []
-
-        # 交互状态
         self._selected = False
         self._hovered = False
-        self._execution_state = None  # None / "Running" / "Success" / "Error"
+        self._exec_state = None  # Running|Success|Error|None
 
-        # 设置标志
         self.setFlag(QGraphicsItem.ItemIsMovable, True)
         self.setFlag(QGraphicsItem.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
         self.setAcceptHoverEvents(True)
-
-        # 创建端口
-        self._create_sockets()
-
-        # 设置Z序
         self.setZValue(1)
 
+        self._create_sockets()
+
     def _create_sockets(self):
-        """创建端口图形项"""
-        for i, socket_def in enumerate(self.inputs):
-            socket = GraphicsSocket(socket_def, self, self.event_bus, is_input=True)
-            socket.setPos(0, self.header_height + 12 + i * 26)
-            socket.setParentItem(self)
-            self.input_sockets.append(socket)
+        for i, s in enumerate(self.inputs):
+            sock = GraphicsSocket(s, self, self.event_bus, is_input=True)
+            sock.setPos(-6, self.socket_area_top + self.padding_v + i * self.socket_spacing)
+            sock.setParentItem(self)
+            self.input_sockets.append(sock)
 
-        for i, socket_def in enumerate(self.outputs):
-            socket = GraphicsSocket(socket_def, self, self.event_bus, is_input=False)
-            socket.setPos(self.width, self.header_height + 12 + i * 26)
-            socket.setParentItem(self)
-            self.output_sockets.append(socket)
+        for i, s in enumerate(self.outputs):
+            sock = GraphicsSocket(s, self, self.event_bus, is_input=False)
+            sock.setPos(self.width + 6, self.socket_area_top + self.padding_v + i * self.socket_spacing)
+            sock.setParentItem(self)
+            self.output_sockets.append(sock)
 
-        max_sockets = max(len(self.input_sockets), len(self.output_sockets), 1)
-        self.height = self.header_height + max_sockets * 26 + 12
-
-    def _get_colors(self):
-        """获取节点颜色"""
-        colors = self.COLORS.get(self.category, self.COLORS["default"])
-
-        if self._selected:
-            bg = QColor(60, 60, 70)
-            header = colors["header"].lighter(120)
-        elif self._hovered:
-            bg = QColor(55, 55, 65)
-            header = colors["header"].lighter(110)
-        else:
-            bg = colors["bg"]
-            header = colors["header"]
-
-        return bg, header
+        max_s = max(len(self.input_sockets), len(self.output_sockets), 1)
+        self.body_h = self.socket_area_top + self.padding_v * 2 + max_s * self.socket_spacing
+        self.height = self.body_h
 
     def boundingRect(self) -> QRectF:
-        return QRectF(0, 0, self.width, self.height)
+        return QRectF(-8, -2, self.width + 16, self.height + 4)
 
-    def shape(self) -> QPainterPath:
-        path = QPainterPath()
-        path.addRoundedRect(0, 0, self.width, self.height, 6, 6)
-        return path
+    def shape(self):
+        p = QPainterPath()
+        p.addRoundedRect(2, 0, self.width, self.height, 4, 4)
+        return p
 
-    def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget=None):
+    def paint(self, painter: QPainter, option, widget=None):
         painter.setRenderHint(QPainter.Antialiasing)
 
-        bg_color, header_color = self._get_colors()
-
-        # 阴影效果
-        shadow_path = QPainterPath()
-        shadow_path.addRoundedRect(2, 3, self.width, self.height + 1, 6, 6)
-        painter.fillPath(shadow_path, QColor(0, 0, 0, 40))
-
-        # 节点主体
-        body_path = QPainterPath()
-        body_path.addRoundedRect(0, 0, self.width, self.height, 6, 6)
-        painter.fillPath(body_path, QBrush(bg_color))
-
-        # 边框
+        # === WPF Border样式 ===
         if self._selected:
-            border_color = QColor("#FF9800")  # 橙色选中边框
-            border_width = 2
+            border_c = QColor("#FF9800")  # 橙色
+            bg_c = QColor("#F0F0F0")       # 浅灰
         elif self._hovered:
-            border_color = QColor(120, 120, 140)
-            border_width = 1.5
+            border_c = QColor("#808080")
+            bg_c = QColor("#F5F5F5")
         else:
-            border_color = QColor(70, 70, 85)
-            border_width = 1
+            border_c = QColor("#D0D0D0")
+            bg_c = QColor("#FFFFFF")
 
-        painter.setPen(QPen(border_color, border_width))
-        painter.drawPath(body_path)
+        # 主体背景
+        body = QPainterPath()
+        body.addRoundedRect(2, 0, self.width, self.height, 4, 4)
+        painter.fillPath(body, QBrush(bg_c))
+        painter.setPen(QPen(border_c, 1.2))
+        painter.drawPath(body)
 
-        # 左侧状态条
-        if self._execution_state in self.STATE_COLORS:
-            state_color = self.STATE_COLORS[self._execution_state]
-            status_bar = QPainterPath()
-            status_bar.addRoundedRect(0, 1, self.status_bar_width, self.height - 2, 3, 3)
-            painter.fillPath(status_bar, QBrush(state_color))
+        # === 左侧状态条 (30px宽, 圆角左侧) ===
+        if self._exec_state and self._exec_state in self.STATE_COLORS:
+            state_c = self.STATE_COLORS[self._exec_state]
+            bar = QPainterPath()
+            bar.addRoundedRect(2, 1, self.status_w, self.height - 2, 3, 3)
+            # 覆盖右侧圆角使左侧条右边缘为直角
+            bar.addRect(self.status_w, 1, 2, self.height - 2)
+            bar.setFillRule(Qt.WindingFill)
+            painter.fillPath(bar, QBrush(state_c))
 
-        # 标题栏
-        header_path = QPainterPath()
-        header_path.setFillRule(Qt.WindingFill)
-        header_path.addRoundedRect(0, 0, self.width, self.header_height, 6, 6)
-        # 覆盖底部圆角为直角
-        header_path.addRect(0, self.header_height - 6, self.width, 6)
+        # === 标题栏 ===
+        cat_c = self.CATEGORY_COLORS.get(self.category, self.CATEGORY_COLORS["通用"])
+        header = QPainterPath()
+        header.addRoundedRect(2, 0, self.width, self.header_h, 4, 4)
+        header.addRect(2, self.header_h - 4, self.width, 4)  # 底部直角
+        painter.fillPath(header, QBrush(cat_c))
 
-        gradient = QLinearGradient(0, 0, self.width, 0)
-        gradient.setColorAt(0, header_color)
-        gradient.setColorAt(1, header_color.darker(108))
-        painter.fillPath(header_path, QBrush(gradient))
-
-        # 标题文字
-        font = QFont("Microsoft YaHei", 9, QFont.Bold)
+        # 标题文字(白色)
+        font = QFont("Microsoft YaHei", 8, QFont.Bold)
         painter.setFont(font)
         painter.setPen(QColor(255, 255, 255))
+        name = self.node_name[:14] + ".." if len(self.node_name) > 14 else self.node_name
+        painter.drawText(QRectF(6, 0, self.width - 12, self.header_h),
+                        Qt.AlignVCenter | Qt.AlignCenter, name)
 
-        display_name = self.node_name[:16] + ".." if len(self.node_name) > 16 else self.node_name
-        painter.drawText(QRectF(6, 0, self.width - 12, self.header_height),
-                         Qt.AlignVCenter | Qt.AlignCenter,
-                         display_name)
+        # === 图标区域(标题栏下方) ===
+        # WPF: FontIconTextBlock + TextBlock 居中
+        icon_font = QFont("Microsoft YaHei", 9)
+        painter.setFont(icon_font)
+        painter.setPen(QColor("#808080"))
 
-        # 分类标签
-        if self.category != "default":
-            font_small = QFont("Microsoft YaHei", 7)
-            painter.setFont(font_small)
-            painter.setPen(QColor(160, 160, 180))
-            painter.drawText(QRectF(6, self.header_height - 13, self.width - 12, 11),
-                            Qt.AlignRight,
-                            self.category[:10])
+        # 分类图标映射
+        icons = {"IO": "📂", "预处理": "🔧", "特征检测": "🔍", "匹配": "🎯", "测量": "📏",
+                 "增强": "✨", "几何变换": "🔄", "颜色处理": "🎨"}
+        icon = icons.get(self.category, "⚙")
+        painter.drawText(QRectF(6, self.header_h + 1, self.width - 12, 16),
+                        Qt.AlignCenter, icon)
 
-    def hoverEnterEvent(self, event):
+    # ===== 交互事件 =====
+
+    def hoverEnterEvent(self, e):
         self._hovered = True
         self.update()
 
-    def hoverLeaveEvent(self, event):
+    def hoverLeaveEvent(self, e):
         self._hovered = False
         self.update()
 
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
+    def mousePressEvent(self, e):
+        if e.button() == Qt.LeftButton:
             self.setSelected(True)
-            self.event_bus.emit(Event(
-                type=EventType.NODE_SELECTED,
-                data={
-                    "node_id": self.node_id,
-                    "node_metadata": {
-                        "id": self.node_id,
-                        "name": self.node_name,
-                        "category": self.category,
-                        "inputs": self.inputs,
-                        "outputs": self.outputs,
-                        "parameters": self.parameters
-                    }
-                }
-            ))
-        super().mousePressEvent(event)
+            self.event_bus.emit(Event(type=EventType.NODE_SELECTED, data={
+                "node_id": self.node_id,
+                "node_metadata": {"id": self.node_id, "name": self.node_name,
+                                  "category": self.category, "inputs": self.inputs,
+                                  "outputs": self.outputs, "parameters": self.parameters}
+            }))
+        super().mousePressEvent(e)
 
-    def mouseDoubleClickEvent(self, event):
-        self.event_bus.emit(Event(
-            type=EventType.NODE_DOUBLE_CLICKED,
-            data={"node_id": self.node_id}
-        ))
-        super().mouseDoubleClickEvent(event)
+    def mouseDoubleClickEvent(self, e):
+        self.event_bus.emit(Event(type=EventType.NODE_DOUBLE_CLICKED,
+                                   data={"node_id": self.node_id}))
+        super().mouseDoubleClickEvent(e)
 
     def itemChange(self, change, value):
         if change == QGraphicsItem.ItemPositionChange:
-            self.event_bus.emit(Event(
-                type=EventType.NODE_MOVED,
-                data={"node_id": self.node_id, "pos_x": value.x(), "pos_y": value.y()}
-            ))
+            self.event_bus.emit(Event(type=EventType.NODE_MOVED,
+                data={"node_id": self.node_id, "pos_x": value.x(), "pos_y": value.y()}))
         elif change == QGraphicsItem.ItemSelectedChange:
             self._selected = value
             self.update()
         return super().itemChange(change, value)
 
-    def set_execution_state(self, state: str):
-        """设置执行状态 (None/Running/Success/Error)"""
-        self._execution_state = state
+    # ===== 公开API =====
+
+    def set_execution_state(self, state):
+        self._exec_state = state
         self.update()
 
     def get_input_socket(self, name: str):
-        for socket in self.input_sockets:
-            if socket.socket_name == name:
-                return socket
+        for s in self.input_sockets:
+            if s.socket_name == name:
+                return s
         return None
 
     def get_output_socket(self, name: str):
-        for socket in self.output_sockets:
-            if socket.socket_name == name:
-                return socket
+        for s in self.output_sockets:
+            if s.socket_name == name:
+                return s
         return None
 
-    def get_socket_by_name(self, name: str, is_input: bool):
-        if is_input:
-            return self.get_input_socket(name)
-        else:
-            return self.get_output_socket(name)
-
-    def update_node_data(self, node_data: dict):
-        self.node_name = node_data.get("name", self.node_name)
+    def update_node_data(self, data: dict):
+        self.node_name = data.get("name", self.node_name)
         self.update()
