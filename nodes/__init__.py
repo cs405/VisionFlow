@@ -1,1 +1,1 @@
-# VisionFlow - Vision Processing Nodes (74 nodes across 14 categories)
+# VisionFlow - Vision Processing Nodes (98 nodes across 15 categories)

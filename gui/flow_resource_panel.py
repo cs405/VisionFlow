@@ -164,12 +164,21 @@ class FlowResourcePanel(QWidget):
             self.index_label.setText("0/0")
             return
 
-        self.title_label.setText(f"图像源 - {self._current_node.name}")
+        # Differentiate image vs video source
+        is_video = "video" in type(self._current_node).__name__.lower()
+        src_type = "视频源" if is_video else "图像源"
+        self.title_label.setText(f"{src_type} - {self._current_node.name}")
+
+        # Video file extensions
+        VIDEO_EXTS = {'.avi', '.mp4', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpg', '.mpeg'}
 
         for path in self._current_node.src_file_paths:
-            item = QListWidgetItem(os.path.basename(path))
+            ext = os.path.splitext(path)[1].lower()
+            is_vid = ext in VIDEO_EXTS
+            display = f"{'🎬' if is_vid else '🖼'} {os.path.basename(path)}"
+            item = QListWidgetItem(display)
             item.setData(Qt.UserRole, path)
-            item.setToolTip(path)
+            item.setToolTip(f"{'视频' if is_vid else '图像'}: {path}")
             self.file_list.addItem(item)
 
         total = len(self._current_node.src_file_paths)

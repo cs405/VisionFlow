@@ -597,10 +597,15 @@ class HelpNodeDataBase(ShowPropertyNodeDataBase):
     """
 
     def create_help_presenter(self) -> dict:
-        """Return help info for the help panel."""
+        """Return help info for the help panel. Override in subclasses to customize."""
+        import inspect
+        cls = type(self)
+        doc = (cls.__doc__ or "").strip().split("\n")[0] if cls.__doc__ else ""
         return {
-            "url": f"https://github.com/HeBianGu/WPF-VisionMaster/wiki/{type(self).__name__}",
+            "url": f"https://github.com/HeBianGu/WPF-VisionMaster/wiki/{cls.__name__}",
             "name": self.name,
+            "description": doc or f"{self.name} - {cls.__name__}",
+            "source": inspect.getfile(cls),
         }
 
 
@@ -1413,9 +1418,11 @@ class WaitAllParallelNodeData(VisionNodeData):
     Acts as a synchronization barrier: counts invocations from parallel branches
     and only proceeds when all parallel predecessors have completed.
     """
+    __group__ = "逻辑模块"
 
     def __init__(self):
         super().__init__()
+        self.name = "并行等待"
         self._result_count = 0
 
     def invoke(self, previors: LinkData | None, diagram: "WorkflowEngine") -> FlowableResult:

@@ -7,15 +7,21 @@ from core.workflow import WorkflowEngine
 
 
 class _FeatureBase(OpenCVNodeDataBase):
-    """Base for feature detector nodes."""
+    """Base for feature detector nodes. Checks algorithm availability before running."""
     feature_count = Property(0, name="特征点数量", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
         mat = from_node.mat if from_node else None
         if mat is None: return self.error(None, "无输入图像")
+        try:
+            detector = self._create_detector()
+        except Exception as e:
+            return self.error(None, f"特征算法不可用: {e}\n请确认 opencv-contrib-python 已安装")
         gray = cv2.cvtColor(mat, cv2.COLOR_BGR2GRAY) if len(mat.shape) == 3 else mat
-        detector = self._create_detector()
-        keypoints = detector.detect(gray, None)
+        try:
+            keypoints = detector.detect(gray, None)
+        except Exception as e:
+            return self.error(None, f"特征检测失败: {e}")
         out = mat.copy() if len(mat.shape) == 3 else cv2.cvtColor(mat, cv2.COLOR_GRAY2BGR)
         cv2.drawKeypoints(out, keypoints, out, (0, 255, 0),
                            cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
