@@ -81,23 +81,23 @@ NODE_BG_HOVER = QColor("#4a4a4a")
 NODE_BG_SELECTED = QColor("#4a4a4a")
 NODE_BG_DISABLED = QColor("#2a2a2a")
 
-# Borders
-NODE_BORDER = QColor("#555555")
+# Borders — exact WPF DiagramKeys.xaml values
+NODE_BORDER = QColor("#ebebeb")             # WPF: default Stroke
 NODE_BORDER_HOVER = QColor("#0078d4")       # WPF: Foreground brush
-NODE_BORDER_SELECTED = QColor("#FF8C00")    # WPF: BrushKeys.Orange
-NODE_BORDER_ERROR = QColor("#f44336")
+NODE_BORDER_SELECTED = QColor("#E6A23C")    # WPF: BrushKeys.Orange
+NODE_BORDER_ERROR = QColor("#dc000c")       # WPF: Red
 
 # Text
 NODE_TEXT_COLOR = QColor("#dcdcdc")
 NODE_TEXT_DISABLED = QColor("#777777")
 NODE_SHADOW = QColor(0, 0, 0, 60)
 
-# State colors (used for left bar background)
+# State colors — exact WPF DiagramKeys.xaml values
 STATE_COLORS = {
-    NodeState.IDLE: QColor("#999999"),
-    NodeState.RUNNING: QColor("#2196f3"),
-    NodeState.COMPLETED: QColor("#4caf50"),
-    NodeState.ERROR: QColor("#f44336"),
+    NodeState.IDLE: QColor("#909399"),      # WPF Gray
+    NodeState.RUNNING: QColor("#3399FF"),   # WPF Accent (blue)
+    NodeState.COMPLETED: QColor("#67C23A"), # WPF Green
+    NodeState.ERROR: QColor("#dc000c"),     # WPF Red
     NodeState.DISABLED: QColor("#555555"),
 }
 
@@ -105,24 +105,46 @@ STATE_COLORS = {
 # Group → flag color (used when bar is visible in idle state for SOURCE template)
 from core.constants import get_group_color, get_group_icon
 
-# Node icon mapping (matching WPF FontIcons per node category)
+# Node icon mapping (matching WPF FontIcons.cs — exact hex codepoints)
 _NODE_ICONS = {
-    "SrcFilesVisionNodeData": FontIcons.Photo2,
-    "ImageFileSource": FontIcons.Photo2,
+    # Source / Input
+    "SrcFilesVisionNodeData": FontIcons.Camera,          # SrcImageDataGroup
+    "ImageFileSource": FontIcons.Camera,
     "CameraCapture": FontIcons.Camera,
     "VideoCapture": FontIcons.Video,
-    "GaussianBlur": FontIcons.Filter,
-    "CvtColor": FontIcons.Color,
-    "Threshold": FontIcons.Filter,
-    "ConditionNodeData": "⇄",
-    "TemplateMatching": "⌖",
-    "ROINodeData": FontIcons.Crop,
-    "Morphology": "⬒",
-    "Detector": "◉",
-    "Feature": "✣",
-    "Output": "↗",
-    "Modbus": "⌁",
-    "Onnx": "AI",
+    # Preprocessing
+    "CvtColor": FontIcons.Color,                         # PreprocessingDataGroup
+    # Blur / Filter
+    "GaussianBlur": FontIcons.InPrivate,                 # BlurDataGroup
+    "MedianBlur": FontIcons.InPrivate,
+    "BilateralFilter": FontIcons.InPrivate,
+    "DetailEnhance": FontIcons.InPrivate,
+    "PencilSketch": FontIcons.InPrivate,
+    "Threshold": FontIcons.InPrivate,
+    # Takeoff / Segmentation
+    "ROINodeData": FontIcons.Annotation,                 # TakeoffDataGroup
+    # Morphology
+    "Morphology": FontIcons.HomeGroup,                   # MorphologyDataGroup
+    "ErodeNode": FontIcons.HomeGroup,
+    "DilateNode": FontIcons.HomeGroup,
+    # Condition / Logic
+    "ConditionNodeData": FontIcons.Dial6,                # ConditionDataGroup
+    "WaitAllParallelNodeData": FontIcons.Dial6,
+    # Template Matching
+    "TemplateMatching": FontIcons.GotoToday,             # TemplateMatchingDataGroup
+    # Detector
+    "Detector": FontIcons.LargeErase,                    # DetectorDataGroup
+    # Feature
+    "Feature": FontIcons.GenericScan,                    # FeatureDetectorDataGroup
+    # Network
+    "Modbus": FontIcons.NarratorForward,                 # NetworkDataGroup
+    "TcpClient": FontIcons.NarratorForward,
+    # Output
+    "Output": FontIcons.Ethernet,                        # OutputDataGroup
+    # ONNX
+    "Onnx": FontIcons.CommandPrompt,                     # OnnxDataGroup
+    # Other
+    "Other": FontIcons.More,                             # OtherDataGroup
 }
 
 

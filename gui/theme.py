@@ -82,7 +82,7 @@ class ThemeColors:
         self.node_bg_hover = QColor("#4a4a4a")
         self.node_bg_selected = QColor("#4a4a4a")
         self.node_border = QColor("#555555")
-        self.node_border_selected = QColor("#FF8C00")
+        self.node_border_selected = QColor("#E6A23C")   # WPF BrushKeys.Orange
         self.node_text = QColor("#dcdcdc")
         self.node_flag_default = QColor("#888888")
         self.node_shadow = QColor(0, 0, 0, 60)
@@ -190,7 +190,7 @@ class ThemeColorsLight(ThemeColors):
         self.node_bg_hover = QColor("#F0F0F0")
         self.node_bg_selected = QColor("#F0F0F0")
         self.node_border = QColor("#CCCCCC")
-        self.node_border_selected = QColor("#FF8C00")
+        self.node_border_selected = QColor("#E6A23C")   # WPF BrushKeys.Orange
         self.node_text = QColor("#1E1E1E")
         self.node_flag_default = QColor("#888888")
         self.node_shadow = QColor(0, 0, 0, 30)
