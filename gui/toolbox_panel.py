@@ -48,42 +48,38 @@ class _NodeTileButton(QFrame):
         self._icon_text = meta["icon"]
 
         self.setCursor(Qt.OpenHandCursor)
-        self.setFixedSize(105, 52)
+        self.setFixedSize(130, 32)
         self.setFrameShape(QFrame.NoFrame)
         self._build_ui(display_name, description)
         self._refresh_style()
 
     def _build_ui(self, display_name: str, description: str):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(6, 5, 6, 5)
-        layout.setSpacing(2)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(6, 4, 6, 4)
+        layout.setSpacing(6)
 
-        top = QHBoxLayout()
-        top.setContentsMargins(0, 0, 0, 0)
-        top.setSpacing(4)
-
+        # Left: icon
         icon = QLabel(self._icon_text)
         icon.setAlignment(Qt.AlignCenter)
-        icon.setFixedSize(24, 24)
+        icon.setFixedSize(22, 22)
         icon.setStyleSheet(
-            f"color: {self._color}; font-size: 16px; font-weight: bold;"
+            f"color: {self._color}; font-size: 15px; font-weight: bold;"
             f"font-family: '{ICON_FONT_FAMILY}';"
             "background: transparent; border: none;"
         )
-        top.addWidget(icon)
-        top.addStretch()
+        layout.addWidget(icon)
 
-        fav = QLabel(FontIcons.FavoriteStar if self.is_favorite else "")
-        fav.setStyleSheet("color: #d7ba7d; font-size: 11px; font-weight: bold;")
-        top.addWidget(fav)
-        layout.addLayout(top)
-
+        # Center: title text (larger, left-aligned)
         title = QLabel(display_name)
-        title.setWordWrap(True)
-        title.setAlignment(Qt.AlignLeft | Qt.AlignTop)
-        title.setStyleSheet("color: #1e1e1e; font-size: 10px; font-weight: 600;")
+        title.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        title.setStyleSheet("color: #000000; font-size: 12px; font-weight: 700;")
         title.setToolTip(description)
         layout.addWidget(title, 1)
+
+        # Right: favorite star
+        fav = QLabel(FontIcons.FavoriteStar if self.is_favorite else "")
+        fav.setStyleSheet("color: #d7ba7d; font-size: 12px; font-weight: bold;")
+        layout.addWidget(fav)
 
         self.setToolTip(f"{display_name}\n{description}\n类型: {self.type_name}")
 
@@ -157,39 +153,38 @@ class _DraggableCard(QPushButton):
         self._drag_start_pos = QPoint()
         self._drag_started = False
 
-        self.setFixedSize(105, 52)
+        self.setFixedSize(130, 32)
         self.setCursor(Qt.PointingHandCursor)
         self.setToolTip(f"{display_name}\n类型: {type_name}")
         self.setStyleSheet(
             "QPushButton {"
             "background: white; border: 1px solid #d0d0d0; border-radius: 4px;"
-            "color: #1e1e1e; font-size: 11px; font-weight: 600;"
             "}"
             "QPushButton:hover {"
             "background: #f0f0f0; border-color: #0078d4;"
             "}"
         )
 
-        inner = QVBoxLayout(self)
-        inner.setContentsMargins(4, 4, 4, 4)
-        inner.setSpacing(2)
+        inner = QHBoxLayout(self)
+        inner.setContentsMargins(6, 4, 6, 4)
+        inner.setSpacing(6)
 
         icon_lbl = QLabel(icon)
         icon_lbl.setAlignment(Qt.AlignCenter)
+        icon_lbl.setFixedSize(22, 22)
         icon_lbl.setStyleSheet(
-            f"color: {color}; font-size: 16px; font-weight: bold;"
+            f"color: {color}; font-size: 15px; font-weight: bold;"
             f"font-family: '{ICON_FONT_FAMILY}';"
             "background: transparent; border: none;"
         )
         inner.addWidget(icon_lbl)
 
         text_lbl = QLabel(display_name)
-        text_lbl.setAlignment(Qt.AlignCenter)
-        text_lbl.setWordWrap(True)
+        text_lbl.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         text_lbl.setStyleSheet(
-            "color: #1e1e1e; font-size: 10px; background: transparent; border: none;"
+            "color: #000000; font-size: 12px; font-weight: 700; background: transparent; border: none;"
         )
-        inner.addWidget(text_lbl)
+        inner.addWidget(text_lbl, 1)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -516,10 +511,15 @@ class _CollapsibleGroup(QWidget):
 
         layout.addWidget(self._header)
 
-        # ── Body (collapsible, FlowLayout) ──
+        # ── Body (collapsible, 2-column grid — WPF UniformGrid Columns=2) ──
         self._body = QWidget()
         self._body.setStyleSheet("background: transparent;")
-        self._body_layout = FlowLayout(self._body, margin=6, h_spacing=6, v_spacing=6)
+        self._body_grid = QGridLayout(self._body)
+        self._body_grid.setContentsMargins(6, 6, 6, 6)
+        self._body_grid.setHorizontalSpacing(4)
+        self._body_grid.setVerticalSpacing(4)
+        self._body_grid.setColumnStretch(0, 1)
+        self._body_grid.setColumnStretch(1, 1)
         self._body.setVisible(self._expanded)
         layout.addWidget(self._body)
 
@@ -528,8 +528,9 @@ class _CollapsibleGroup(QWidget):
         self._body.setVisible(self._expanded)
         self._arrow.setText("▾" if self._expanded else "▸")
 
-    def flow_layout(self) -> FlowLayout:
-        return self._body_layout
+    def add_tile(self, tile, index: int):
+        row, col = divmod(index, 2)
+        self._body_grid.addWidget(tile, row, col)
 
 
 # ── Draggable tree widget ──────────────────────────────────────────────────
@@ -943,17 +944,16 @@ class ToolboxPanel(QWidget):
         meta = _group_meta(group_name)
         section = _CollapsibleGroup(group_name, meta["icon"], meta["color"], metas)
 
-        for m in metas:
+        for i, m in enumerate(metas):
             tile = _NodeTileButton(m["type_name"], m["display_name"], m["description"],
                                     m["group_name"], m["is_favorite"])
             tile.activated.connect(self.node_type_selected.emit)
-            # single click also adds to canvas (WPF behaviour)
             tile.selected.connect(self.node_type_selected.emit)
             tile.favorite_toggled.connect(self.toggle_favorite)
             self._tile_widgets[m["type_name"]] = tile
             if m["type_name"] == self._selected_type:
                 tile.set_selected(True)
-            section.flow_layout().addWidget(tile)
+            section.add_tile(tile, i)
 
         self._grid_layout.addWidget(section)
         return len(metas)
