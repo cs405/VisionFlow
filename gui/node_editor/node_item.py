@@ -6,9 +6,8 @@ WPF structure:
   Border (state-aware border/background)
     ├─ DockPanel
     │   ├─ Grid (left 30px bar area)
-    │   │   ├─ Border Width=30 (colored state strip)
-    │   │   │   └─ FontIconTextBlock (icon centered)
-    │   │   └─ ...
+    │   │   ├─ Border Width=30 (colored state strip with index number)
+    │   │   └─ FontIconTextBlock (icon centered)
     │   └─ TextBlock (node title, center-aligned)
     └─ State triggers: bar visibility + icon foreground color
 
@@ -33,10 +32,6 @@ from core.node_base import (NodeBase, Port, PortType, PortDock,
                             ConditionNodeData, WaitAllParallelNodeData)
 from gui.node_editor.socket_item import SocketItem, PORT_DIAMETER
 from gui.font_icons import FontIcons, icon_font
-from gui.theme import theme_manager
-
-def _tc():
-    return theme_manager.colors
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -69,23 +64,6 @@ BAR_WIDTH = 30.0
 ICON_SIZE = 14
 TEXT_FONT_SIZE = 9
 NODE_MARGIN = 2
-
-# ═══════════════════════════════════════════════════════════════════════════
-# Colors — resolved from theme at paint time (WPF DynamicResource)
-# ═══════════════════════════════════════════════════════════════════════════
-
-def _nc(key: str) -> QColor:
-    """Resolve a node color key from the active theme — WPF {DynamicResource}."""
-    return theme_manager.color(key)
-
-# State colors mapped to theme keys
-_STATE_COLOR_KEYS = {
-    NodeState.IDLE: "status_idle",
-    NodeState.RUNNING: "status_running",
-    NodeState.COMPLETED: "status_ok",
-    NodeState.ERROR: "status_error",
-    NodeState.DISABLED: "status_disabled",
-}
 
 from core.constants import get_group_color, get_group_icon
 
@@ -152,12 +130,13 @@ class NodeItem(QGraphicsObject):
         self.node_data = node_data
         self._group_name = group_name
         self._hovered = False
-        self._state = NodeState.IDLE
+        self._state = NodeState.COMPLETED
         self._template = self._detect_template()
         self._flag_color = QColor(get_group_color(group_name))
         self._icon_text = _resolve_node_icon(node_data)
         self._pulse_val = 0.0
         self._pulse_timer: QTimer | None = None
+        self._index = 0  # sequential index managed by DiagramScene
 
         # Adaptive size
         self._node_w, self._node_h = self._compute_size()
@@ -195,7 +174,7 @@ class NodeItem(QGraphicsObject):
         font = self._title_font()
         fm = QFontMetrics(font)
         text_width = fm.boundingRect(title).width()
-        w = max(NODE_MIN_WIDTH, BAR_WIDTH + text_width + 18)
+        w = max(NODE_MIN_WIDTH, BAR_WIDTH + text_width + 18 + ICON_SIZE + 10)
         h = max(NODE_MIN_HEIGHT, fm.height() + 12)
         if self._template == NodeTemplate.SOURCE:
             h = max(h, 38.0)
@@ -304,115 +283,128 @@ class NodeItem(QGraphicsObject):
         return path
 
     # ═════════════════════════════════════════════════════════════════════════
-    # Paint — WPF StyleNodeDataBase visual alignment
+    # Paint — WPF StyleNodeDataBase visual alignment (3-state design)
     # ═════════════════════════════════════════════════════════════════════════
 
     def paint(self, painter, option, widget):
         painter.setRenderHint(QPainter.Antialiasing)
-        state_color = _nc(_STATE_COLOR_KEYS.get(self._state, "status_idle"))
+        state_color = self._resolve_state_color()
         body_path = self._build_body_path(self._rect)
 
-        is_active = self.isSelected() or self._hovered
-        if self._state == NodeState.DISABLED:
-            bg_color = _nc("node_bg")
-        elif self.isSelected():
-            bg_color = _nc("node_bg_selected")
-        elif self._hovered:
-            bg_color = _nc("node_bg_hover")
-        else:
-            bg_color = _nc("node_bg")
+        # ── Body background — always white, independent of theme ──
+        bg_color = QColor("#FFFFFF")
 
         painter.fillPath(body_path, bg_color)
 
-        if is_active:
+        if self.isSelected() or self._hovered:
             sr = self._rect.adjusted(2, 3, -2, 0)
             shadow_path = self._build_body_path(sr)
-            painter.fillPath(shadow_path, _nc("node_shadow"))
+            painter.fillPath(shadow_path, QColor(0, 0, 0, 30))
 
+        # ── Left bar: colored state strip with index number ──
         self._draw_left_bar(painter, state_color)
 
-        if self.isSelected():
-            border_color = _nc("node_border_selected")
-            border_width = 2.0
-        elif self._state == NodeState.ERROR:
-            border_color = _nc("status_error")
-            border_width = 2.0
-        elif self._state == NodeState.RUNNING:
-            border_color = _nc("status_running")
-            border_width = 2.0
-        elif self._state == NodeState.COMPLETED:
-            border_color = _nc("status_ok")
-            border_width = 2.0
-        elif self._hovered:
-            border_color = _nc("node_border_hover")
-            border_width = 1.5
-        elif self._template == NodeTemplate.SOURCE:
-            border_color = self._flag_color
-            border_width = 2.0
-        else:
-            border_color = _nc("node_border")
-            border_width = 1.0
-
+        # ── Border (WPF 3-state design: state-aware color & width) ──
+        border_color, border_width = self._resolve_border()
         painter.setPen(QPen(border_color, border_width))
         painter.setBrush(Qt.NoBrush)
         painter.drawPath(body_path)
 
+        # ── Output template: double border ──
         if self._template == NodeTemplate.OUTPUT and not self.isSelected():
             inner = self._rect.adjusted(3, 3, -3, -3)
             ipath = self._build_body_path(inner)
             painter.setPen(QPen(border_color.lighter(120), 0.5))
             painter.drawPath(ipath)
 
-        if self._state == NodeState.DISABLED:
-            text_color = _nc("text_disabled")
-        elif self._state == NodeState.RUNNING:
-            text_color = _nc("status_running")
-        elif self._state == NodeState.COMPLETED:
-            text_color = _nc("status_ok")
-        elif self._state == NodeState.ERROR:
-            text_color = _nc("status_error")
-        else:
-            text_color = _nc("node_text")
-        painter.setPen(text_color)
-        font = self._title_font()
-        painter.setFont(font)
+        # ── Right content: icon + text on white background ──
+        self._draw_right_content(painter)
 
-        title = self.node_data.title or self.node_data.name
-        fm = QFontMetrics(font)
-        text_rect_w = self._node_w - BAR_WIDTH - 8
-        elided = fm.elidedText(title, Qt.ElideRight, int(text_rect_w))
-        text_rect = QRectF(
-            -self._node_w / 2 + BAR_WIDTH + 2,
-            -self._node_h / 2,
-            text_rect_w,
-            self._node_h,
-        )
-        painter.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, elided)
+    # ── Border resolution (WPF 3-state design) ─────────────────────────────
+
+    def _resolve_state_color(self) -> QColor:
+        """State color for left bar — hardcoded, independent of theme."""
+        if self._state == NodeState.RUNNING:
+            return QColor("#3399FF")
+        if self._state == NodeState.COMPLETED:
+            return QColor("#67C23A")
+        if self._state == NodeState.ERROR:
+            return QColor("#DC000C")
+        return QColor("#909399")
+
+    def _resolve_border(self) -> tuple[QColor, float]:
+        """State-aware border — hardcoded, independent of theme."""
+        if self.isSelected():
+            return QColor("#E6A23C"), 2.0
+        if self._state == NodeState.ERROR:
+            return QColor("#DC000C"), 2.0
+        if self._state == NodeState.RUNNING:
+            return QColor("#3399FF"), 2.0
+        if self._state == NodeState.COMPLETED:
+            return QColor("#67C23A"), 2.0
+        if self._hovered:
+            return QColor("#606266"), 1.5
+        if self._template == NodeTemplate.SOURCE:
+            return self._flag_color, 2.0
+        return QColor("#EBEBEB"), 1.0
+
+    def _resolve_content_color(self) -> QColor:
+        """Content color for icon + text on white background."""
+        if self._state == NodeState.DISABLED:
+            return QColor("#C0C4CC")
+        return QColor("#000000")
+
+    # ── Left bar ────────────────────────────────────────────────────────────
 
     def _draw_left_bar(self, painter, state_color):
+        """Left 30px colored strip — WPF Running/Success/Error visibility trigger."""
         bar_visible = self._state in (NodeState.RUNNING, NodeState.COMPLETED, NodeState.ERROR)
-        icon_rect = QRectF(
-            -self._node_w / 2 + 2,
-            -self._node_h / 2 + 2,
-            BAR_WIDTH - 4,
-            self._node_h - 4,
-        )
-        if bar_visible:
-            bar_rect = QRectF(-self._node_w / 2, -self._node_h / 2, BAR_WIDTH, self._node_h)
-            bar_path = QPainterPath()
-            bar_path.addRoundedRect(bar_rect, NODE_CORNER_RADIUS, NODE_CORNER_RADIUS)
-            clip = QPainterPath()
-            clip.addRect(-self._node_w / 2, -self._node_h / 2,
-                         BAR_WIDTH + NODE_CORNER_RADIUS, self._node_h)
-            painter.fillPath(clip.intersected(bar_path), QBrush(state_color))
-            icon_color = _nc("accent_text")  # white on colored bar
-        else:
-            icon_color = _nc("node_text")
+        if not bar_visible:
+            return
 
+        bar_rect = QRectF(-self._node_w / 2, -self._node_h / 2, BAR_WIDTH, self._node_h)
+        bar_path = QPainterPath()
+        bar_path.addRoundedRect(bar_rect, NODE_CORNER_RADIUS, NODE_CORNER_RADIUS)
+        clip = QPainterPath()
+        clip.addRect(-self._node_w / 2, -self._node_h / 2,
+                     BAR_WIDTH + NODE_CORNER_RADIUS, self._node_h)
+        painter.fillPath(clip.intersected(bar_path), QBrush(state_color))
+
+        if self._index > 0:
+            index_font = QFont("Segoe UI", 11, QFont.Bold)
+            painter.setFont(index_font)
+            painter.setPen(QColor("#FFFFFF"))
+            num_rect = QRectF(-self._node_w / 2 + 2, -self._node_h / 2 + 2,
+                              BAR_WIDTH - 4, self._node_h - 4)
+            painter.drawText(num_rect, Qt.AlignCenter, str(self._index))
+
+    # ── Right content (icon + text on white background) ─────────────────────
+
+    def _draw_right_content(self, painter):
+        """Icon + text on the right side with white background."""
+        right_x = -self._node_w / 2 + BAR_WIDTH
+        right_w = self._node_w - BAR_WIDTH
+        content_color = self._resolve_content_color()
+
+        # ── Icon ──
         icon_f = icon_font(ICON_SIZE)
         painter.setFont(icon_f)
-        painter.setPen(icon_color)
-        painter.drawText(icon_rect, Qt.AlignCenter, self._icon_text)
+        painter.setPen(content_color)
+        icon_w = 16.0
+        icon_rect = QRectF(right_x + 6, -self._node_h / 2, icon_w, self._node_h)
+        painter.drawText(icon_rect, Qt.AlignVCenter | Qt.AlignCenter, self._icon_text)
+
+        # ── Text ──
+        font = self._title_font()
+        painter.setFont(font)
+        painter.setPen(content_color)
+        title = self.node_data.title or self.node_data.name
+        fm = QFontMetrics(font)
+        text_x = right_x + 6 + icon_w + 4
+        text_w = max(1.0, right_w - icon_w - 14)
+        elided = fm.elidedText(title, Qt.ElideRight, int(text_w))
+        text_rect = QRectF(text_x, -self._node_h / 2, text_w, self._node_h)
+        painter.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, elided)
 
     # ── Mouse events ────────────────────────────────────────────────────────
 

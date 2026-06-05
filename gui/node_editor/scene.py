@@ -115,6 +115,9 @@ class DiagramScene(QGraphicsScene):
         # ── Clipboard ──
         self._clipboard: list[dict] = []
 
+        # ── Sequential index counter ──
+        self._node_counter: int = 0
+
         self.selectionChanged.connect(self._on_selection_changed)
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -229,7 +232,8 @@ class DiagramScene(QGraphicsScene):
         self._workflow = workflow
 
     def add_node_item(self, node_data: NodeBase, pos: QPointF = None,
-                      group_name: str = "", sync_workflow: bool = True) -> NodeItem:
+                      group_name: str = "", sync_workflow: bool = True,
+                      auto_link: bool = True) -> NodeItem:
         item = NodeItem(node_data, group_name)
         item.setZValue(LayerZ.NODE)
         if pos is not None:
@@ -243,6 +247,10 @@ class DiagramScene(QGraphicsScene):
         # DoLayoutPort — position sockets along edges (WPF Layout.DoLayoutPort)
         self._do_layout_port(item)
 
+        # Assign sequential index
+        self._node_counter += 1
+        item._index = self._node_counter
+
         self.addItem(item)
         self._node_items[node_data.node_id] = item
         item.node_selected.connect(self._on_node_item_selected)
@@ -251,10 +259,29 @@ class DiagramScene(QGraphicsScene):
         if sync_workflow and self._workflow:
             self._workflow.add_node(node_data)
 
+        # Auto-connect to previous index node (skip the first node, only for new user actions)
+        if auto_link and item._index > 1:
+            self._auto_connect_to_previous(item)
+
         event_system.publish(EventType.NODE_ADDED, sender=self, node=node_data)
         event_system.publish(EventType.DIAGRAM_CHANGED, sender=self)
         self.node_item_added.emit(item)
         return item
+
+    def _auto_connect_to_previous(self, current_item: NodeItem):
+        """Auto-connect current node to the node with index = current_index - 1."""
+        prev_item = next(
+            (it for it in self._node_items.values()
+             if it._index == current_item._index - 1),
+            None
+        )
+        if prev_item is None:
+            return
+
+        out_socket = prev_item.get_output_sockets()[0] if prev_item.get_output_sockets() else None
+        in_socket = current_item.get_input_sockets()[0] if current_item.get_input_sockets() else None
+        if out_socket and in_socket:
+            self.create_edge(out_socket, in_socket, sync_workflow=True)
 
     def remove_node_item(self, node_id: str, sync_workflow: bool = True):
         item = self._node_items.pop(node_id, None)
@@ -269,9 +296,19 @@ class DiagramScene(QGraphicsScene):
         self.removeItem(item)
         if sync_workflow and self._workflow:
             self._workflow.remove_node(node_id)
+        self._reindex_nodes()
         event_system.publish(EventType.NODE_REMOVED, sender=self, node=item.node_data)
         event_system.publish(EventType.DIAGRAM_CHANGED, sender=self)
         self.node_item_removed.emit(node_id)
+
+    def _reindex_nodes(self):
+        """Re-assign sequential indices to all nodes after a deletion."""
+        items = sorted(self._node_items.values(), key=lambda it: it._index)
+        self._node_counter = 0
+        for it in items:
+            self._node_counter += 1
+            it._index = self._node_counter
+            it.update()
 
     def get_node_item(self, node_id: str) -> NodeItem | None:
         return self._node_items.get(node_id)
@@ -781,6 +818,7 @@ class DiagramScene(QGraphicsScene):
         self._node_items.clear()
         self._edge_items.clear()
         self._cmd_stack.clear()
+        self._node_counter = 0
 
     def load_from_workflow(self, workflow: WorkflowEngine):
         self.clear_all(sync_workflow=False)
@@ -790,7 +828,7 @@ class DiagramScene(QGraphicsScene):
             x = getattr(node, '_pos_x', 0.0) or 0.0
             y = getattr(node, '_pos_y', 0.0) or 0.0
             pos = QPointF(x, y) if (x or y) else None
-            item = self.add_node_item(node, pos, sync_workflow=False)
+            item = self.add_node_item(node, pos, sync_workflow=False, auto_link=False)
             if item:
                 node._pos_x = item.pos().x()
                 node._pos_y = item.pos().y()
