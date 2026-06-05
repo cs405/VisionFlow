@@ -1330,17 +1330,28 @@ class MainWindow(QMainWindow):
             self._log_panel.success(f"已复制流程图: {clone.name}")
 
     def _on_add_from_template(self):
-        """Add diagram from template (WPF top template / index 0)."""
+        """Add diagram from template (WPF AddDiagramByTemplateCommand).
+
+        WPF flow:
+          1. Guard: no templates → show "不存在模板，请先添加模板"
+          2. Show DiagramTemplates selection dialog (ListBox DataTemplate)
+          3. On submit: add SelectedDiagramTemplate.Diagram to DiagramDatas
+
+        Python: reuses TemplateManagerDialog for selection.
+        """
         project = project_service.current_project
         if project is None:
             return
-        self._sync_workflow_to_project()
-        clone = project.add_diagram_from_template(0)
-        if clone:
+        if not project.templates:
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.information(self, "提示", "不存在模板，请先将流程图另存为模板")
+            return
+        from gui.template_dialog import TemplateManagerDialog
+        dlg = TemplateManagerDialog(project, self)
+        dlg.exec_()
+        if dlg.added_diagram:
             self._refresh_diagram_tabs(project)
-            self._log_panel.success(f"从模板添加: {clone.name}")
-        else:
-            self._log_panel.warning("没有可用模板，请先将流程图另存为模板")
+            self._log_panel.success(f"从模板创建: {dlg.added_diagram.name}")
 
     def _on_manage_templates(self):
         """Open template management dialog (WPF ManageTemplatesCommand)."""
