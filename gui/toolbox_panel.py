@@ -144,8 +144,18 @@ class _NodeTileButton(QFrame):
 
 # ── Narrow mode: group icon buttons + popup (WPF ContextMenuPresenter) ──────
 
+# Track currently-active narrow popup for mutual exclusion
+_active_popup_button = None
+
+
 class _NarrowGroupPopup(QFrame):
-    """Popup showing a group's nodes in 2-column grid (WPF UniformGrid Columns=2)."""
+    """Popup matching WPF ContextMenu + GroupBox with CaptionRightTemplate.
+
+    WPF structure:
+      GroupBox Header=\"{Binding Name}\" (name left)
+        CaptionRightTemplate → icon (right)
+        UniformGrid Columns=\"2\" → node items
+    """
 
     node_type_selected = pyqtSignal(str)
 
@@ -157,43 +167,94 @@ class _NarrowGroupPopup(QFrame):
         )
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 8, 10, 8)
-        layout.setSpacing(6)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        header = QLabel(f"{icon}  {group_name}")
-        header.setStyleSheet(
+        # Header: group name (left) + icon (right) — WPF CaptionRightTemplate
+        header = QWidget()
+        header.setStyleSheet("background: #353538; border-radius: 6px 6px 0 0;")
+        hl = QHBoxLayout(header)
+        hl.setContentsMargins(10, 6, 8, 6)
+        hl.setSpacing(4)
+
+        name_lbl = QLabel(group_name)
+        name_lbl.setStyleSheet(
             f"color: {color}; font-size: 12px; font-weight: bold;"
             "background: transparent; border: none;"
         )
+        hl.addWidget(name_lbl, 1)
+
+        icon_lbl = QLabel(icon)
+        icon_lbl.setStyleSheet(
+            f"color: {color}; font-size: 14px; font-weight: bold;"
+            f"font-family: '{ICON_FONT_FAMILY}';"
+            "background: transparent; border: none;"
+        )
+        hl.addWidget(icon_lbl)
+
         layout.addWidget(header)
 
-        sep = QFrame()
-        sep.setFrameShape(QFrame.HLine)
-        sep.setStyleSheet("background: #505050; max-height: 1px; border: none;")
-        layout.addWidget(sep)
+        # 2-column grid — WPF UniformGrid Columns="2"
+        body = QWidget()
+        body.setStyleSheet("background: #2d2d30; border-radius: 0 0 6px 6px;")
+        bl = QVBoxLayout(body)
+        bl.setContentsMargins(8, 8, 8, 8)
+        bl.setSpacing(6)
 
         grid_widget = QWidget()
         grid = QGridLayout(grid_widget)
         grid.setContentsMargins(0, 0, 0, 0)
-        grid.setHorizontalSpacing(4)
-        grid.setVerticalSpacing(4)
+        grid.setHorizontalSpacing(6)
+        grid.setVerticalSpacing(6)
 
         for i, m in enumerate(metas):
-            btn = QPushButton(m["display_name"])
-            btn.setFixedSize(110, 28)
-            btn.setCursor(Qt.PointingHandCursor)
-            btn.setToolTip(f"{m['display_name']}\n{m['description']}")
-            btn.setStyleSheet(
-                "QPushButton { background: #3c3c3c; color: #dcdcdc; border: 1px solid #3f3f46;"
-                "border-radius: 4px; font-size: 11px; padding: 3px 8px; text-align: left; }"
-                "QPushButton:hover { background: #094771; border-color: #0078d4; color: white; }"
-            )
-            btn.clicked.connect(lambda checked, tn=m["type_name"]: self._on_node_clicked(tn))
             row, col = divmod(i, 2)
-            grid.addWidget(btn, row, col)
+            grid.addWidget(self._make_node_card(m), row, col)
 
-        layout.addWidget(grid_widget)
+        bl.addWidget(grid_widget)
+        layout.addWidget(body)
         self.adjustSize()
+
+    def _make_node_card(self, m: dict) -> QPushButton:
+        """WPF StyleNodeDataBase card: white bg, icon + text stacked."""
+        btn = QPushButton()
+        btn.setFixedSize(105, 52)
+        btn.setCursor(Qt.PointingHandCursor)
+        btn.setToolTip(f"{m['display_name']}\n{m['description']}\n类型: {m['type_name']}")
+        btn.setStyleSheet(
+            "QPushButton {"
+            "background: white; border: 1px solid #d0d0d0; border-radius: 4px;"
+            "color: #1e1e1e; font-size: 11px; font-weight: 600;"
+            "}"
+            "QPushButton:hover {"
+            "background: #f0f0f0; border-color: #0078d4;"
+            "}"
+        )
+        btn.clicked.connect(lambda checked, tn=m["type_name"]: self._on_node_clicked(tn))
+
+        # Icon + text stacked (matching WPF StyleNodeDataBase)
+        inner = QVBoxLayout(btn)
+        inner.setContentsMargins(4, 4, 4, 4)
+        inner.setSpacing(2)
+
+        icon_lbl = QLabel(m["icon"])
+        icon_lbl.setAlignment(Qt.AlignCenter)
+        icon_lbl.setStyleSheet(
+            f"color: {m['color']}; font-size: 16px; font-weight: bold;"
+            f"font-family: '{ICON_FONT_FAMILY}';"
+            "background: transparent; border: none;"
+        )
+        inner.addWidget(icon_lbl)
+
+        text_lbl = QLabel(m["display_name"])
+        text_lbl.setAlignment(Qt.AlignCenter)
+        text_lbl.setWordWrap(True)
+        text_lbl.setStyleSheet(
+            "color: #1e1e1e; font-size: 10px; background: transparent; border: none;"
+        )
+        inner.addWidget(text_lbl)
+
+        return btn
 
     def _on_node_clicked(self, type_name: str):
         self.node_type_selected.emit(type_name)
@@ -207,6 +268,7 @@ class _NarrowGroupButton(QPushButton):
              UncheckedGlyph=\"{Binding Icon}\" />
 
     No border, no background — just the icon glyph at large font size.
+    Mutual exclusion: only one button's popup is open at a time.
     """
 
     node_type_selected = pyqtSignal(str)
@@ -242,6 +304,12 @@ class _NarrowGroupButton(QPushButton):
             self._hide_popup()
 
     def _show_popup(self):
+        global _active_popup_button
+        # Close previously-active popup (mutual exclusion)
+        if _active_popup_button and _active_popup_button is not self:
+            _active_popup_button.setChecked(False)
+        _active_popup_button = self
+
         self._hide_popup()
         gmeta = _group_meta(self._group_name)
         icon = gmeta.get("icon", self._icon)
@@ -253,6 +321,9 @@ class _NarrowGroupButton(QPushButton):
         self._popup.show()
 
     def _hide_popup(self):
+        global _active_popup_button
+        if _active_popup_button is self:
+            _active_popup_button = None
         if self._popup:
             self._popup.removeEventFilter(self)
             self._popup.close()
