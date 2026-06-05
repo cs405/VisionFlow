@@ -332,71 +332,191 @@ theme_manager = ThemeManager()
 # ═══════════════════════════════════════════════════════════════════════════
 
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
-                               QPushButton, QListWidget, QListWidgetItem)
+                               QPushButton, QGroupBox, QScrollArea, QWidget,
+                               QGridLayout, QFrame)
 from PyQt5.QtCore import Qt as QtCore_Qt
 
 class ThemePickerDialog(QDialog):
-    """Modal dialog listing all color themes — WPF ColorThemeViewPresenter.
+    """Color theme picker — WPF ColorThemeViewPresenter 1:1 port.
 
-    Click any theme to preview instantly. OK to confirm, Cancel to revert.
+    Layout: GroupBox groups with WrapPanel-style card grid.
+    Each card = 250x150 QFrame rendered in the theme's OWN colors.
+    Click a card → immediate preview (WPF SelectionChanged → RefreshThemeCommand).
+    OK = keep, Cancel = revert to original.
     """
+
+    CARD_W, CARD_H = 250, 150
+    COLS = 2  # cards per row in group grid
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("颜色主题")
-        self.setMinimumSize(400, 350)
+        self.setMinimumSize(580, 480)
         self._original_theme = theme_manager.current_theme_id
         self._selected_id: str | None = None
+        self._cards: dict[str, QFrame] = {}
         self._setup_ui()
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
+        layout.setSpacing(10)
 
-        label = QLabel("选择颜色主题：")
-        layout.addWidget(label)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        container = QWidget()
+        container_layout = QVBoxLayout(container)
+        container_layout.setSpacing(14)
 
-        self._list = QListWidget()
+        # Group themes by GroupName (WPF CollectionViewSource GroupDescriptions)
         groups: dict[str, list] = {}
         for t in theme_manager.available_themes:
             groups.setdefault(t.group, []).append(t)
 
-        for group_name in ["强力推荐", "纯色", "外部主题"]:
+        for group_name in ["强力推荐", "纯色", "外部主题", "自定义"]:
             if group_name not in groups:
                 continue
-            for tdef in groups[group_name]:
-                check = "> " if tdef.id == theme_manager.current_theme_id else "   "
-                tag = "(深色)" if tdef.is_dark else "(浅色)"
-                item = QListWidgetItem(f"{check}{tdef.name}  {tag}")
-                item.setData(QtCore_Qt.UserRole, tdef.id)
-                item.setToolTip(f"{tdef.group} · {tdef.name}")
-                self._list.addItem(item)
+            group_box = QGroupBox(group_name)
+            group_box.setStyleSheet(f"""
+                QGroupBox {{ font-weight: bold; border: 1px solid {theme_manager.color('border').name()};
+                             margin-top: 14px; padding-top: 18px; }}
+                QGroupBox::title {{ subcontrol-origin: margin; left: 12px; padding: 0 6px; }}
+            """)
+            grid = QGridLayout()
+            grid.setSpacing(10)
+            for i, tdef in enumerate(groups[group_name]):
+                card = self._make_card(tdef)
+                grid.addWidget(card, i // self.COLS, i % self.COLS)
+            group_box.setLayout(grid)
+            container_layout.addWidget(group_box)
 
-        self._list.currentItemChanged.connect(self._on_item_changed)
-        layout.addWidget(self._list, 1)
+        container_layout.addStretch()
+        scroll.setWidget(container)
+        layout.addWidget(scroll, 1)
 
+        # Bottom buttons
         btn_row = QHBoxLayout()
         btn_row.addStretch()
-
         cancel_btn = QPushButton("取消")
         cancel_btn.clicked.connect(self._on_cancel)
         btn_row.addWidget(cancel_btn)
-
         ok_btn = QPushButton("确定")
         ok_btn.setDefault(True)
-        ok_btn.clicked.connect(self.accept)
+        ok_btn.clicked.connect(self._on_accept)
         btn_row.addWidget(ok_btn)
-
         layout.addLayout(btn_row)
 
-    def _on_item_changed(self, current, previous):
-        if current is None:
-            return
-        theme_id = current.data(QtCore_Qt.UserRole)
+        # Highlight the currently active theme card
+        self._update_card_highlights()
+
+    # ── Card factory (WPF ItemTemplate 250×150 Border) ──────────────────
+
+    def _make_card(self, tdef) -> QFrame:
+        """Build a 250x150 preview card rendered in the theme's own colors.
+
+        WPF XAML:
+          Border 250x150, Background={DynamicResource ColorKeys.Background}
+            UniformGrid (1 col):
+              TextBlock 【Prompt】 (ForegroundTitle)
+              TextBlock Name    (Foreground)
+              TextBlock Desc    (ForegroundAssist, wrap)
+              UniformGrid (1 row): Button "默认按钮" (CaptionBackground/CaptionForeground)
+        """
+        from gui.theme_data import resolve_colors
+        c = resolve_colors(tdef)  # full resolved color map for this theme
+
+        card = QFrame()
+        card.setFixedSize(self.CARD_W, self.CARD_H)
+        card.setCursor(QtCore_Qt.PointingHandCursor)
+        card.setToolTip(f"{tdef.name} — {tdef.description}")
+
+        card.setStyleSheet(f"""
+            QFrame {{
+                background: {c.get('bg_surface', '#333')};
+                border: 1px solid {c.get('border', '#555')};
+                border-radius: 6px;
+            }}
+        """)
+
+        # Click → select + immediate apply
+        card.mousePressEvent = lambda e, tid=tdef.id: self._select(tid)
+        self._cards[tdef.id] = card
+
+        inner = QVBoxLayout(card)
+        inner.setContentsMargins(10, 10, 10, 10)
+        inner.setSpacing(4)
+
+        # Row 1: 【Prompt】 (WPF ForegroundTitle)
+        prompt = tdef.prompt or tdef.name
+        p_lbl = QLabel(f"【{prompt}】")
+        p_lbl.setAlignment(QtCore_Qt.AlignCenter)
+        p_lbl.setStyleSheet(f"color: {c.get('text_title', c.get('text_primary','#ccc'))}; "
+                            f"font-weight: bold; font-size: 12px; border: none; background: transparent;")
+        inner.addWidget(p_lbl)
+
+        # Row 2: Name (WPF Foreground)
+        n_lbl = QLabel(tdef.name)
+        n_lbl.setAlignment(QtCore_Qt.AlignCenter)
+        n_lbl.setStyleSheet(f"color: {c.get('text_primary', '#ccc')}; font-size: 11px; "
+                            f"border: none; background: transparent;")
+        inner.addWidget(n_lbl)
+
+        # Row 3: Description (WPF ForegroundAssist, wrap + ellipsis)
+        desc = tdef.description or f"{'深色' if tdef.is_dark else '浅色'}主题"
+        d_lbl = QLabel(desc)
+        d_lbl.setAlignment(QtCore_Qt.AlignCenter)
+        d_lbl.setWordWrap(True)
+        d_lbl.setStyleSheet(f"color: {c.get('text_secondary', '#999')}; font-size: 9px; "
+                            f"border: none; background: transparent;")
+        inner.addWidget(d_lbl)
+
+        inner.addStretch()
+
+        # Row 4: "默认按钮" (WPF CaptionBackground / CaptionForeground)
+        btn = QPushButton("默认按钮")
+        btn.setEnabled(False)   # display-only, not interactive
+        btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {c.get('bg_caption', c.get('bg_surface_raised','#444'))};
+                color: {c.get('text_caption', c.get('text_primary','#ccc'))};
+                border: 1px solid {c.get('border', '#555')};
+                border-radius: 3px; padding: 3px 12px; font-size: 10px;
+            }}
+        """)
+        inner.addWidget(btn)
+
+        return card
+
+    # ── Selection (WPF SelectionChanged → RefreshThemeCommand) ──────────
+
+    def _select(self, theme_id: str):
+        """Immediate apply on click — WPF TwoWay SelectedItem binding."""
         theme_manager.set_theme(theme_id)
         self._selected_id = theme_id
+        self._update_card_highlights()
+
+    def _update_card_highlights(self):
+        """Update card borders: accent border for selected, normal for others."""
+        current = theme_manager.current_theme_id
+        for tid, card in self._cards.items():
+            tdef = next((t for t in theme_manager.available_themes if t.id == tid), None)
+            if tdef is None:
+                continue
+            from gui.theme_data import resolve_colors
+            c = resolve_colors(tdef)
+            border = c.get('accent', '#3399FF') if tid == current else c.get('border', '#555')
+            width = 3 if tid == current else 1
+            card.setStyleSheet(f"""
+                QFrame {{ background: {c.get('bg_surface', '#333')};
+                         border: {width}px solid {border}; border-radius: 6px; }}
+            """)
+
+    # ── Accept / Cancel ──────────────────────────────────────────────────
+
+    def _on_accept(self):
+        self.accept()
 
     def _on_cancel(self):
-        """Revert to original theme on cancel."""
         if self._original_theme != theme_manager.current_theme_id:
             theme_manager.set_theme(self._original_theme)
         self.reject()

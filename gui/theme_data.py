@@ -46,20 +46,24 @@ class ColorKey:
 
 @dataclass
 class ThemeDef:
-    """A named color theme — WPF DarkColorResource / LightColorResource.
+    """A named color theme — WPF ColorResource.
 
     Each theme:
-      - id: unique identifier, e.g. "dark", "light", "purple"
-      - name: display name in Chinese
-      - group: category for UI organization (强力推荐/纯色/自定义)
-      - is_dark: True = dark background theme, False = light
-      - colors: dict of color_key_id → hex_value (only overrides from defaults)
-      - order: sort order in theme picker UI
+      - id: unique identifier
+      - name: display name (WPF {Binding Name})
+      - group: category (WPF GroupName)
+      - is_dark: True = dark background
+      - prompt: short hint shown in 【】 (WPF {Binding Prompt})
+      - description: longer description (WPF {Binding Description})
+      - colors: dict of color_key_id → hex_value
+      - order: sort order
     """
     id: str
     name: str
     group: str = "纯色"
     is_dark: bool = True
+    prompt: str = ""
+    description: str = ""
     colors: dict[str, str] = field(default_factory=dict)
     order: int = 0
 
@@ -446,23 +450,28 @@ def _make_purple_dark() -> dict[str, str]:
 THEMES: dict[str, ThemeDef] = {
     "dark": ThemeDef(
         id="dark", name="深色（推荐）", group="强力推荐",
-        is_dark=True, colors=_make_dark(), order=0,
+        is_dark=True, prompt="专业深色", description="护眼深色主题，适合长时间使用",
+        colors=_make_dark(), order=0,
     ),
     "light": ThemeDef(
         id="light", name="浅色（推荐）", group="强力推荐",
-        is_dark=False, colors=_make_light(), order=1,
+        is_dark=False, prompt="清爽浅色", description="明亮清新，适合日间办公环境",
+        colors=_make_light(), order=1,
     ),
     "default": ThemeDef(
         id="default", name="常规", group="纯色",
-        is_dark=False, colors={}, order=10,
+        is_dark=False, prompt="系统默认", description="跟随系统的基础配色方案",
+        colors={}, order=10,
     ),
     "technology_blue": ThemeDef(
         id="technology_blue", name="深空科技蓝", group="外部主题",
-        is_dark=True, colors=_make_technology_blue_dark(), order=20,
+        is_dark=True, prompt="科技感", description="深蓝基调搭配青色强调，充满科技感",
+        colors=_make_technology_blue_dark(), order=20,
     ),
     "purple": ThemeDef(
         id="purple", name="暗夜紫", group="外部主题",
-        is_dark=True, colors=_make_purple_dark(), order=21,
+        is_dark=True, prompt="优雅紫色", description="深紫底色配合淡紫强调，优雅神秘",
+        colors=_make_purple_dark(), order=21,
     ),
 }
 

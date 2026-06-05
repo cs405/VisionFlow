@@ -242,6 +242,8 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1180, 720)
         self.setPalette(theme_manager.colors.to_palette())
         self.setStyleSheet(theme_manager.get_stylesheet())
+        # WPF SelectionChanged → RefreshThemeCommand: apply theme immediately
+        theme_manager.theme_changed.connect(lambda _: self._apply_theme())
         # WPF SystemKeys.FontFamily = Microsoft YaHei
         font = QFont("Microsoft YaHei", 9)
         self.setFont(font)
