@@ -762,48 +762,10 @@ class DiagramScene(QGraphicsScene):
         menu = QMenu()
 
         if isinstance(item, NodeItem):
-            run_act = QAction("▶  运行此节点", menu)
-            run_act.triggered.connect(lambda: self._run_single_node(item.node_data))
-            menu.addAction(run_act)
-            menu.addSeparator()
-
-            prop_act = QAction("⚙  属性...", menu)
-            prop_act.triggered.connect(lambda: self.node_properties_requested.emit(item.node_data))
-            menu.addAction(prop_act)
-
-            copy_act = QAction("📋  复制", menu)
-            copy_act.triggered.connect(self.copy_selected)
-            menu.addAction(copy_act)
-            menu.addSeparator()
-
-            delete_act = QAction("🗑  删除节点", menu)
-            delete_act.triggered.connect(
-                lambda: self._cmd_stack.execute(RemoveNodeCommand(self, item.node_data.node_id)))
-            menu.addAction(delete_act)
-
-            disable_act = QAction("⊘  禁用节点", menu)
-            disable_act.setCheckable(True)
-            disable_act.setChecked(item._state == NodeState.DISABLED)
-            disable_act.triggered.connect(
-                lambda checked: item.set_state(NodeState.DISABLED if checked else NodeState.IDLE))
-            menu.addAction(disable_act)
-            menu.addSeparator()
-
-            help_act = QAction("?  帮助", menu)
-            help_act.triggered.connect(lambda: self.node_help_requested.emit(item.node_data))
-            menu.addAction(help_act)
+            return None
 
         elif isinstance(item, EdgeItem):
-            delete_act = QAction("删除连线", menu)
-            delete_act.triggered.connect(
-                lambda: self._cmd_stack.execute(
-                    RemoveLinkCommand(self, item.link_data.link_id) if item.link_data else None))
-            menu.addAction(delete_act)
-            menu.addSeparator()
-            label_act = QAction("添加标签", menu)
-            label_act.triggered.connect(lambda: item.set_label(
-                getattr(item.from_socket.port, 'data_type', 'image') if item.from_socket else ''))
-            menu.addAction(label_act)
+            return None
 
         else:
             add_menu = menu.addMenu("添加节点")
