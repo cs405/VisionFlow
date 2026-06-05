@@ -48,15 +48,15 @@ class _NodeTileButton(QFrame):
         self._icon_text = meta["icon"]
 
         self.setCursor(Qt.OpenHandCursor)
-        self.setFixedSize(108, 78)
+        self.setFixedSize(105, 52)
         self.setFrameShape(QFrame.NoFrame)
         self._build_ui(display_name, description)
         self._refresh_style()
 
     def _build_ui(self, display_name: str, description: str):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 7, 8, 7)
-        layout.setSpacing(4)
+        layout.setContentsMargins(6, 5, 6, 5)
+        layout.setSpacing(2)
 
         top = QHBoxLayout()
         top.setContentsMargins(0, 0, 0, 0)
@@ -64,24 +64,24 @@ class _NodeTileButton(QFrame):
 
         icon = QLabel(self._icon_text)
         icon.setAlignment(Qt.AlignCenter)
-        icon.setFixedSize(28, 28)
+        icon.setFixedSize(24, 24)
         icon.setStyleSheet(
-            f"background: {self._color}; border-radius: 6px; color: white;"
-            "font-size: 14px; font-weight: 700;"
-            "font-family: 'Segoe UI Symbol', 'Microsoft YaHei UI';"
+            f"color: {self._color}; font-size: 16px; font-weight: bold;"
+            f"font-family: '{ICON_FONT_FAMILY}';"
+            "background: transparent; border: none;"
         )
         top.addWidget(icon)
         top.addStretch()
 
         fav = QLabel(FontIcons.FavoriteStar if self.is_favorite else "")
-        fav.setStyleSheet("color: #d7ba7d; font-size: 12px; font-weight: bold;")
+        fav.setStyleSheet("color: #d7ba7d; font-size: 11px; font-weight: bold;")
         top.addWidget(fav)
         layout.addLayout(top)
 
         title = QLabel(display_name)
         title.setWordWrap(True)
         title.setAlignment(Qt.AlignLeft | Qt.AlignTop)
-        title.setStyleSheet("color: #dcdcdc; font-size: 11px; font-weight: 600;")
+        title.setStyleSheet("color: #1e1e1e; font-size: 10px; font-weight: 600;")
         title.setToolTip(description)
         layout.addWidget(title, 1)
 
@@ -92,11 +92,11 @@ class _NodeTileButton(QFrame):
         self._refresh_style()
 
     def _refresh_style(self):
-        border = "#0078d4" if self._selected else ("#d7ba7d" if self.is_favorite else "#3f3f46")
-        bg = "#2f3640" if self._selected else "#252526"
+        border = "#0078d4" if self._selected else ("#d7ba7d" if self.is_favorite else "#d0d0d0")
+        bg = "#e8f0fe" if self._selected else "#ffffff"
         self.setStyleSheet(
-            f"_NodeTileButton {{ background: {bg}; border: 1px solid {border}; border-radius: 8px; }}"
-            f"_NodeTileButton:hover {{ background: #2d2d30; border-color: #0078d4; }}"
+            f"_NodeTileButton {{ background: {bg}; border: 1px solid {border}; border-radius: 4px; }}"
+            f"_NodeTileButton:hover {{ background: #f0f0f0; border-color: #0078d4; }}"
         )
 
     def mousePressEvent(self, event):
@@ -433,7 +433,7 @@ class _CollapsibleGroup(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # ── Header (clickable toggle) ──
+        # ── Header (clickable toggle) — WPF Expander with CaptionRightTemplate ──
         self._header = QPushButton()
         self._header.setFlat(True)
         self._header.setCursor(Qt.PointingHandCursor)
@@ -455,13 +455,6 @@ class _CollapsibleGroup(QWidget):
         )
         hl.addWidget(self._arrow)
 
-        icon_lbl = QLabel(icon)
-        icon_lbl.setStyleSheet(
-            f"color: {color}; font-size: 12px; font-weight: bold;"
-            "background: transparent; border: none;"
-        )
-        hl.addWidget(icon_lbl)
-
         name_lbl = QLabel(group_name)
         name_lbl.setStyleSheet(
             f"color: {color}; font-size: 12px; font-weight: bold;"
@@ -475,12 +468,21 @@ class _CollapsibleGroup(QWidget):
         )
         hl.addWidget(count_lbl)
 
+        # Icon on right — WPF CaptionRightTemplate
+        icon_lbl = QLabel(icon)
+        icon_lbl.setStyleSheet(
+            f"color: {color}; font-size: 14px; font-weight: bold;"
+            f"font-family: '{ICON_FONT_FAMILY}';"
+            "background: transparent; border: none;"
+        )
+        hl.addWidget(icon_lbl)
+
         layout.addWidget(self._header)
 
         # ── Body (collapsible, FlowLayout) ──
         self._body = QWidget()
         self._body.setStyleSheet("background: transparent;")
-        self._body_layout = FlowLayout(self._body, margin=6, h_spacing=8, v_spacing=8)
+        self._body_layout = FlowLayout(self._body, margin=6, h_spacing=6, v_spacing=6)
         self._body.setVisible(self._expanded)
         layout.addWidget(self._body)
 
