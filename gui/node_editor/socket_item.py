@@ -123,7 +123,7 @@ class SocketItem(QGraphicsObject):
             painter.drawEllipse(QPointF(0, 0), r, r)
         if self._connected_edges:
             painter.setPen(Qt.NoPen)
-            painter.setBrush(QBrush(QColor("#FF8C00")))
+            painter.setBrush(QBrush(QColor("#67C23A")))
             painter.drawEllipse(QPointF(0, 0), 2, 2)
 
     # ── Edge tracking ─────────────────────────────────────────────────────

@@ -68,9 +68,9 @@ class ThemeColors:
 
         # Port / Link
         self.port_input = QColor("#FFFFFF")
-        self.port_output = QColor("#FF8C00")
-        self.link = QColor("#FF8C00")
-        self.link_selected = QColor("#FFA726")
+        self.port_output = QColor("#67C23A")
+        self.link = QColor("#67C23A")
+        self.link_selected = QColor("#3399FF")
 
         # Grid / Canvas (checkerboard matching WPF Dark0 / Dark0_1)
         self.checker_base = QColor("#121317")   # WPF Dark0

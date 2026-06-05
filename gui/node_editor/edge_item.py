@@ -28,12 +28,12 @@ from PyQt5.QtGui import (QPen, QBrush, QColor, QPainterPath, QPainter,
 from core.node_base import LinkData, PortDock
 from gui.node_editor.link_drawer import ILinkDrawer, BrokenLinkDrawer
 
-# ── WPF Link.xaml BrushKeys colors (Light theme defaults) ──
+# ── WPF Link.xaml BrushKeys colors (WPF-VisionMaster flowable link defaults) ──
 
-EDGE_COLOR = QColor("#606266")           # WPF BrushKeys.Foreground — default link color
+EDGE_COLOR = QColor("#67C23A")           # WPF BrushKeys.Green — default flowable link (VisionMaster)
 EDGE_COLOR_SELECTED = QColor("#3399FF")  # WPF BrushKeys.Accent — IsSelected trigger
-EDGE_COLOR_HOVER = QColor("#0078d4")     # WPF MouseOver (no color change, we use accent-blue)
-EDGE_COLOR_RUNNING = QColor("#3399FF")   # WPF BrushKeys.Accent — State=Running
+EDGE_COLOR_HOVER = QColor("#0078d4")     # MouseOver blue
+EDGE_COLOR_RUNNING = QColor("#3399FF")   # WPF BrushKeys.Accent — State=Running + marching ants
 EDGE_COLOR_SUCCESS = QColor("#67C23A")   # WPF BrushKeys.Green — State=Success
 EDGE_COLOR_ERROR = QColor("#dc000c")     # WPF BrushKeys.Red — State=Error
 EDGE_COLOR_ORANGE = QColor("#E6A23C")    # WPF BrushKeys.Orange — IsDragEnter
@@ -233,8 +233,18 @@ class EdgeItem(QGraphicsObject):
     # ── Color & Pen — WPF Style triggers 1:1 ────────────────────────────────
 
     def _active_pen(self) -> QPen:
-        """Build QPen matching WPF Link.xaml DataTriggers."""
-        # State-based colors take priority (WPF trigger order)
+        """Build QPen matching WPF Link.xaml DataTriggers.
+
+        WPF: Stroke="{Binding Stroke}" from link data, with DataTrigger fallbacks.
+        """
+        # WPF: {Binding Stroke} from link data — use link_data.stroke_color if set
+        base_color = EDGE_COLOR
+        if self.link_data is not None and hasattr(self.link_data, 'stroke_color'):
+            sc = self.link_data.stroke_color
+            if sc:
+                base_color = QColor(sc)
+
+        # State-based colors take priority (WPF DataTrigger order)
         if self._state == EdgeState.RUNNING:
             pen = QPen(EDGE_COLOR_RUNNING, 2.0, cap=Qt.RoundCap, join=Qt.RoundJoin)
             pen.setDashPattern(DASH_RUNNING)
@@ -244,9 +254,9 @@ class EdgeItem(QGraphicsObject):
         if self._state == EdgeState.ERROR:
             return QPen(EDGE_COLOR_ERROR, EDGE_WIDTH, cap=Qt.RoundCap, join=Qt.RoundJoin)
 
-        # Non-flowable — dashed (WPF: not IFlowable → StrokeDashArray="5 5")
+        # Non-flowable / dynamic — dashed (WPF: S.Link.Dash / not IFlowable)
         if self._dash_pattern:
-            pen = QPen(EDGE_COLOR, EDGE_WIDTH_DYNAMIC, cap=Qt.RoundCap, join=Qt.RoundJoin)
+            pen = QPen(base_color, EDGE_WIDTH_DYNAMIC, cap=Qt.RoundCap, join=Qt.RoundJoin)
             pen.setDashPattern(self._dash_pattern)
             return pen
 
@@ -256,8 +266,8 @@ class EdgeItem(QGraphicsObject):
         if self._hovered:
             return QPen(EDGE_COLOR_HOVER, EDGE_WIDTH_HOVER, cap=Qt.RoundCap, join=Qt.RoundJoin)
 
-        # Default — WPF BrushKeys.Foreground
-        return QPen(EDGE_COLOR, EDGE_WIDTH, cap=Qt.RoundCap, join=Qt.RoundJoin)
+        # Default — WPF {Binding Stroke} or BrushKeys.Green
+        return QPen(base_color, EDGE_WIDTH, cap=Qt.RoundCap, join=Qt.RoundJoin)
 
     # ── Paint ───────────────────────────────────────────────────────────────
 
