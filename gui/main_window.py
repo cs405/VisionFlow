@@ -1351,7 +1351,7 @@ class MainWindow(QMainWindow):
             diagram_name = "无流程图"
             self.setWindowTitle("VisionFlow — VisionFlow")
         else:
-            project_name = project.display_name
+            project_name = project.name or project.display_name
             diagram_name = project.selected_diagram.display_name if project.selected_diagram else "无流程图"
             self.setWindowTitle(f"{project_name} — VisionFlow")
         if hasattr(self, "_cap_proj_lbl"):
@@ -1560,16 +1560,19 @@ class MainWindow(QMainWindow):
         if project is None:
             return
         self._sync_workflow_to_project()
-        if project.is_saved:
+        if project.file_path:
             if project_service.save(project):
-                self._log_panel.success("项目已保存")
+                self._log_panel.success(f"项目已保存: {os.path.basename(project.file_path)}")
+            else:
+                self._log_panel.error("项目保存失败")
         else:
             self._on_save_as_project()
 
     def _on_save_as_project(self):
         project = project_service.current_project or project_service.new_project()
-        path, _ = QFileDialog.getSaveFileName(self, "另存为...", f"{project.display_name}.json", project_service.FILE_FILTER)
+        path, _ = QFileDialog.getSaveFileName(self, "另存为...", f"{project.name}.json", project_service.FILE_FILTER)
         if path:
+            project.file_path = path
             self._sync_workflow_to_project()
             if project_service.save_as(project, path):
                 self._log_panel.success(f"已保存至: {path}")
@@ -2013,11 +2016,16 @@ class MainWindow(QMainWindow):
         form.addRow(btns)
 
         if dlg.exec_() == dlg.Accepted:
-            project.name = name_edit.text() or project.name
+            old_name = project.name
+            project.name = name_edit.text().strip() or project.name
             project.description = desc_edit.text()
             project.author = author_edit.text()
+            # Update file_path to reflect new name (WPF: GetFilePath uses Title)
+            if project.file_path and project.name != old_name:
+                d = os.path.dirname(project.file_path)
+                project.file_path = os.path.join(d, f"{project.name}.json")
             self._sync_proj_labels(project)
-            self._log_panel.info(f"项目属性已更新: {project.display_name}")
+            self._log_panel.info(f"项目已重命名: {old_name} → {project.name}")
 
     def _show_notification(self, level: str, title: str, message: str):
         """Show desktop notification (WPF ShowXxxNotifyMessageOutputNodeData)."""
