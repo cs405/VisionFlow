@@ -222,7 +222,6 @@ class NodeItem(QGraphicsObject):
         self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
         self.setAcceptHoverEvents(True)
         self.setZValue(10)
-        self.setCacheMode(QGraphicsItem.DeviceCoordinateCache)
 
         self.sockets: list[SocketItem] = []
         self._create_sockets()
@@ -366,7 +365,7 @@ class NodeItem(QGraphicsObject):
     # Paint — WPF StyleNodeDataBase visual alignment
     # ═════════════════════════════════════════════════════════════════════
 
-    def painter(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget):
+    def paint(self, painter, option, widget):
         painter.setRenderHint(QPainter.Antialiasing)
 
         state_color = STATE_COLORS.get(self._state, QColor("#999999"))
@@ -458,7 +457,7 @@ class NodeItem(QGraphicsObject):
         )
         painter.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, elided)
 
-    def _draw_left_bar(self, painter: QPainter, state_color: QColor):
+    def _draw_left_bar(self, painter, state_color):
         """Draw the 30px left bar area with FontIcon — 1:1 WPF StyleNodeDataBase.
 
         WPF layout (DockPanel):
