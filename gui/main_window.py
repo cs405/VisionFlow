@@ -25,7 +25,7 @@ from core.events import EventType, event_system
 from core.registry import node_registry
 from gui.font_icons import FontIcons, FontIconButton, FontIconTextBlock, FontIconToggleButton
 
-from gui.theme import theme_manager
+from gui.theme import theme_manager, ThemePickerDialog
 from gui.toolbox_panel import ToolboxPanel
 from gui.property_panel import PropertyPanel
 from gui.result_panel import ResultPanel
@@ -439,9 +439,9 @@ class MainWindow(QMainWindow):
 
         # ══════════ Right-docked action buttons — WPF FontIconButtonKeys.Command (lines 28-39) ══════════
         # Same style as Row 2 toolbar — _CMD_BTN matches WPF ButtonKeys.Default + FontIconButtonKeys.Default
-        # Color → Setting (lines 30-34)
+        # Color → Setting (lines 30-34) — WPF ShowColorThemeViewCommand
         for icon, tip, slot in [
-            (FontIcons.Color,   "颜色主题", self._on_toggle_theme),
+            (FontIcons.Color,   "颜色主题", self._on_show_theme_dialog),
             (FontIcons.Setting, "设置",     None),
         ]:
             btn = FontIconButton(icon, tooltip=tip, font_size=16)
@@ -1588,8 +1588,18 @@ class MainWindow(QMainWindow):
             pass
         self.close()
 
+    def _on_show_theme_dialog(self):
+        """Open color theme picker dialog — WPF ShowColorThemeViewCommand."""
+        dlg = ThemePickerDialog(self)
+        if dlg.exec_():
+            self._apply_theme()
+        if hasattr(self, '_theme_toggle'):
+            self._theme_toggle.blockSignals(True)
+            self._theme_toggle.setChecked(theme_manager.is_dark)
+            self._theme_toggle.blockSignals(False)
+
     def _on_toggle_theme(self):
-        """Toggle between dark and light themes (WPF ShowColorThemeViewCommand)."""
+        """Toggle between dark and light themes (WPF SwitchThemeViewPresenter)."""
         theme_manager.toggle()
         self._apply_theme()
         if hasattr(self, '_theme_toggle'):

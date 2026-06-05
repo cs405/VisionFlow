@@ -1,300 +1,409 @@
-"""Theme system — WPF H.Themes 1:1 port.
+"""Theme system — WPF H.Themes + ThemeOptions 1:1 port.
 
-Supports dark/light theme switching at runtime with signal notifications.
-Ported from H.Themes.Colors + ISwitchThemeViewPresenter.
+Data-driven theme engine with:
+  - 5 built-in themes (Dark, Light, Default, Technology Blue, Purple)
+  - color(key) → QColor unified accessor (replaces hardcoded QColor)
+  - Persistence: save/load theme choice to user config
+  - Backward compatible: colors property, get_stylesheet(), to_palette()
+  - Extensible: add themes by adding entries to theme_data.py
+
+WPF alignment:
+  - ThemeOptions.Instance.ColorResource ↔ ThemeManager.current_theme_id
+  - ThemeOptions.RefreshTheme()       ↔ ThemeManager._apply()
+  - ColorKeys + BrushKeys             ↔ COLOR_KEYS + resolve_colors()
+  - ResourceDictionary swap           ↔ _active_colors dict replace
+  - Persistence                       ↔ JSON save/load
 """
 
-from enum import Enum
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
 
 from PyQt5.QtGui import QColor, QPalette
 from PyQt5.QtCore import Qt, pyqtSignal, QObject
 
+from gui.theme_data import (
+    THEMES, COLOR_KEYS, ThemeDef, resolve_colors, get_theme_ids, get_theme_by_id,
+)
 
-class ThemeType(Enum):
-    DARK = "dark"
-    LIGHT = "light"
+
+# Config path — saved next to the app or in user home
+def _config_path() -> str:
+    """Get theme config file path (WPF AppPaths.UserSetting equivalent)."""
+    candidates = [
+        Path(__file__).parent.parent / "theme_config.json",   # project root
+        Path.home() / ".visionflow_theme.json",               # user home
+    ]
+    for p in candidates:
+        try:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            return str(p)
+        except Exception:
+            continue
+    return str(candidates[0])
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Color tokens
+# Legacy-style colors object — backward compat with existing code
 # ═══════════════════════════════════════════════════════════════════════════
 
-class ThemeColors:
-    """Dark theme color tokens (WPF Dark / Technology Blue palette)."""
+class _ThemeColorsProxy:
+    """Backward-compatible attribute-access wrapper over the active color map.
 
-    def __init__(self):
-        # Window chrome
-        self.window_bg = QColor(45, 45, 48)
-        self.title_bar_bg = QColor(30, 30, 30)
-        self.title_bar_text = QColor(220, 220, 220)
+    Existing code like `theme_manager.colors.node_bg` continues to work.
+    New code should prefer `theme_manager.color("node_bg")`.
+    """
 
-        # Surfaces
-        self.surface = QColor(37, 37, 38)      # #252526
-        self.surface_raised = QColor(52, 52, 55)  # #343437
-        self.surface_hover = QColor(62, 62, 66)   # #3e3e42
-        self.surface_input = QColor(51, 51, 55)   # #333337
-        self.surface_deep = QColor(30, 30, 30)    # #1e1e1e
+    def __init__(self, manager: "ThemeManager"):
+        self._manager = manager
 
-        # Text
-        self.text_primary = QColor(220, 220, 220)
-        self.text_secondary = QColor(153, 153, 153)
-        self.text_disabled = QColor(100, 100, 100)
+    def __getattr__(self, name: str):
+        # Map legacy attribute names to color key IDs
+        key = _LEGACY_TO_KEY.get(name, name)
+        val = self._manager._active_colors.get(key)
+        if val is None:
+            return QColor()
+        return QColor(val)
 
-        # Borders
-        self.border = QColor(63, 63, 70)         # #3f3f46
-        self.border_focus = QColor(0, 120, 212)   # #0078d4
-        self.border_title = QColor(0, 122, 204)
+    def __dir__(self):
+        return list(COLOR_KEYS.keys())
 
-        # Accent
-        self.accent = QColor("#0078d4")
-        self.accent_text = QColor(255, 255, 255)
-
-        # Node group colors
-        self.node_src = QColor("#4a9eff")
-        self.node_preprocess = QColor("#ff8c00")
-        self.node_blur = QColor("#9c27b0")
-        self.node_morph = QColor("#00bcd4")
-        self.node_detect = QColor("#f44336")
-        self.node_match = QColor("#4caf50")
-        self.node_output = QColor("#607d8b")
-        self.node_network = QColor("#795548")
-        self.node_onnx = QColor("#e91e63")
-
-        # Status
-        self.status_ok = QColor("#4caf50")
-        self.status_error = QColor("#f44336")
-        self.status_running = QColor("#2196f3")
-        self.status_idle = QColor("#999999")
-
-        # Port / Link
-        self.port_input = QColor("#FFFFFF")
-        self.port_output = QColor("#67C23A")
-        self.link = QColor("#67C23A")
-        self.link_selected = QColor("#3399FF")
-
-        # Grid / Canvas (checkerboard matching WPF Dark0 / Dark0_1)
-        self.checker_base = QColor("#121317")   # WPF Dark0
-        self.checker_alt = QColor("#191a20")    # WPF Dark0_1
-        self.canvas_bg = QColor("#121317")
-
-        # Node body
-        self.node_bg = QColor("#3c3c3c")
-        self.node_bg_hover = QColor("#4a4a4a")
-        self.node_bg_selected = QColor("#4a4a4a")
-        self.node_border = QColor("#555555")
-        self.node_border_selected = QColor("#E6A23C")   # WPF BrushKeys.Orange
-        self.node_text = QColor("#dcdcdc")
-        self.node_flag_default = QColor("#888888")
-        self.node_shadow = QColor(0, 0, 0, 60)
-
-        # Scroll bar
-        self.scroll_bg = QColor("#1e1e1e")
-        self.scroll_handle = QColor("#505050")
-        self.scroll_handle_hover = QColor("#686868")
+    # ── Palette + Stylesheet (delegated from legacy ThemeColors) ──────────
 
     def to_palette(self) -> QPalette:
-        p = QPalette()
-        p.setColor(QPalette.Window, self.surface)
-        p.setColor(QPalette.WindowText, self.text_primary)
-        p.setColor(QPalette.Base, self.surface_deep)
-        p.setColor(QPalette.AlternateBase, self.surface)
-        p.setColor(QPalette.ToolTipBase, QColor(60, 60, 60))
-        p.setColor(QPalette.ToolTipText, self.text_primary)
-        p.setColor(QPalette.Text, self.text_primary)
-        p.setColor(QPalette.Button, self.surface)
-        p.setColor(QPalette.ButtonText, self.text_primary)
-        p.setColor(QPalette.Link, self.accent)
-        p.setColor(QPalette.Highlight, self.accent)
-        p.setColor(QPalette.HighlightedText, self.accent_text)
-        p.setColor(QPalette.Disabled, QPalette.Text, QColor(128, 128, 128))
-        p.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(128, 128, 128))
-        return p
+        return _build_palette(self)
 
     @property
     def stylesheet(self) -> str:
-        """Dark theme QSS."""
-        return f"""
-            QToolTip {{ color: {self.text_primary.name()}; background: #3c3c3c; border: 1px solid #505050; padding: 4px; }}
-            QMenuBar {{ background: #2d2d30; color: {self.text_primary.name()}; }}
-            QMenuBar::item:selected {{ background: #3e3e42; }}
-            QMenu {{ background: #2d2d30; color: {self.text_primary.name()}; border: 1px solid #505050; }}
-            QMenu::item:selected {{ background: {self.accent.name()}; }}
-            QMenu::separator {{ height: 1px; background: #505050; margin: 4px 10px; }}
-            QStatusBar {{ background: #007acc; color: white; }}
-            QScrollBar:vertical {{ background: #1e1e1e; width: 10px; }}
-            QScrollBar::handle:vertical {{ background: #505050; min-height: 20px; border-radius: 5px; }}
-            QScrollBar::handle:vertical:hover {{ background: #686868; }}
-            QScrollBar:horizontal {{ background: #1e1e1e; height: 10px; }}
-            QScrollBar::handle:horizontal {{ background: #505050; min-width: 20px; border-radius: 5px; }}
-            QScrollBar::handle:horizontal:hover {{ background: #686868; }}
-            QTreeWidget {{ background: #252526; color: {self.text_primary.name()}; border: none; }}
-            QTreeWidget::item:hover {{ background: #2a2d2e; }}
-            QTreeWidget::item:selected {{ background: #094771; }}
-            QSplitter::handle {{ background: #505050; }}
-            QTabWidget::pane {{ border: 1px solid {self.border.name()}; background: #252526; }}
-            QTabBar::tab {{ background: #2d2d30; color: {self.text_primary.name()}; padding: 6px 12px; border-bottom: 2px solid transparent; }}
-            QTabBar::tab:selected {{ background: #252526; border-bottom: 2px solid {self.accent.name()}; }}
-            QTabBar::tab:hover {{ background: #3e3e42; }}
-            QTableView, QTableWidget {{ background: #252526; color: {self.text_primary.name()}; border: 1px solid {self.border.name()}; gridline-color: {self.border.name()}; selection-background-color: #094771; }}
-            QHeaderView::section {{ background: #2d2d30; color: {self.text_primary.name()}; padding: 4px 8px; border: none; border-right: 1px solid {self.border.name()}; border-bottom: 1px solid {self.border.name()}; }}
-            QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {{ background: #333337; color: {self.text_primary.name()}; border: 1px solid {self.border.name()}; padding: 4px 8px; border-radius: 3px; }}
-            QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {{ border-color: {self.accent.name()}; }}
-            QComboBox QAbstractItemView {{ background: #2d2d30; color: {self.text_primary.name()}; selection-background-color: {self.accent.name()}; }}
-            QCheckBox {{ color: {self.text_primary.name()}; }}
-            QPushButton {{ background: {self.accent.name()}; color: white; border: none; padding: 6px 16px; border-radius: 3px; }}
-            QPushButton:hover {{ background: #1a8ad4; }}
-            QPushButton:pressed {{ background: #005a9e; }}
-            QPushButton:disabled {{ background: #505050; color: #888; }}
-            QLabel {{ color: {self.text_primary.name()}; }}
-        """
+        return _build_stylesheet(self)
 
 
-class ThemeColorsLight(ThemeColors):
-    """Light theme (WPF White / Light Gray palette)."""
-
-    def __init__(self):
-        super().__init__()
-        # Window chrome
-        self.window_bg = QColor(245, 245, 245)
-        self.title_bar_bg = QColor(255, 255, 255)
-        self.title_bar_text = QColor(30, 30, 30)
-
-        # Surfaces
-        self.surface = QColor(255, 255, 255)      # white
-        self.surface_raised = QColor(245, 245, 245)
-        self.surface_hover = QColor(230, 230, 230)
-        self.surface_input = QColor(255, 255, 255)
-        self.surface_deep = QColor(240, 240, 240)
-
-        # Text
-        self.text_primary = QColor(30, 30, 30)
-        self.text_secondary = QColor(100, 100, 100)
-        self.text_disabled = QColor(170, 170, 170)
-
-        # Borders
-        self.border = QColor(220, 220, 220)
-        self.border_focus = QColor(0, 120, 212)
-        self.border_title = QColor(0, 122, 204)
-
-        # Accent
-        self.accent = QColor("#0078d4")
-        self.accent_text = QColor(255, 255, 255)
-
-        # Grid / Canvas (checkerboard matching WPF Dark0 / Dark0_1 in light theme)
-        self.checker_base = QColor("#ffffff")   # WPF Dark0 (light)
-        self.checker_alt = QColor("#fafafa")    # WPF Dark0_1 (light)
-        self.canvas_bg = QColor("#ffffff")
-
-        # Node body (WPF light theme: white bg, black text)
-        self.node_bg = QColor("#FFFFFF")
-        self.node_bg_hover = QColor("#F0F0F0")
-        self.node_bg_selected = QColor("#F0F0F0")
-        self.node_border = QColor("#CCCCCC")
-        self.node_border_selected = QColor("#E6A23C")   # WPF BrushKeys.Orange
-        self.node_text = QColor("#1E1E1E")
-        self.node_flag_default = QColor("#888888")
-        self.node_shadow = QColor(0, 0, 0, 30)
-
-        # Scroll
-        self.scroll_bg = QColor("#F0F0F0")
-        self.scroll_handle = QColor("#C0C0C0")
-        self.scroll_handle_hover = QColor("#A0A0A0")
-
-    def to_palette(self) -> QPalette:
-        p = QPalette()
-        p.setColor(QPalette.Window, self.surface)
-        p.setColor(QPalette.WindowText, self.text_primary)
-        p.setColor(QPalette.Base, self.surface)
-        p.setColor(QPalette.AlternateBase, self.surface_raised)
-        p.setColor(QPalette.ToolTipBase, QColor(255, 255, 255))
-        p.setColor(QPalette.ToolTipText, self.text_primary)
-        p.setColor(QPalette.Text, self.text_primary)
-        p.setColor(QPalette.Button, self.surface_raised)
-        p.setColor(QPalette.ButtonText, self.text_primary)
-        p.setColor(QPalette.Link, self.accent)
-        p.setColor(QPalette.Highlight, self.accent)
-        p.setColor(QPalette.HighlightedText, self.accent_text)
-        p.setColor(QPalette.Disabled, QPalette.Text, QColor(170, 170, 170))
-        p.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(170, 170, 170))
-        return p
-
-    @property
-    def stylesheet(self) -> str:
-        """Light theme QSS."""
-        return f"""
-            QToolTip {{ color: #1e1e1e; background: #ffffff; border: 1px solid #ccc; padding: 4px; }}
-            QMenuBar {{ background: #ffffff; color: #1e1e1e; }}
-            QMenuBar::item:selected {{ background: #e0e0e0; }}
-            QMenu {{ background: #ffffff; color: #1e1e1e; border: 1px solid #ccc; }}
-            QMenu::item:selected {{ background: {self.accent.name()}; color: white; }}
-            QMenu::separator {{ height: 1px; background: #e0e0e0; margin: 4px 10px; }}
-            QStatusBar {{ background: #007acc; color: white; }}
-            QScrollBar:vertical {{ background: #f0f0f0; width: 10px; }}
-            QScrollBar::handle:vertical {{ background: #c0c0c0; min-height: 20px; border-radius: 5px; }}
-            QScrollBar::handle:vertical:hover {{ background: #a0a0a0; }}
-            QScrollBar:horizontal {{ background: #f0f0f0; height: 10px; }}
-            QScrollBar::handle:horizontal {{ background: #c0c0c0; min-width: 20px; border-radius: 5px; }}
-            QScrollBar::handle:horizontal:hover {{ background: #a0a0a0; }}
-            QTreeWidget {{ background: #ffffff; color: #1e1e1e; border: none; }}
-            QTreeWidget::item:hover {{ background: #f0f0f0; }}
-            QTreeWidget::item:selected {{ background: {self.accent.name()}; color: white; }}
-            QSplitter::handle {{ background: #ccc; }}
-            QTabWidget::pane {{ border: 1px solid #e0e0e0; background: #ffffff; }}
-            QTabBar::tab {{ background: #f5f5f5; color: #1e1e1e; padding: 6px 12px; border-bottom: 2px solid transparent; }}
-            QTabBar::tab:selected {{ background: #ffffff; border-bottom: 2px solid {self.accent.name()}; }}
-            QTabBar::tab:hover {{ background: #e8e8e8; }}
-            QTableView, QTableWidget {{ background: #ffffff; color: #1e1e1e; border: 1px solid #e0e0e0; gridline-color: #e0e0e0; selection-background-color: {self.accent.name()}; }}
-            QHeaderView::section {{ background: #f5f5f5; color: #1e1e1e; padding: 4px 8px; border: none; border-right: 1px solid #e0e0e0; border-bottom: 1px solid #e0e0e0; }}
-            QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {{ background: #ffffff; color: #1e1e1e; border: 1px solid #ccc; padding: 4px 8px; border-radius: 3px; }}
-            QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {{ border-color: {self.accent.name()}; }}
-            QComboBox QAbstractItemView {{ background: #ffffff; color: #1e1e1e; selection-background-color: {self.accent.name()}; }}
-            QCheckBox {{ color: #1e1e1e; }}
-            QPushButton {{ background: {self.accent.name()}; color: white; border: none; padding: 6px 16px; border-radius: 3px; }}
-            QPushButton:hover {{ background: #1a8ad4; }}
-            QPushButton:pressed {{ background: #005a9e; }}
-            QPushButton:disabled {{ background: #ccc; color: #999; }}
-            QLabel {{ color: #1e1e1e; }}
-        """
+# Map old attribute names → new ColorKey IDs
+_LEGACY_TO_KEY = {
+    "window_bg":         "bg_window",
+    "title_bar_bg":      "bg_title_bar",
+    "title_bar_text":    "text_title",
+    "surface":           "bg_surface",
+    "surface_raised":    "bg_surface_raised",
+    "surface_hover":     "bg_surface_hover",
+    "surface_input":     "bg_surface_input",
+    "surface_deep":      "bg_surface_deep",
+    "status_ok":         "status_ok",
+    "status_error":      "status_error",
+    "status_running":    "status_running",
+    "status_idle":       "status_idle",
+    "port_input":        "port_input",
+    "port_output":       "port_output",
+    "link":              "edge",
+    "link_selected":     "edge_selected",
+    "checker_base":      "canvas_checker_base",
+    "checker_alt":       "canvas_checker_alt",
+    "canvas_bg":         "canvas_bg",
+    "node_bg":           "node_bg",
+    "node_bg_hover":     "node_bg_hover",
+    "node_bg_selected":  "node_bg_selected",
+    "node_border":       "node_border",
+    "node_border_selected": "node_border_selected",
+    "node_text":         "node_text",
+    "node_flag_default": "gray",
+    "node_shadow":       "node_shadow",
+    "scroll_bg":         "scroll_bg",
+    "scroll_handle":     "scroll_handle",
+    "scroll_handle_hover": "scroll_handle_hover",
+}
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Theme manager with signal
+# Palette builder — independent from proxy class
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _build_palette(colors) -> QPalette:
+    """Build QPalette from resolved colors (WPF to_palette equivalent)."""
+    p = QPalette()
+    p.setColor(QPalette.Window, QColor(colors.surface))
+    p.setColor(QPalette.WindowText, QColor(colors.text_primary))
+    p.setColor(QPalette.Base, QColor(colors.surface_deep))
+    p.setColor(QPalette.AlternateBase, QColor(colors.surface))
+    p.setColor(QPalette.ToolTipBase, QColor(60, 60, 60) if colors.surface_deep.lightness() < 128 else QColor(255, 255, 255))
+    p.setColor(QPalette.ToolTipText, QColor(colors.text_primary))
+    p.setColor(QPalette.Text, QColor(colors.text_primary))
+    p.setColor(QPalette.Button, QColor(colors.surface))
+    p.setColor(QPalette.ButtonText, QColor(colors.text_primary))
+    p.setColor(QPalette.Link, QColor(colors.accent))
+    p.setColor(QPalette.Highlight, QColor(colors.accent))
+    p.setColor(QPalette.HighlightedText, QColor(colors.accent_text))
+    p.setColor(QPalette.Disabled, QPalette.Text, QColor(128, 128, 128))
+    p.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(128, 128, 128))
+    return p
+
+
+def _build_stylesheet(colors) -> str:
+    """Build QSS from resolved colors (WPF ThemeColors.stylesheet equivalent)."""
+    c = colors   # shorthand
+    return f"""
+        QToolTip {{ color: {c.text_primary.name()}; background: {c.bg_surface_input.name()}; border: 1px solid {c.border.name()}; padding: 4px; }}
+        QMenuBar {{ background: {c.bg_surface.name()}; color: {c.text_primary.name()}; }}
+        QMenuBar::item:selected {{ background: {c.bg_surface_hover.name()}; }}
+        QMenu {{ background: {c.bg_surface.name()}; color: {c.text_primary.name()}; border: 1px solid {c.border.name()}; }}
+        QMenu::item:selected {{ background: {c.accent.name()}; }}
+        QMenu::separator {{ height: 1px; background: {c.border.name()}; margin: 4px 10px; }}
+        QStatusBar {{ background: #007acc; color: white; }}
+        QScrollBar:vertical {{ background: {c.scroll_bg.name()}; width: 10px; }}
+        QScrollBar::handle:vertical {{ background: {c.scroll_handle.name()}; min-height: 20px; border-radius: 5px; }}
+        QScrollBar::handle:vertical:hover {{ background: {c.scroll_handle_hover.name()}; }}
+        QScrollBar:horizontal {{ background: {c.scroll_bg.name()}; height: 10px; }}
+        QScrollBar::handle:horizontal {{ background: {c.scroll_handle.name()}; min-width: 20px; border-radius: 5px; }}
+        QScrollBar::handle:horizontal:hover {{ background: {c.scroll_handle_hover.name()}; }}
+        QTreeWidget {{ background: {c.bg_surface.name()}; color: {c.text_primary.name()}; border: none; }}
+        QTreeWidget::item:hover {{ background: {c.bg_surface_hover.name()}; }}
+        QTreeWidget::item:selected {{ background: #094771; }}
+        QSplitter::handle {{ background: {c.border.name()}; }}
+        QTabWidget::pane {{ border: 1px solid {c.border.name()}; background: {c.bg_surface.name()}; }}
+        QTabBar::tab {{ background: {c.bg_surface_raised.name()}; color: {c.text_primary.name()}; padding: 6px 12px; border-bottom: 2px solid transparent; }}
+        QTabBar::tab:selected {{ background: {c.bg_surface.name()}; border-bottom: 2px solid {c.accent.name()}; }}
+        QTabBar::tab:hover {{ background: {c.bg_surface_hover.name()}; }}
+        QTableView, QTableWidget {{ background: {c.bg_surface.name()}; color: {c.text_primary.name()}; border: 1px solid {c.border.name()}; gridline-color: {c.border.name()}; selection-background-color: #094771; }}
+        QHeaderView::section {{ background: {c.bg_surface_raised.name()}; color: {c.text_primary.name()}; padding: 4px 8px; border: none; border-right: 1px solid {c.border.name()}; border-bottom: 1px solid {c.border.name()}; }}
+        QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {{ background: {c.bg_surface_input.name()}; color: {c.text_primary.name()}; border: 1px solid {c.border.name()}; padding: 4px 8px; border-radius: 3px; }}
+        QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {{ border-color: {c.accent.name()}; }}
+        QComboBox QAbstractItemView {{ background: {c.bg_surface.name()}; color: {c.text_primary.name()}; selection-background-color: {c.accent.name()}; }}
+        QCheckBox {{ color: {c.text_primary.name()}; }}
+        QPushButton {{ background: {c.accent.name()}; color: {c.accent_text.name()}; border: none; padding: 6px 16px; border-radius: 3px; }}
+        QPushButton:hover {{ background: #1a8ad4; }}
+        QPushButton:pressed {{ background: #005a9e; }}
+        QPushButton:disabled {{ background: {c.border.name()}; color: {c.text_disabled.name()}; }}
+        QLabel {{ color: {c.text_primary.name()}; }}
+    """
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ThemeManager — WPF ThemeOptions + ThemeService
 # ═══════════════════════════════════════════════════════════════════════════
 
 class ThemeManager(QObject):
-    """Manages current theme, notifies all widgets on change (WPF ThemeService)."""
+    """Central theme service — WPF ThemeOptions + ILoadThemeOptionsService.
 
-    theme_changed = pyqtSignal(ThemeType)
+    Manages the active theme, provides color access, and persists choice.
+
+    Usage:
+        # Unified accessor (preferred for new code)
+        accent = theme_manager.color("accent")
+
+        # Backward-compatible attribute access
+        accent = theme_manager.colors.accent
+
+        # Switch themes
+        theme_manager.set_theme("light")
+        theme_manager.set_theme("technology_blue")
+        theme_manager.toggle_dark()    # toggle between dark/light
+
+        # List available themes for UI
+        for t in theme_manager.available_themes:
+            print(t.id, t.name, t.group)
+    """
+
+    theme_changed = pyqtSignal(str)   # emits new theme_id
 
     def __init__(self):
         super().__init__()
-        self._theme = ThemeType.DARK
-        self.colors = ThemeColors()
+        self._theme_id: str = "dark"                            # active theme ID
+        self._active_colors: dict[str, str] = {}                # resolved key→hex
+        self._theme_def: ThemeDef | None = None                 # active ThemeDef
+        self.colors = _ThemeColorsProxy(self)                   # backward compat proxy
 
-    @property
-    def theme(self) -> ThemeType:
-        return self._theme
+        # Load persisted choice, fall back to dark
+        loaded = self._load()
+        if loaded and loaded in THEMES:
+            self._theme_id = loaded
+        self._apply()
 
-    @theme.setter
-    def theme(self, value: ThemeType):
-        if value == self._theme:
+    # ── Public API ──────────────────────────────────────────────────────
+
+    def color(self, key: str) -> QColor:
+        """Unified color accessor — WPF {DynamicResource BrushKeys.Xxx}.
+
+        All GUI code should use this instead of hardcoding QColor("#...").
+        Returns black if key is unknown (safe fallback).
+        """
+        hex_val = self._active_colors.get(key)
+        if hex_val is None:
+            return QColor(0, 0, 0)
+        return QColor(hex_val)
+
+    def set_theme(self, theme_id: str):
+        """Switch to a different theme — WPF ThemeOptions.ColorResource setter."""
+        if theme_id == self._theme_id:
             return
-        self._theme = value
-        self.colors = ThemeColorsLight() if value == ThemeType.LIGHT else ThemeColors()
-        self.theme_changed.emit(value)
+        if theme_id not in THEMES:
+            return
+        self._theme_id = theme_id
+        self._apply()
+        self._save()
+
+    def toggle_dark(self):
+        """Toggle between dark/light — WPF ThemeOptions.SwitchDark()."""
+        current = THEMES.get(self._theme_id)
+        if current is None:
+            self.set_theme("dark")
+            return
+        target_is_dark = not current.is_dark
+        for tid, tdef in THEMES.items():
+            if tdef.is_dark == target_is_dark and tdef.group == "强力推荐":
+                self.set_theme(tid)
+                return
+        for tid, tdef in THEMES.items():
+            if tdef.is_dark == target_is_dark:
+                self.set_theme(tid)
+                return
 
     def toggle(self):
-        """Toggle between dark and light themes."""
-        self.theme = ThemeType.LIGHT if self._theme == ThemeType.DARK else ThemeType.DARK
+        """Backward-compat alias for toggle_dark()."""
+        self.toggle_dark()
 
-    def get_stylesheet(self) -> str:
-        """Get the current theme's stylesheet."""
-        return self.colors.stylesheet
+    @property
+    def current_theme_id(self) -> str:
+        return self._theme_id
+
+    @property
+    def current_theme_name(self) -> str:
+        t = THEMES.get(self._theme_id)
+        return t.name if t else self._theme_id
 
     @property
     def is_dark(self) -> bool:
-        return self._theme == ThemeType.DARK
+        t = THEMES.get(self._theme_id)
+        return t.is_dark if t else True
+
+    @property
+    def available_themes(self) -> list[ThemeDef]:
+        """All registered themes in display order — WPF ThemeOptions.ColorResources."""
+        return sorted(THEMES.values(), key=lambda t: t.order)
+
+    def get_stylesheet(self) -> str:
+        """Current theme QSS stylesheet (backward compat)."""
+        return self.colors.stylesheet
+
+    # ── Internal ────────────────────────────────────────────────────────
+
+    def _apply(self):
+        """Resolve colors for the current theme and notify — WPF RefreshTheme()."""
+        tdef = THEMES.get(self._theme_id)
+        if tdef is None:
+            tdef = THEMES["dark"]
+            self._theme_id = "dark"
+        self._theme_def = tdef
+        self._active_colors = resolve_colors(tdef)
+        self.theme_changed.emit(self._theme_id)
+
+    def _save(self):
+        """Persist theme choice to JSON — WPF ThemeOptions.Save()."""
+        try:
+            data = {"theme": self._theme_id}
+            with open(_config_path(), "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+        except Exception:
+            pass   # non-critical — don't crash if config can't be written
+
+    def _load(self) -> str | None:
+        """Load persisted theme choice — WPF ThemeOptions.Load()."""
+        for path in [
+            Path(__file__).parent.parent / "theme_config.json",
+            Path.home() / ".visionflow_theme.json",
+        ]:
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    theme_id = data.get("theme", "")
+                    if theme_id in THEMES:
+                        return theme_id
+            except Exception:
+                continue
+        return None
 
 
-# Global instance
+# Global singleton — WPF ThemeOptions.Instance
 theme_manager = ThemeManager()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Theme Picker Dialog — WPF ColorThemeViewPresenter
+# ═══════════════════════════════════════════════════════════════════════════
+
+from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
+                               QPushButton, QListWidget, QListWidgetItem)
+from PyQt5.QtCore import Qt as QtCore_Qt
+
+class ThemePickerDialog(QDialog):
+    """Modal dialog listing all color themes — WPF ColorThemeViewPresenter.
+
+    Click any theme to preview instantly. OK to confirm, Cancel to revert.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("颜色主题")
+        self.setMinimumSize(400, 350)
+        self._original_theme = theme_manager.current_theme_id
+        self._selected_id: str | None = None
+        self._setup_ui()
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+
+        label = QLabel("选择颜色主题：")
+        layout.addWidget(label)
+
+        self._list = QListWidget()
+        groups: dict[str, list] = {}
+        for t in theme_manager.available_themes:
+            groups.setdefault(t.group, []).append(t)
+
+        for group_name in ["强力推荐", "纯色", "外部主题"]:
+            if group_name not in groups:
+                continue
+            for tdef in groups[group_name]:
+                check = "> " if tdef.id == theme_manager.current_theme_id else "   "
+                tag = "(深色)" if tdef.is_dark else "(浅色)"
+                item = QListWidgetItem(f"{check}{tdef.name}  {tag}")
+                item.setData(QtCore_Qt.UserRole, tdef.id)
+                item.setToolTip(f"{tdef.group} · {tdef.name}")
+                self._list.addItem(item)
+
+        self._list.currentItemChanged.connect(self._on_item_changed)
+        layout.addWidget(self._list, 1)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+
+        cancel_btn = QPushButton("取消")
+        cancel_btn.clicked.connect(self._on_cancel)
+        btn_row.addWidget(cancel_btn)
+
+        ok_btn = QPushButton("确定")
+        ok_btn.setDefault(True)
+        ok_btn.clicked.connect(self.accept)
+        btn_row.addWidget(ok_btn)
+
+        layout.addLayout(btn_row)
+
+    def _on_item_changed(self, current, previous):
+        if current is None:
+            return
+        theme_id = current.data(QtCore_Qt.UserRole)
+        theme_manager.set_theme(theme_id)
+        self._selected_id = theme_id
+
+    def _on_cancel(self):
+        """Revert to original theme on cancel."""
+        if self._original_theme != theme_manager.current_theme_id:
+            theme_manager.set_theme(self._original_theme)
+        self.reject()
+
+    def exec_(self) -> int:
+        result = super().exec_()
+        if result != QDialog.Accepted:
+            self._on_cancel()
+        return bool(self._selected_id) or (result == QDialog.Accepted)
+

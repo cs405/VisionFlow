@@ -38,12 +38,15 @@ SCENE_RECT = QRectF(-5000, -5000, 10000, 10000)
 # Checkerboard tile — 1:1 port of WPF H.Theme BrushKeys Tile pattern
 CHECKER_TILE = 20
 CHECKER_CELL = 10
-CHECKER_BASE = QColor("#121317")
-CHECKER_ALT = QColor("#191a20")
+from gui.theme import theme_manager
 
 
 def _make_checker_brush(tile=CHECKER_TILE, cell=CHECKER_CELL,
-                         base=CHECKER_BASE, alt=CHECKER_ALT):
+                         base=None, alt=None):
+    if base is None:
+        base = theme_manager.color("canvas_checker_base")
+    if alt is None:
+        alt = theme_manager.color("canvas_checker_alt")
     pixmap = QPixmap(tile, tile)
     pixmap.fill(base)
     p = QPainter(pixmap)
@@ -199,7 +202,7 @@ class DiagramScene(QGraphicsScene):
         if self._show_grid:
             self.setBackgroundBrush(_make_checker_brush())
         else:
-            self.setBackgroundBrush(QBrush(CHECKER_BASE))
+            self.setBackgroundBrush(QBrush(theme_manager.color("canvas_checker_base")))
         self.update()
 
     # ═══════════════════════════════════════════════════════════════════════════

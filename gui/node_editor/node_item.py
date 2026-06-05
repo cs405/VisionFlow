@@ -71,29 +71,20 @@ TEXT_FONT_SIZE = 9
 NODE_MARGIN = 2
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Colors — WPF Brushes mapped to dark theme
+# Colors — resolved from theme at paint time (WPF DynamicResource)
 # ═══════════════════════════════════════════════════════════════════════════
 
-NODE_BG = QColor("#ffffff")
-NODE_BG_HOVER = QColor("#f5f5f5")
-NODE_BG_SELECTED = QColor("#ebebeb")
-NODE_BG_DISABLED = QColor("#f0f0f0")
+def _nc(key: str) -> QColor:
+    """Resolve a node color key from the active theme — WPF {DynamicResource}."""
+    return theme_manager.color(key)
 
-NODE_BORDER = QColor("#ebebeb")
-NODE_BORDER_HOVER = QColor("#606266")
-NODE_BORDER_SELECTED = QColor("#E6A23C")
-NODE_BORDER_ERROR = QColor("#dc000c")
-
-NODE_TEXT_COLOR = QColor("#1e1e1e")
-NODE_TEXT_DISABLED = QColor("#999999")
-NODE_SHADOW = QColor(0, 0, 0, 30)
-
-STATE_COLORS = {
-    NodeState.IDLE: QColor("#909399"),
-    NodeState.RUNNING: QColor("#3399FF"),
-    NodeState.COMPLETED: QColor("#67C23A"),
-    NodeState.ERROR: QColor("#dc000c"),
-    NodeState.DISABLED: QColor("#555555"),
+# State colors mapped to theme keys
+_STATE_COLOR_KEYS = {
+    NodeState.IDLE: "status_idle",
+    NodeState.RUNNING: "status_running",
+    NodeState.COMPLETED: "status_ok",
+    NodeState.ERROR: "status_error",
+    NodeState.DISABLED: "status_disabled",
 }
 
 from core.constants import get_group_color, get_group_icon
@@ -318,48 +309,48 @@ class NodeItem(QGraphicsObject):
 
     def paint(self, painter, option, widget):
         painter.setRenderHint(QPainter.Antialiasing)
-        state_color = STATE_COLORS.get(self._state, QColor("#999999"))
+        state_color = _nc(_STATE_COLOR_KEYS.get(self._state, "status_idle"))
         body_path = self._build_body_path(self._rect)
 
         is_active = self.isSelected() or self._hovered
         if self._state == NodeState.DISABLED:
-            bg_color = NODE_BG_DISABLED
+            bg_color = _nc("node_bg")
         elif self.isSelected():
-            bg_color = NODE_BG_SELECTED
+            bg_color = _nc("node_bg_selected")
         elif self._hovered:
-            bg_color = NODE_BG_HOVER
+            bg_color = _nc("node_bg_hover")
         else:
-            bg_color = NODE_BG
+            bg_color = _nc("node_bg")
 
         painter.fillPath(body_path, bg_color)
 
         if is_active:
             sr = self._rect.adjusted(2, 3, -2, 0)
             shadow_path = self._build_body_path(sr)
-            painter.fillPath(shadow_path, NODE_SHADOW)
+            painter.fillPath(shadow_path, _nc("node_shadow"))
 
         self._draw_left_bar(painter, state_color)
 
         if self.isSelected():
-            border_color = NODE_BORDER_SELECTED
+            border_color = _nc("node_border_selected")
             border_width = 2.0
         elif self._state == NodeState.ERROR:
-            border_color = NODE_BORDER_ERROR
+            border_color = _nc("status_error")
             border_width = 2.0
         elif self._state == NodeState.RUNNING:
-            border_color = STATE_COLORS[NodeState.RUNNING]
+            border_color = _nc("status_running")
             border_width = 2.0
         elif self._state == NodeState.COMPLETED:
-            border_color = STATE_COLORS[NodeState.COMPLETED]
+            border_color = _nc("status_ok")
             border_width = 2.0
         elif self._hovered:
-            border_color = NODE_BORDER_HOVER
+            border_color = _nc("node_border_hover")
             border_width = 1.5
         elif self._template == NodeTemplate.SOURCE:
             border_color = self._flag_color
             border_width = 2.0
         else:
-            border_color = NODE_BORDER
+            border_color = _nc("node_border")
             border_width = 1.0
 
         painter.setPen(QPen(border_color, border_width))
@@ -373,15 +364,15 @@ class NodeItem(QGraphicsObject):
             painter.drawPath(ipath)
 
         if self._state == NodeState.DISABLED:
-            text_color = NODE_TEXT_DISABLED
+            text_color = _nc("text_disabled")
         elif self._state == NodeState.RUNNING:
-            text_color = STATE_COLORS[NodeState.RUNNING]
+            text_color = _nc("status_running")
         elif self._state == NodeState.COMPLETED:
-            text_color = STATE_COLORS[NodeState.COMPLETED]
+            text_color = _nc("status_ok")
         elif self._state == NodeState.ERROR:
-            text_color = STATE_COLORS[NodeState.ERROR]
+            text_color = _nc("status_error")
         else:
-            text_color = NODE_TEXT_COLOR
+            text_color = _nc("node_text")
         painter.setPen(text_color)
         font = self._title_font()
         painter.setFont(font)
@@ -414,9 +405,9 @@ class NodeItem(QGraphicsObject):
             clip.addRect(-self._node_w / 2, -self._node_h / 2,
                          BAR_WIDTH + NODE_CORNER_RADIUS, self._node_h)
             painter.fillPath(clip.intersected(bar_path), QBrush(state_color))
-            icon_color = QColor("#FFFFFF")
+            icon_color = _nc("accent_text")  # white on colored bar
         else:
-            icon_color = NODE_TEXT_COLOR
+            icon_color = _nc("node_text")
 
         icon_f = icon_font(ICON_SIZE)
         painter.setFont(icon_f)

@@ -22,6 +22,7 @@ from PyQt5.QtGui import (QPen, QBrush, QColor, QPainter, QPainterPath,
                           QLinearGradient, QPolygonF)
 
 from core.node_base import Port, PortType, PortDock
+from gui.theme import theme_manager
 
 
 PORT_RADIUS = 4.0
@@ -96,7 +97,7 @@ class SocketItem(QGraphicsObject):
             self._pen = QPen(dt.color, 1.5)
             if dt.dashed:
                 self._pen.setStyle(Qt.DashLine)
-            self._brush = QBrush(QColor("#333337"))
+            self._brush = QBrush(theme_manager.color("bg_surface_input"))
         self.setToolTip(f"{self.port.dock.name} — {dt.label}")
         self.update()
 
@@ -123,7 +124,7 @@ class SocketItem(QGraphicsObject):
             painter.drawEllipse(QPointF(0, 0), r, r)
         if self._connected_edges:
             painter.setPen(Qt.NoPen)
-            painter.setBrush(QBrush(QColor("#67C23A")))
+            painter.setBrush(QBrush(theme_manager.color("port_connected")))
             painter.drawEllipse(QPointF(0, 0), 2, 2)
 
     # ── Edge tracking ─────────────────────────────────────────────────────
