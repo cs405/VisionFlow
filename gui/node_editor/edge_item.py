@@ -1,14 +1,7 @@
-"""Edge (link) graphics item — Bezier curve with arrow, labels, type coloring.
+"""Edge (link) graphics item — WPF LineLinkDrawer / BrokenLinkDrawer port.
 
-Ported from H.Controls.Diagram (LinkData, FlowableLinkData, BezierLink).
-
-Features:
-  - Cubic Bezier routing between port dock positions
-  - Arrowhead at target endpoint
-  - Self-loop routing (when connecting to same node)
-  - Data-type color coding (from source port)
-  - Hoverable label with link info
-  - Selection and deletion support
+Ported from H.Controls.Diagram Link + ILinkDrawer.
+Straight-line or orthogonal path with arrow at target, driven by port dock positions.
 """
 
 import math
@@ -17,67 +10,45 @@ from PyQt5.QtWidgets import (QGraphicsObject, QGraphicsSceneMouseEvent,
                               QGraphicsTextItem)
 from PyQt5.QtCore import Qt, QPointF, QRectF, pyqtSignal
 from PyQt5.QtGui import (QPen, QBrush, QColor, QPainterPath, QPainter,
-                          QPainterPathStroker, QFont, QFontMetrics,
-                          QPolygonF)
+                          QPainterPathStroker, QFont, QPolygonF)
 
 from core.node_base import LinkData, PortDock
 
-
-# Colors by data type
-EDGE_COLORS = {
-    "image": QColor("#FF8C00"),      # Orange
-    "control": QColor("#FFD700"),    # Gold
-    "text": QColor("#00BCD4"),       # Cyan
-    "any": QColor("#AAAAAA"),        # Gray
-}
-EDGE_COLOR_DEFAULT = QColor("#FF8C00")
+EDGE_COLOR = QColor("#FF8C00")
 EDGE_COLOR_SELECTED = QColor("#FFA726")
 EDGE_COLOR_HOVER = QColor("#FFB74D")
 EDGE_WIDTH = 2.0
 EDGE_WIDTH_HOVER = 3.0
 EDGE_WIDTH_SELECTED = 2.5
-CONTROL_POINT_OFFSET = 80
 ARROW_SIZE = 8.0
 
 
 class EdgeItem(QGraphicsObject):
-    """Bezier curve edge connecting two SocketItems.
+    """Straight-line / orthogonal edge between two SocketItems.
 
-    Supports:
-      - Cubic Bezier routing with port-dock-aware control points
-      - Arrow at target
-      - Self-loop rendering (circular loopback)
-      - Data-type-aware coloring
-      - Label display
-      - Selection and hover states
+    WPF alignment: LineLinkDrawer + BrokenLinkDrawer.
+    No Bezier — straight segments between port center points.
     """
 
     edge_selected = pyqtSignal(object)
 
-    def __init__(self, from_socket: "SocketItem", to_socket: "SocketItem" = None,
-                 link_data: LinkData = None, parent=None):
+    def __init__(self, from_socket, to_socket=None, link_data=None, parent=None):
         super().__init__(parent)
         self.from_socket = from_socket
         self.to_socket = to_socket
         self.link_data = link_data
         self._hovered = False
-        self._temp_end: QPointF | None = None
-        self._label_item: QGraphicsTextItem | None = None
+        self._temp_end = None
+        self._label_item = None
         self._path = QPainterPath()
-        self._pen = QPen()
+        self._pen = QPen(EDGE_COLOR, EDGE_WIDTH)
         self._arrow_poly = QPolygonF()
-
-        # Determine color from source port data type
-        dt = getattr(from_socket.port, 'data_type', 'image') or 'image'
-        self._edge_color = EDGE_COLORS.get(dt, EDGE_COLOR_DEFAULT)
 
         self.setZValue(5)
         self.setAcceptHoverEvents(True)
         self.setFlag(QGraphicsObject.ItemIsSelectable, True)
 
-        self._update_color()
-        self.update_path()
-
+        self._rebuild()
         if self.link_data and self.link_data.text:
             self.set_label(self.link_data.text)
 
@@ -85,141 +56,150 @@ class EdgeItem(QGraphicsObject):
         if to_socket:
             to_socket.add_edge(self)
 
-    # ── Color ─────────────────────────────────────────────────────────
+    # ── Path ─────────────────────────────────────────────────────────────
 
-    def _update_color(self):
-        if self.isSelected():
-            color = EDGE_COLOR_SELECTED
-            width = EDGE_WIDTH_SELECTED
-        elif self._hovered:
-            color = EDGE_COLOR_HOVER
-            width = EDGE_WIDTH_HOVER
-        else:
-            color = self._edge_color
-            width = EDGE_WIDTH
+    def _get_start(self):
+        try:
+            return self.from_socket.get_center_scene_pos()
+        except Exception:
+            return QPointF(0, 0)
 
-        pen = QPen(color, width)
-        pen.setCapStyle(Qt.RoundCap)
-        pen.setJoinStyle(Qt.RoundJoin)
-        self._pen = pen
-        self.update()
-
-    def boundingRect(self) -> QRectF:
-        rect = self._path.boundingRect()
-        if hasattr(self, '_arrow_poly') and self._arrow_poly is not None and not self._arrow_poly.isEmpty():
-            rect = rect.united(self._arrow_poly.boundingRect())
-        return rect.adjusted(-8, -8, 8, 8)
-
-    def path(self) -> QPainterPath:
-        return self._path
-
-    def setPath(self, path: QPainterPath):
-        self.prepareGeometryChange()
-        self._path = path
-        self.update()
-
-    def pen(self) -> QPen:
-        return self._pen
-
-    # ── Path computation ──────────────────────────────────────────────
+    def _get_end(self):
+        if self.to_socket:
+            try:
+                return self.to_socket.get_center_scene_pos()
+            except Exception:
+                return QPointF(0, 0)
+        if self._temp_end:
+            return self._temp_end
+        return self._get_start()
 
     def update_path(self):
-        """Recompute the Bezier path."""
-        start = self.from_socket.get_center_scene_pos()
-        if self.to_socket:
-            end = self.to_socket.get_center_scene_pos()
-        elif self._temp_end:
-            end = self._temp_end
-        else:
-            end = start
+        self._rebuild()
 
-        is_self_loop = (self.from_socket.port.node_id ==
-                        getattr(getattr(self.to_socket, 'port', None), 'node_id', None))
+    def _rebuild(self):
+        """Orthogonal routing — WPF BrokenLinkDrawer. L-shaped when not axis-aligned."""
+        start = self._get_start()
+        end = self._get_end()
 
         path = QPainterPath()
-        path.moveTo(start)
-
-        if is_self_loop:
-            # Self-loop: draw a circular loop to the side
-            self._draw_self_loop(path, start)
-        elif self.to_socket:
-            ctrl1 = self._control_point(start, end, self.from_socket.port.dock)
-            ctrl2 = self._control_point(end, start, self.to_socket.port.dock)
-            path.cubicTo(start + ctrl1, end + ctrl2, end)
-        else:
-            # Temporary drag line
-            mid = (start + end) / 2
-            ctrl = self._control_point(start, end, self.from_socket.port.dock)
-            path.cubicTo(start + ctrl, mid, end)
-
-        self.setPath(path)
-        self._update_arrow(end)
-
-        # Update label position
-        if self._label_item:
-            mid_pt = path.pointAtPercent(0.5)
-            self._label_item.setPos(mid_pt + QPointF(5, -12))
-
-    def _draw_self_loop(self, path: QPainterPath, center: QPointF):
-        """Draw a self-loop as a small circle to the right of the node."""
-        r = 20.0
-        offset = QPointF(r * 2, -r)
-        ctrl = QPointF(r * 2, -r * 2)
-        path.cubicTo(center + QPointF(r, -r), center + ctrl, center + offset)
-        path.cubicTo(center + QPointF(0, -r), center + QPointF(r, r), center)
-
-    def _control_point(self, pos: QPointF, other: QPointF, dock: PortDock) -> QPointF:
-        """Compute control point offset based on port dock and relative position."""
-        dist = CONTROL_POINT_OFFSET
-        dx = other.x() - pos.x()
-        dy = other.y() - pos.y()
-
-        if dock == PortDock.BOTTOM:
-            return QPointF(0, abs(dist) if dy >= 0 else dist)
-        elif dock == PortDock.TOP:
-            return QPointF(0, -abs(dist) if dy <= 0 else -dist)
-        elif dock == PortDock.RIGHT:
-            return QPointF(abs(dist) if dx >= 0 else dist, 0)
-        elif dock == PortDock.LEFT:
-            return QPointF(-abs(dist) if dx <= 0 else -dist, 0)
-        return QPointF(dist, 0)
-
-    # ── Arrowhead ─────────────────────────────────────────────────────
-
-    def _update_arrow(self, end: QPointF):
-        """Compute and cache arrowhead polygon."""
-        if not self.to_socket and not self._temp_end:
+        dx = end.x() - start.x()
+        dy = end.y() - start.y()
+        dist = math.sqrt(dx * dx + dy * dy)
+        if dist < 1.0:
+            self.setPath(path)
             self._arrow_poly = QPolygonF()
             return
 
-        # Get direction at end of path
-        percent = self.path().percentAtLength(self.path().length() - 1e-6)
-        tangent = self.path().angleAtPercent(max(0.001, percent - 0.001))
-        # Actually use pointAtPercent
-        pt_before = self.path().pointAtPercent(max(0.001, percent - 0.05))
-        dx, dy = end.x() - pt_before.x(), end.y() - pt_before.y()
-        length = math.sqrt(dx * dx + dy * dy)
-        if length > 0:
-            dx, dy = dx / length, dy / length
+        # Decide routing based on port docks
+        from_dock = self.from_socket.port.dock
+        to_dock = self.to_socket.port.dock if self.to_socket else PortDock.TOP
 
-        s = ARROW_SIZE
-        p1 = QPointF(end.x() - dx * s + dy * s * 0.5,
-                      end.y() - dy * s - dx * s * 0.5)
-        p2 = QPointF(end.x() - dx * s - dy * s * 0.5,
-                      end.y() - dy * s + dx * s * 0.5)
-        self._arrow_poly = QPolygonF([QPointF(end.x(), end.y()), p1, p2])
+        # Check if roughly axis-aligned
+        aligned_h = abs(dx) > abs(dy) * 2  # mostly horizontal
+        aligned_v = abs(dy) > abs(dx) * 2  # mostly vertical
 
-    # ── Label ─────────────────────────────────────────────────────────
+        if aligned_h and from_dock in (PortDock.LEFT, PortDock.RIGHT):
+            # Straight horizontal
+            path.moveTo(start)
+            path.lineTo(end)
+        elif aligned_v and from_dock in (PortDock.TOP, PortDock.BOTTOM):
+            # Straight vertical
+            path.moveTo(start)
+            path.lineTo(end)
+        else:
+            # Orthogonal (L-shaped) — WPF BrokenLinkDrawer
+            span = 30.0
+            if from_dock == PortDock.BOTTOM:
+                mid1 = QPointF(start.x(), start.y() + span)
+            elif from_dock == PortDock.TOP:
+                mid1 = QPointF(start.x(), start.y() - span)
+            elif from_dock == PortDock.RIGHT:
+                mid1 = QPointF(start.x() + span, start.y())
+            else:
+                mid1 = QPointF(start.x() - span, start.y())
 
-    def set_label(self, text: str):
-        """Set a visible label on the edge."""
+            if to_dock == PortDock.TOP:
+                mid2 = QPointF(end.x(), end.y() - span)
+            elif to_dock == PortDock.BOTTOM:
+                mid2 = QPointF(end.x(), end.y() + span)
+            elif to_dock == PortDock.LEFT:
+                mid2 = QPointF(end.x() - span, end.y())
+            else:
+                mid2 = QPointF(end.x() + span, end.y())
+
+            cross = QPointF(mid1.x(), mid2.y()) if abs(dx) > abs(dy) else QPointF(mid2.x(), mid1.y())
+
+            path.moveTo(start)
+            path.lineTo(mid1)
+            path.lineTo(cross)
+            path.lineTo(mid2)
+            path.lineTo(end)
+
+        self.setPath(path)
+        self._arrow_poly = _arrow_at(end, start)
+
+        if self._label_item:
+            mid = QPointF((start.x() + end.x()) / 2, (start.y() + end.y()) / 2)
+            self._label_item.setPos(mid + QPointF(5, -12))
+
+    # ── Path accessors ───────────────────────────────────────────────────
+
+    def setPath(self, path):
+        self.prepareGeometryChange()
+        self._path = path
+
+    def boundingRect(self):
+        r = self._path.boundingRect()
+        if self._arrow_poly and not self._arrow_poly.isEmpty():
+            r = r.united(self._arrow_poly.boundingRect())
+        return r.adjusted(-8, -8, 8, 8)
+
+    def shape(self):
+        if self._path.isEmpty():
+            return self._path
+        stroker = QPainterPathStroker()
+        stroker.setWidth(10.0)
+        return stroker.createStroke(self._path)
+
+    # ── Color ─────────────────────────────────────────────────────────────
+
+    def _active_color(self):
+        if self.isSelected():
+            return EDGE_COLOR_SELECTED, EDGE_WIDTH_SELECTED
+        if self._hovered:
+            return EDGE_COLOR_HOVER, EDGE_WIDTH_HOVER
+        return EDGE_COLOR, EDGE_WIDTH
+
+    # ── Paint ─────────────────────────────────────────────────────────────
+
+    def paint(self, painter, option, widget):
+        painter.setRenderHint(QPainter.Antialiasing)
+        color, width = self._active_color()
+        pen = QPen(color, width)
+        pen.setCapStyle(Qt.RoundCap)
+        pen.setJoinStyle(Qt.RoundJoin)
+
+        painter.setPen(pen)
+        painter.setBrush(Qt.NoBrush)
+        if not self._path.isEmpty():
+            painter.drawPath(self._path)
+
+        if self._arrow_poly and not self._arrow_poly.isEmpty():
+            painter.setBrush(QBrush(color))
+            painter.setPen(Qt.NoPen)
+            painter.drawPolygon(self._arrow_poly)
+
+    # ── Label ─────────────────────────────────────────────────────────────
+
+    def set_label(self, text):
         if not self._label_item:
             self._label_item = QGraphicsTextItem(self)
             self._label_item.setFont(QFont("Segoe UI", 8))
             self._label_item.setDefaultTextColor(QColor("#999"))
             self._label_item.setZValue(6)
         self._label_item.setPlainText(text)
-        self.update_path()
+        self._rebuild()
 
     def remove_label(self):
         if self._label_item:
@@ -228,58 +208,62 @@ class EdgeItem(QGraphicsObject):
                 self.scene().removeItem(self._label_item)
             self._label_item = None
 
-    # ── Paint ─────────────────────────────────────────────────────────
+    # ── Temp / finalize ───────────────────────────────────────────────────
 
-    def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget):
-        painter.setRenderHint(QPainter.Antialiasing)
-        self._update_color()
-        painter.setPen(self._pen)
-        painter.setBrush(Qt.NoBrush)
-        painter.drawPath(self._path)
-
-        # Arrowhead
-        if hasattr(self, '_arrow_poly') and self._arrow_poly and not self._arrow_poly.isEmpty():
-            painter.setBrush(QBrush(self._pen.color()))
-            painter.setPen(Qt.NoPen)
-            painter.drawPolygon(self._arrow_poly)
-
-    def shape(self) -> QPainterPath:
-        """Wider shape for easier mouse hit detection."""
-        stroker = QPainterPathStroker()
-        stroker.setWidth(10.0)
-        return stroker.createStroke(self._path)
-
-    # ── Temp end (drag creation) ──────────────────────────────────────
-
-    def set_temp_end(self, pos: QPointF):
+    def set_temp_end(self, pos):
         self._temp_end = pos
-        self.update_path()
+        self._rebuild()
 
-    def finalize(self, to_socket: "SocketItem"):
+    def finalize(self, to_socket):
         self.to_socket = to_socket
         self._temp_end = None
         to_socket.add_edge(self)
-        self.update_path()
+        self._rebuild()
 
     def disconnect(self):
-        self.from_socket.remove_edge(self)
+        try:
+            self.from_socket.remove_edge(self)
+        except Exception:
+            pass
         if self.to_socket:
-            self.to_socket.remove_edge(self)
+            try:
+                self.to_socket.remove_edge(self)
+            except Exception:
+                pass
         self.remove_label()
 
-    # ── Interaction ───────────────────────────────────────────────────
+    # ── Mouse ─────────────────────────────────────────────────────────────
 
-    def hoverEnterEvent(self, event: QGraphicsSceneMouseEvent):
+    def hoverEnterEvent(self, event):
         self._hovered = True
         self.update()
         super().hoverEnterEvent(event)
 
-    def hoverLeaveEvent(self, event: QGraphicsSceneMouseEvent):
+    def hoverLeaveEvent(self, event):
         self._hovered = False
         self.update()
         super().hoverLeaveEvent(event)
 
-    def mousePressEvent(self, event: QGraphicsSceneMouseEvent):
+    def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.edge_selected.emit(self)
+        self.update()
         super().mousePressEvent(event)
+
+
+# ── Arrow helper ───────────────────────────────────────────────────────────
+
+def _arrow_at(tip, before):
+    dx, dy = tip.x() - before.x(), tip.y() - before.y()
+    length = math.sqrt(dx * dx + dy * dy)
+    if length < 0.001:
+        return QPolygonF()
+    dx, dy = dx / length, dy / length
+    s = ARROW_SIZE
+    return QPolygonF([
+        QPointF(tip.x(), tip.y()),
+        QPointF(tip.x() - dx * s + dy * s * 0.5,
+                tip.y() - dy * s - dx * s * 0.5),
+        QPointF(tip.x() - dx * s - dy * s * 0.5,
+                tip.y() - dy * s + dx * s * 0.5),
+    ])

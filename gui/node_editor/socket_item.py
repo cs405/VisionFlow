@@ -169,24 +169,34 @@ class SocketItem(QGraphicsObject):
     # ── Drag to connect ───────────────────────────────────────────────
 
     def mousePressEvent(self, event: QGraphicsSceneMouseEvent):
-        if event.button() == Qt.LeftButton:
+        if event.button() == Qt.LeftButton and self.port.is_output:
             self._dragging = True
             self._update_style()
-            self.connection_started.emit(self)
+            s = self.scene()
+            if hasattr(s, 'start_edge_drag'):
+                s.start_edge_drag(self)
+            event.accept()
+            return
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: QGraphicsSceneMouseEvent):
         if self._dragging:
-            scene_pos = self.mapToScene(event.pos())
-            self.connection_moved.emit(self, scene_pos)
+            s = self.scene()
+            if hasattr(s, 'update_edge_drag'):
+                s.update_edge_drag(self, self.mapToScene(event.pos()))
+            event.accept()
+            return
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event: QGraphicsSceneMouseEvent):
         if self._dragging:
             self._dragging = False
             self._update_style()
-            scene_pos = self.mapToScene(event.pos())
-            self.connection_ended.emit(self, scene_pos)
+            s = self.scene()
+            if hasattr(s, 'end_edge_drag'):
+                s.end_edge_drag(self, self.mapToScene(event.pos()))
+            event.accept()
+            return
         super().mouseReleaseEvent(event)
 
     def itemChange(self, change, value):

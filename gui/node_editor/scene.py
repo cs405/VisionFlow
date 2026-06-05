@@ -16,9 +16,10 @@ Features:
 
 from PyQt5.QtWidgets import (QGraphicsScene, QGraphicsItem, QMenu, QAction,
                               QGraphicsSceneMouseEvent)
-from PyQt5.QtCore import Qt, QRectF, QPointF, pyqtSignal, QLineF, QMimeData
+from PyQt5.QtCore import Qt, QRectF, QPointF, pyqtSignal, QLineF, QMimeData, QTimer
 from PyQt5.QtGui import (QPainter, QPen, QColor, QBrush, QFont, QPainterPath,
-                          QTransform, QPixmap)
+                          QTransform, QPixmap, QPolygonF)
+import math
 
 from core.node_base import (NodeBase, Port, PortType, PortDock, LinkData,
                              VisionNodeData)
@@ -56,6 +57,21 @@ def _make_checker_brush(tile=CHECKER_TILE, cell=CHECKER_CELL,
     return QBrush(pixmap)
 
 
+def _arrow_at(tip: QPointF, before: QPointF) -> QPolygonF:
+    """Arrowhead polygon pointing from before to tip."""
+    dx, dy = tip.x() - before.x(), tip.y() - before.y()
+    length = math.sqrt(dx * dx + dy * dy)
+    if length < 0.001:
+        return QPolygonF()
+    dx, dy = dx / length, dy / length
+    s = 8.0
+    p1 = QPointF(tip.x() - dx * s + dy * s * 0.5,
+                  tip.y() - dy * s - dx * s * 0.5)
+    p2 = QPointF(tip.x() - dx * s - dy * s * 0.5,
+                  tip.y() - dy * s + dx * s * 0.5)
+    return QPolygonF([QPointF(tip.x(), tip.y()), p1, p2])
+
+
 class DiagramScene(QGraphicsScene):
     """Main diagram scene — full node/edge editor with undo/redo and clipboard."""
 
@@ -80,8 +96,8 @@ class DiagramScene(QGraphicsScene):
         self._show_grid = True
 
         # Interaction state
-        self._drag_edge: EdgeItem | None = None
         self._drag_from_socket: SocketItem | None = None
+        self._drag_to_pos: QPointF = QPointF()
         self._connecting = False
 
         # Command stack (undo/redo)
@@ -112,6 +128,20 @@ class DiagramScene(QGraphicsScene):
         else:
             self.setBackgroundBrush(QBrush(CHECKER_BASE))
         self.update()
+
+    def drawForeground(self, painter: QPainter, rect: QRectF):
+        """Draw drag-to-connect preview — WPF DynamicLayer LineLinkDrawer."""
+        super().drawForeground(painter, rect)
+        if not self._connecting or not self._drag_from_socket:
+            return
+        start = self._drag_from_socket.get_center_scene_pos()
+        end = self._drag_to_pos
+        painter.setPen(QPen(QColor("#FF8C00"), 2, Qt.DashLine))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawLine(QLineF(start, end))
+        painter.setBrush(QBrush(QColor("#FF8C00")))
+        painter.setPen(Qt.NoPen)
+        painter.drawPolygon(_arrow_at(end, start))
 
     # ── Node management ───────────────────────────────────────────────
 
@@ -203,15 +233,15 @@ class DiagramScene(QGraphicsScene):
                 to_port_id=to_socket.port.port_id,
             )
 
-        edge = EdgeItem(from_socket, to_socket, link)
-        self.addItem(edge)
-        self._edge_items[link.link_id] = edge
-        edge.edge_selected.connect(self._on_edge_selected)
-
-        event_system.publish(EventType.LINK_ADDED, sender=self, link=link)
-        event_system.publish(EventType.DIAGRAM_CHANGED, sender=self)
-        self.edge_item_added.emit(edge)
-        return edge
+        try:
+            edge = EdgeItem(from_socket, to_socket, link)
+            self.addItem(edge)
+            self._edge_items[link.link_id] = edge
+            edge.edge_selected.connect(self._on_edge_selected)
+            self.edge_item_added.emit(edge)
+            return edge
+        except Exception:
+            return None
 
     def remove_edge_item(self, link_id: str, sync_workflow: bool = True):
         edge = self._edge_items.pop(link_id, None)
@@ -233,42 +263,54 @@ class DiagramScene(QGraphicsScene):
 
     # ── Drag-to-connect ───────────────────────────────────────────────
 
+    # ── Drag-to-connect (WPF LinkDrawer — preview as overlay, no temp item) ──
+
     def start_edge_drag(self, from_socket: SocketItem):
         self._drag_from_socket = from_socket
-        self._drag_edge = EdgeItem(from_socket, None)
-        self._drag_edge.setZValue(100)
-        self.addItem(self._drag_edge)
+        self._drag_to_pos = from_socket.get_center_scene_pos()
         self._connecting = True
 
-    def update_edge_drag(self, scene_pos: QPointF):
-        if self._drag_edge:
-            self._drag_edge.set_temp_end(scene_pos)
+    def update_edge_drag(self, sock, scene_pos: QPointF):
+        self._drag_to_pos = scene_pos
+        self.update()
 
-    def end_edge_drag(self, scene_pos: QPointF):
-        if not self._drag_edge or not self._drag_from_socket:
-            self._cleanup_drag()
+    def end_edge_drag(self, sock, scene_pos: QPointF):
+        if not self._drag_from_socket:
+            self._connecting = False
             return
-        target = self._find_socket_at(scene_pos, exclude=self._drag_from_socket)
-        if target and target is not self._drag_from_socket:
-            cmd = AddLinkCommand(self, self._drag_from_socket, target)
-            self._cmd_stack.execute(cmd)
-            self.status_message.emit("连线已创建")
-        else:
-            self.status_message.emit("连线已取消")
-        self._cleanup_drag()
-
-    def _cleanup_drag(self):
-        if self._drag_edge:
-            self.removeItem(self._drag_edge)
-            self._drag_edge = None
+        from_sock = self._drag_from_socket
+        target = self._find_socket_at(scene_pos, exclude=from_sock)
         self._drag_from_socket = None
         self._connecting = False
+        self.update()
+
+        if not target:
+            self.status_message.emit("连线已取消")
+            return
+
+        # Defer creation to next event loop — matches WPF Dispatcher.BeginInvoke
+        QTimer.singleShot(0, lambda fs=from_sock, ts=target: self._commit_edge(fs, ts))
+
+    def _commit_edge(self, from_socket, to_socket):
+        try:
+            cmd = AddLinkCommand(self, from_socket, to_socket)
+            result = self._cmd_stack.execute(cmd)
+            if result:
+                self.status_message.emit("连线已创建")
+            else:
+                self.status_message.emit("连线创建失败")
+        except Exception as e:
+            self.status_message.emit(f"连线异常: {e}")
 
     def _find_socket_at(self, scene_pos: QPointF, exclude: SocketItem = None) -> SocketItem | None:
+        exclude_node_id = exclude.port.node_id if exclude else None
         for node_item in self._node_items.values():
             socket = node_item.get_socket_at(scene_pos)
-            if socket and socket is not exclude:
-                return socket
+            if socket is None or socket is exclude:
+                continue
+            if socket.port.node_id == exclude_node_id:
+                continue
+            return socket
         return None
 
     # ── Selection ─────────────────────────────────────────────────────
