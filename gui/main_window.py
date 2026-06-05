@@ -452,6 +452,7 @@ class MainWindow(QMainWindow):
         self._left_panel_visible = True
         self._right_panel_visible = True
         self._saved_right_width = _ps.get_i("right_width", 420)
+        self._saved_right_width = _ps.get_i("right_width", 420)
 
         self._setup_window()
         self._setup_caption_bar()
@@ -872,6 +873,7 @@ class MainWindow(QMainWindow):
         self._center_right_splitter.addWidget(self._diagram_panel)
 
         self._right_panel = self._build_side_panel()
+        self._right_panel.setFixedWidth(850)
         self._center_right_splitter.addWidget(self._right_panel)
 
         # WPF Grid layout: GridSplitterBox | center+right splitter
@@ -893,7 +895,9 @@ class MainWindow(QMainWindow):
         self._center_splitter = QSplitter(Qt.Vertical)
         self._center_splitter.setHandleWidth(2)
         self._center_splitter.setStyleSheet("QSplitter::handle { background: #505050; }")
-        self._center_splitter.addWidget(self._build_center_panel())
+        center_panel = self._build_center_panel()
+        center_panel.setFixedHeight(800)
+        self._center_splitter.addWidget(center_panel)
         self._center_splitter.addWidget(self._build_bottom_panel())
 
         panel = QWidget()
@@ -1654,17 +1658,10 @@ class MainWindow(QMainWindow):
 
     def toggle_right_panel(self):
         if self._right_panel_visible:
-            sizes = self._center_right_splitter.sizes()
-            if len(sizes) >= 2:
-                self._saved_right_width = max(0, sizes[1])
             self._right_panel.setVisible(False)
-            self._center_right_splitter.setSizes([max(1, sum(sizes)), 0])
             self._right_panel_visible = False
         else:
             self._right_panel.setVisible(True)
-            total = max(self.width() - (_ps.get_i("left_width", 280) if self._left_panel_visible else 0), 900)
-            right = self._saved_right_width or _ps.get_i("right_width", 420)
-            self._center_right_splitter.setSizes([max(640, total - right), right])
             self._right_panel_visible = True
 
     @property
