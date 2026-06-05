@@ -226,6 +226,7 @@ class MainWindow(QMainWindow):
 
     def _setup_window(self):
         self.setWindowTitle("VisionFlow — VisionFlow")
+        self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
         width = _ps.get_i("window_width", 1460)
         height = _ps.get_i("window_height", 900)
         self.resize(width, height)
@@ -367,7 +368,27 @@ class MainWindow(QMainWindow):
         row2_layout.addWidget(self._cmd_proj_lbl)
 
         main_layout.addWidget(row2)
+
+        # Make caption bar draggable for frameless window
+        bar.mousePressEvent = self._caption_mouse_press
+        bar.mouseMoveEvent = self._caption_mouse_move
+        bar.mouseDoubleClickEvent = self._caption_double_click
+
         self.setMenuWidget(bar)
+
+    def _caption_mouse_press(self, event):
+        if event.button() == Qt.LeftButton:
+            self._drag_pos = event.globalPos()
+
+    def _caption_mouse_move(self, event):
+        if event.buttons() == Qt.LeftButton and hasattr(self, '_drag_pos'):
+            delta = event.globalPos() - self._drag_pos
+            self.move(self.x() + delta.x(), self.y() + delta.y())
+            self._drag_pos = event.globalPos()
+
+    def _caption_double_click(self, event):
+        if event.button() == Qt.LeftButton:
+            self._toggle_max()
 
     def _setup_main_surface(self):
         root = QWidget()
