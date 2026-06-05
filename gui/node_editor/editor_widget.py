@@ -335,13 +335,17 @@ class DiagramEditorWidget(QWidget):
             socket.connection_ended.connect(self._on_socket_drag_end)
 
     def _on_socket_drag_start(self, socket: SocketItem):
-        self.scene.start_edge_drag(socket)
+        # Primary path: scene.event() intercepts move/release at Diagram level
+        # This signal serves as a secondary confirmation of drag start
+        pass
 
     def _on_socket_drag_move(self, socket: SocketItem, scene_pos: QPointF):
-        self.scene.update_edge_drag(scene_pos)
+        # Scene handles move via event() override — WPF Diagram.MouseMove pattern
+        pass
 
     def _on_socket_drag_end(self, socket: SocketItem, scene_pos: QPointF):
-        self.scene.end_edge_drag(scene_pos)
+        # Scene handles release via event() override — WPF Diagram.MouseLeftButtonUp pattern
+        pass
 
     def _on_node_dropped(self, type_name: str, pos: QPointF):
         node = node_registry.create(type_name)

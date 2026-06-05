@@ -1,14 +1,17 @@
 """Socket (port) graphics item — typed connection points on nodes.
 
-Ported from H.Controls.Diagram (PortData, FlowablePortData, SocketItem).
+Ported from H.Controls.Diagram (PortData, SocketItem).
 
-Each port now carries a data_type for visual differentiation:
-  - image (default): white/solid — carries numpy image data
+WPF alignment: SocketItem only handles mousePressEvent to signal drag start.
+All subsequent drag events (move/release) are handled at DiagramScene level
+via QGraphicsScene.event() override — matching WPF's Diagram.MouseMove +
+Diagram.MouseLeftButtonUp pattern on the parent Diagram, not the Port.
+
+Visual port types:
+  - image (default): white circle — carries numpy image data
   - control: yellow/diamond — flow control signals
-  - text: cyan/rounded — string data
+  - text: cyan/circle — string data
   - any: gray/dashed — generic passthrough
-
-Visual differences by type: fill color, pen style, shape.
 """
 
 from enum import Enum
@@ -42,15 +45,17 @@ class PortDataType(Enum):
 
 
 class SocketItem(QGraphicsObject):
-    """Visual port on a node. Supports drag-to-connect.
+    """Visual port on a node. Emits signal on press; Scene handles the rest.
 
-    Colors and shapes vary by data type:
-      - IMAGE: white circle, blue glow on hover
-      - CONTROL: yellow diamond, yellow glow on hover
-      - TEXT: cyan circle, cyan glow on hover
-      - ANY: gray circle with dashed border
+    WPF equivalent: Port visual child + PortLinkBehavior.
+    Qt note: mousePressEvent only. Move/Release are intercepted by
+    DiagramScene.event() override — WPF Diagram.MouseMove/MouseLeftButtonUp.
     """
 
+    # Emitted on mouse press — Scene connects to start_edge_drag
+    drag_started = pyqtSignal(object)   # socket
+
+    # Legacy signals kept for backward compat with editor_widget.py
     connection_started = pyqtSignal(object)
     connection_moved = pyqtSignal(object, QPointF)
     connection_ended = pyqtSignal(object, object)
@@ -59,13 +64,11 @@ class SocketItem(QGraphicsObject):
         super().__init__(parent)
         self.port = port
         self._hovered = False
-        self._dragging = False
         self._connected_edges: list = []
         self._pen = QPen()
         self._brush = QBrush()
         self._rect = QRectF(-PORT_RADIUS, -PORT_RADIUS, PORT_DIAMETER, PORT_DIAMETER)
 
-        # Determine data type from port metadata
         dt_str = getattr(port, 'data_type', 'image') or 'image'
         try:
             self._data_type = PortDataType[dt_str.upper()]
@@ -79,12 +82,11 @@ class SocketItem(QGraphicsObject):
 
         self._update_style()
 
-    # ── Style ─────────────────────────────────────────────────────────
+    # ── Style ─────────────────────────────────────────────────────────────
 
     def _update_style(self):
         dt = self._data_type
-
-        if self._hovered or self._dragging:
+        if self._hovered:
             self._pen = QPen(dt.glow_color, 2.5)
             self._brush = QBrush(dt.glow_color)
         elif self.port.is_output:
@@ -95,7 +97,6 @@ class SocketItem(QGraphicsObject):
             if dt.dashed:
                 self._pen.setStyle(Qt.DashLine)
             self._brush = QBrush(QColor("#333337"))
-
         self.setToolTip(f"{self.port.dock.name} — {dt.label}")
         self.update()
 
@@ -103,10 +104,7 @@ class SocketItem(QGraphicsObject):
         pad = PORT_HOVER_RADIUS + 2
         return self._rect.adjusted(-pad, -pad, pad, pad)
 
-    # ── Shape (varies by data type) ──────────────────────────────────
-
     def shape(self) -> QPainterPath:
-        """Hit-test area — larger than visual for easy grabbing."""
         path = QPainterPath()
         path.addEllipse(QPointF(0, 0), PORT_HIT_RADIUS, PORT_HIT_RADIUS)
         return path
@@ -115,26 +113,20 @@ class SocketItem(QGraphicsObject):
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setPen(self._pen)
         painter.setBrush(self._brush)
-
         r = PORT_RADIUS
-        dt = self._data_type
-
-        if dt == PortDataType.CONTROL:
-            # Diamond shape
+        if self._data_type == PortDataType.CONTROL:
             diamond = QPolygonF([
                 QPointF(0, -r), QPointF(r, 0), QPointF(0, r), QPointF(-r, 0)
             ])
             painter.drawPolygon(diamond)
         else:
             painter.drawEllipse(QPointF(0, 0), r, r)
-
-        # Connection indicator dot
         if self._connected_edges:
             painter.setPen(Qt.NoPen)
-            painter.setBrush(QBrush(self.port.link_color if hasattr(self.port, 'link_color') else QColor("#FF8C00")))
+            painter.setBrush(QBrush(QColor("#FF8C00")))
             painter.drawEllipse(QPointF(0, 0), 2, 2)
 
-    # ── Edge tracking ─────────────────────────────────────────────────
+    # ── Edge tracking ─────────────────────────────────────────────────────
 
     def add_edge(self, edge):
         if edge not in self._connected_edges:
@@ -153,7 +145,7 @@ class SocketItem(QGraphicsObject):
     def is_connected(self) -> bool:
         return len(self._connected_edges) > 0
 
-    # ── Hover ─────────────────────────────────────────────────────────
+    # ── Hover ─────────────────────────────────────────────────────────────
 
     def hoverEnterEvent(self, event: QGraphicsSceneMouseEvent):
         self._hovered = True
@@ -162,16 +154,17 @@ class SocketItem(QGraphicsObject):
 
     def hoverLeaveEvent(self, event: QGraphicsSceneMouseEvent):
         self._hovered = False
-        if not self._dragging:
-            self._update_style()
+        self._update_style()
         super().hoverLeaveEvent(event)
 
-    # ── Drag to connect ───────────────────────────────────────────────
+    # ── Mouse press → signal scene (WPF PortLinkBehavior Init) ─────────────
 
     def mousePressEvent(self, event: QGraphicsSceneMouseEvent):
+        """Only output ports start connections. Scene handles move/release."""
         if event.button() == Qt.LeftButton and self.port.is_output:
-            self._dragging = True
-            self._update_style()
+            self.drag_started.emit(self)
+            self.connection_started.emit(self)
+            # Still call scene.start_edge_drag for immediate initiation
             s = self.scene()
             if hasattr(s, 'start_edge_drag'):
                 s.start_edge_drag(self)
@@ -179,25 +172,7 @@ class SocketItem(QGraphicsObject):
             return
         super().mousePressEvent(event)
 
-    def mouseMoveEvent(self, event: QGraphicsSceneMouseEvent):
-        if self._dragging:
-            s = self.scene()
-            if hasattr(s, 'update_edge_drag'):
-                s.update_edge_drag(self, self.mapToScene(event.pos()))
-            event.accept()
-            return
-        super().mouseMoveEvent(event)
-
-    def mouseReleaseEvent(self, event: QGraphicsSceneMouseEvent):
-        if self._dragging:
-            self._dragging = False
-            self._update_style()
-            s = self.scene()
-            if hasattr(s, 'end_edge_drag'):
-                s.end_edge_drag(self, self.mapToScene(event.pos()))
-            event.accept()
-            return
-        super().mouseReleaseEvent(event)
+    # ── Position changes → update connected edges ─────────────────────────
 
     def itemChange(self, change, value):
         if change == QGraphicsObject.ItemPositionHasChanged:
