@@ -148,6 +148,79 @@ class _NodeTileButton(QFrame):
 _active_popup_button = None
 
 
+class _DraggableCard(QPushButton):
+    """Popup node card with click-select and drag-to-canvas (WPF StyleNodeDataBase)."""
+
+    def __init__(self, type_name: str, display_name: str, color: str, icon: str, parent=None):
+        super().__init__(parent)
+        self._type_name = type_name
+        self._drag_start_pos = QPoint()
+        self._drag_started = False
+
+        self.setFixedSize(105, 52)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setToolTip(f"{display_name}\n类型: {type_name}")
+        self.setStyleSheet(
+            "QPushButton {"
+            "background: white; border: 1px solid #d0d0d0; border-radius: 4px;"
+            "color: #1e1e1e; font-size: 11px; font-weight: 600;"
+            "}"
+            "QPushButton:hover {"
+            "background: #f0f0f0; border-color: #0078d4;"
+            "}"
+        )
+
+        inner = QVBoxLayout(self)
+        inner.setContentsMargins(4, 4, 4, 4)
+        inner.setSpacing(2)
+
+        icon_lbl = QLabel(icon)
+        icon_lbl.setAlignment(Qt.AlignCenter)
+        icon_lbl.setStyleSheet(
+            f"color: {color}; font-size: 16px; font-weight: bold;"
+            f"font-family: '{ICON_FONT_FAMILY}';"
+            "background: transparent; border: none;"
+        )
+        inner.addWidget(icon_lbl)
+
+        text_lbl = QLabel(display_name)
+        text_lbl.setAlignment(Qt.AlignCenter)
+        text_lbl.setWordWrap(True)
+        text_lbl.setStyleSheet(
+            "color: #1e1e1e; font-size: 10px; background: transparent; border: none;"
+        )
+        inner.addWidget(text_lbl)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._drag_start_pos = event.pos()
+            self._drag_started = False
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if not (event.buttons() & Qt.LeftButton):
+            super().mouseMoveEvent(event)
+            return
+        if (event.pos() - self._drag_start_pos).manhattanLength() < QApplication.startDragDistance():
+            return
+        self._drag_started = True
+        drag = QDrag(self)
+        mime = QMimeData()
+        mime.setText(self._type_name)
+        drag.setMimeData(mime)
+        drag.setPixmap(self.grab())
+        drag.setHotSpot(self.rect().center())
+        drag.exec_(Qt.CopyAction)
+        event.accept()
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton and not self._drag_started:
+            self.clicked.emit()  # triggers the connected slot
+        super().mouseReleaseEvent(event)
+
+
 class _NarrowGroupPopup(QFrame):
     """Popup matching WPF ContextMenu + GroupBox with CaptionRightTemplate.
 
@@ -216,44 +289,9 @@ class _NarrowGroupPopup(QFrame):
         self.adjustSize()
 
     def _make_node_card(self, m: dict) -> QPushButton:
-        """WPF StyleNodeDataBase card: white bg, icon + text stacked."""
-        btn = QPushButton()
-        btn.setFixedSize(105, 52)
-        btn.setCursor(Qt.PointingHandCursor)
-        btn.setToolTip(f"{m['display_name']}\n{m['description']}\n类型: {m['type_name']}")
-        btn.setStyleSheet(
-            "QPushButton {"
-            "background: white; border: 1px solid #d0d0d0; border-radius: 4px;"
-            "color: #1e1e1e; font-size: 11px; font-weight: 600;"
-            "}"
-            "QPushButton:hover {"
-            "background: #f0f0f0; border-color: #0078d4;"
-            "}"
-        )
+        """WPF StyleNodeDataBase card: white bg, icon + text stacked, drag-to-canvas."""
+        btn = _DraggableCard(m["type_name"], m["display_name"], m["color"], m["icon"])
         btn.clicked.connect(lambda checked, tn=m["type_name"]: self._on_node_clicked(tn))
-
-        # Icon + text stacked (matching WPF StyleNodeDataBase)
-        inner = QVBoxLayout(btn)
-        inner.setContentsMargins(4, 4, 4, 4)
-        inner.setSpacing(2)
-
-        icon_lbl = QLabel(m["icon"])
-        icon_lbl.setAlignment(Qt.AlignCenter)
-        icon_lbl.setStyleSheet(
-            f"color: {m['color']}; font-size: 16px; font-weight: bold;"
-            f"font-family: '{ICON_FONT_FAMILY}';"
-            "background: transparent; border: none;"
-        )
-        inner.addWidget(icon_lbl)
-
-        text_lbl = QLabel(m["display_name"])
-        text_lbl.setAlignment(Qt.AlignCenter)
-        text_lbl.setWordWrap(True)
-        text_lbl.setStyleSheet(
-            "color: #1e1e1e; font-size: 10px; background: transparent; border: none;"
-        )
-        inner.addWidget(text_lbl)
-
         return btn
 
     def _on_node_clicked(self, type_name: str):
@@ -494,6 +532,20 @@ class _CollapsibleGroup(QWidget):
         return self._body_layout
 
 
+# ── Draggable tree widget ──────────────────────────────────────────────────
+
+class _DraggableTreeWidget(QTreeWidget):
+    """QTreeWidget with proper drag mime data for node type names."""
+
+    def mimeData(self, items):
+        mime = super().mimeData(items)
+        if items:
+            type_name = items[0].data(0, Qt.UserRole)
+            if type_name:
+                mime.setText(type_name)
+        return mime
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Main ToolboxPanel
 # ═══════════════════════════════════════════════════════════════════════════
@@ -676,7 +728,7 @@ class ToolboxPanel(QWidget):
     # ── Tree view ─────────────────────────────────────────────────────
 
     def _create_tree(self) -> QTreeWidget:
-        tree = QTreeWidget()
+        tree = _DraggableTreeWidget()
         tree.setHeaderLabels(["模块名称", "描述"])
         tree.setColumnWidth(0, 140)
         tree.setIndentation(16)
@@ -895,7 +947,8 @@ class ToolboxPanel(QWidget):
             tile = _NodeTileButton(m["type_name"], m["display_name"], m["description"],
                                     m["group_name"], m["is_favorite"])
             tile.activated.connect(self.node_type_selected.emit)
-            tile.selected.connect(self._set_selected_type)
+            # single click also adds to canvas (WPF behaviour)
+            tile.selected.connect(self.node_type_selected.emit)
             tile.favorite_toggled.connect(self.toggle_favorite)
             self._tile_widgets[m["type_name"]] = tile
             if m["type_name"] == self._selected_type:
