@@ -1355,13 +1355,26 @@ class MainWindow(QMainWindow):
             self._log_panel.success(f"从模板创建: {dlg.added_diagram.name}")
 
     def _on_save_as_template(self):
-        """Save current diagram as template (WPF SaveDiagramAsTemplateCommand)."""
+        """Save current diagram as template (WPF SaveAsDiagramTemplateCommand).
+
+        WPF: TextBoxPresenter dialog with Title="保存模板名称", pre-filled with diagram name.
+        Python: QInputDialog with same behavior.
+        """
         project = project_service.current_project
         if project is None:
             return
-        self._sync_workflow_to_project()
-        project.save_diagram_as_template()
-        self._log_panel.success("已保存当前流程图为模板")
+        diagram = project.selected_diagram
+        if diagram is None:
+            return
+        from PyQt5.QtWidgets import QInputDialog
+        name, ok = QInputDialog.getText(
+            self, "保存模板名称",
+            "请输入模板名称：",
+            text=diagram.name)
+        if ok and name.strip():
+            self._sync_workflow_to_project()
+            project.save_diagram_as_template(name=name.strip())
+            self._log_panel.success(f"模板已保存: {name.strip()}")
 
     def _on_delete_diagram(self):
         """Delete current diagram."""
