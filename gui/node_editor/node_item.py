@@ -75,22 +75,22 @@ NODE_MARGIN = 2                # WPF: Border Margin="2"
 # Colors — WPF Brushes mapped to dark theme
 # ═══════════════════════════════════════════════════════════════════════════
 
-# Backgrounds (WPF: White / LightGray → dark equivalents)
-NODE_BG = QColor("#3c3c3c")
-NODE_BG_HOVER = QColor("#4a4a4a")
-NODE_BG_SELECTED = QColor("#4a4a4a")
-NODE_BG_DISABLED = QColor("#2a2a2a")
+# Backgrounds — WPF StyleNodeDataBase hardcodes White/LightGray (not theme-dependent)
+NODE_BG = QColor("#ffffff")                 # WPF: Background="White"
+NODE_BG_HOVER = QColor("#f5f5f5")           # WPF: IsMouseOver → LightGray
+NODE_BG_SELECTED = QColor("#ebebeb")        # WPF: IsSelected → Selected
+NODE_BG_DISABLED = QColor("#f0f0f0")
 
 # Borders — exact WPF DiagramKeys.xaml values
 NODE_BORDER = QColor("#ebebeb")             # WPF: default Stroke
-NODE_BORDER_HOVER = QColor("#0078d4")       # WPF: Foreground brush
+NODE_BORDER_HOVER = QColor("#606266")       # WPF: Foreground brush (text gray)
 NODE_BORDER_SELECTED = QColor("#E6A23C")    # WPF: BrushKeys.Orange
 NODE_BORDER_ERROR = QColor("#dc000c")       # WPF: Red
 
-# Text
-NODE_TEXT_COLOR = QColor("#dcdcdc")
-NODE_TEXT_DISABLED = QColor("#777777")
-NODE_SHADOW = QColor(0, 0, 0, 60)
+# Text — WPF TextBlock.Foreground="Black"
+NODE_TEXT_COLOR = QColor("#1e1e1e")         # WPF: Black
+NODE_TEXT_DISABLED = QColor("#999999")
+NODE_SHADOW = QColor(0, 0, 0, 30)          # WPF: subtle shadow
 
 # State colors — exact WPF DiagramKeys.xaml values
 STATE_COLORS = {
@@ -366,54 +366,55 @@ class NodeItem(QGraphicsObject):
     # Paint — WPF StyleNodeDataBase visual alignment
     # ═════════════════════════════════════════════════════════════════════
 
-    def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget):
+    def painter(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget):
         painter.setRenderHint(QPainter.Antialiasing)
 
         state_color = STATE_COLORS.get(self._state, QColor("#999999"))
         body_path = self._build_body_path(self._rect)
 
-        # ── Shadow ──
-        sr = self._rect.adjusted(2, 2, 2, 2)
-        shadow_path = self._build_body_path(sr)
-        painter.fillPath(shadow_path, NODE_SHADOW)
-
-        # ── Body background (theme-aware) ──
-        c = _tc()
+        # ── Body background — WPF hardcoded White / LightGray ──
+        is_active = self.isSelected() or self._hovered
         if self._state == NodeState.DISABLED:
             bg_color = NODE_BG_DISABLED
         elif self.isSelected():
-            bg_color = c.node_bg_selected
+            bg_color = NODE_BG_SELECTED       # WPF: IsSelected → Selected (#ebebeb)
         elif self._hovered:
-            bg_color = c.node_bg_hover
-        elif self._state == NodeState.RUNNING:
-            import math
-            pulse = (math.sin(self._pulse_val * 4) + 1) / 2
-            r = int(60 + pulse * 30)
-            bg_color = QColor(r, r, r)
+            bg_color = NODE_BG_HOVER          # WPF: IsMouseOver → MouseOver (#f5f5f5)
         else:
-            bg_color = c.node_bg
+            bg_color = NODE_BG                # WPF: Background="White"
 
         painter.fillPath(body_path, bg_color)
+
+        # ── Shadow — WPF StateBorderAnimation: only on hover/drag/selected ──
+        if is_active:
+            sr = self._rect.adjusted(2, 3, -2, 0)
+            shadow_path = self._build_body_path(sr)
+            painter.fillPath(shadow_path, NODE_SHADOW)
 
         # ── Left bar (WPF: Border Width=30, Visibility bound to State) ──
         self._draw_left_bar(painter, state_color)
 
-        # ── Border (theme-aware) ──
-        c = _tc()
+        # ── Border — WPF DiagramKeys StateBorder triggers ──
         if self.isSelected():
-            border_color = c.node_border_selected   # WPF Orange
+            border_color = NODE_BORDER_SELECTED          # WPF Orange #E6A23C
             border_width = 2.0
         elif self._state == NodeState.ERROR:
-            border_color = NODE_BORDER_ERROR
+            border_color = NODE_BORDER_ERROR             # WPF Red #dc000c
+            border_width = 2.0
+        elif self._state == NodeState.RUNNING:
+            border_color = STATE_COLORS[NodeState.RUNNING]   # WPF Accent #3399FF
+            border_width = 2.0
+        elif self._state == NodeState.COMPLETED:
+            border_color = STATE_COLORS[NodeState.COMPLETED] # WPF Green #67C23A
             border_width = 2.0
         elif self._hovered:
-            border_color = c.border_focus           # WPF Foreground brush
+            border_color = NODE_BORDER_HOVER             # WPF Foreground #606266
             border_width = 1.5
         elif self._template == NodeTemplate.SOURCE:
             border_color = self._flag_color
             border_width = 2.0
         else:
-            border_color = c.node_border
+            border_color = NODE_BORDER                   # WPF default #ebebeb
             border_width = 1.0
 
         painter.setPen(QPen(border_color, border_width))
@@ -427,9 +428,17 @@ class NodeItem(QGraphicsObject):
             painter.setPen(QPen(border_color.lighter(120), 0.5))
             painter.drawPath(ipath)
 
-        # ── Title text (theme-aware) ──
-        c = _tc()
-        text_color = NODE_TEXT_DISABLED if self._state == NodeState.DISABLED else c.node_text
+        # ── Title text — WPF TextBlock.Foreground="Black" + StateBorder triggers ──
+        if self._state == NodeState.DISABLED:
+            text_color = NODE_TEXT_DISABLED
+        elif self._state == NodeState.RUNNING:
+            text_color = STATE_COLORS[NodeState.RUNNING]   # WPF Accent #3399FF
+        elif self._state == NodeState.COMPLETED:
+            text_color = STATE_COLORS[NodeState.COMPLETED] # WPF Green #67C23A
+        elif self._state == NodeState.ERROR:
+            text_color = STATE_COLORS[NodeState.ERROR]     # WPF Red #dc000c
+        else:
+            text_color = NODE_TEXT_COLOR                   # WPF: Black
         painter.setPen(text_color)
         font = self._title_font()
         painter.setFont(font)
@@ -449,78 +458,58 @@ class NodeItem(QGraphicsObject):
         )
         painter.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, elided)
 
-        # ── State indicator dot (right side, replaces WPF border-based state) ──
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(QBrush(state_color))
-        dot_r = 3.0
-        painter.drawEllipse(
-            QPointF(self._node_w / 2 - 8, -self._node_h / 2 + 8),
-            dot_r, dot_r,
-        )
-
     def _draw_left_bar(self, painter: QPainter, state_color: QColor):
-        """Draw the 30px left colored bar with centered FontIcon.
+        """Draw the 30px left bar area with FontIcon — 1:1 WPF StyleNodeDataBase.
 
-        WPF behavior:
-          - Bar Visibility: Hidden in IDLE/DISABLED → Visible in RUNNING/SUCCESS/ERROR
-          - Bar Background: Bound to parent Border's BorderBrush (= state color)
-          - Icon foreground: White when bar is visible (Running/Success/Error triggers)
-          - For SOURCE template or IDLE state with group color: thin-colored left edge hint
+        WPF layout (DockPanel):
+          Grid (left 30px):
+            Border Width=30 (colored bar, Hidden idle → Visible Running/Success/Error)
+            FontIconTextBlock (ALWAYS visible, centered; turns White when bar visible)
+          TextBlock (title, centered in remaining space)
+
+        WPF DataTriggers:
+          - IDLE:        bar hidden,  icon = default color (group flag)
+          - RUNNING:     bar visible (blue),    icon = white
+          - SUCCESS:     bar visible (green),   icon = white
+          - ERROR:       bar visible (red),     icon = white
         """
-        bar_rect = QRectF(
-            -self._node_w / 2,
-            -self._node_h / 2,
-            BAR_WIDTH,
-            self._node_h,
-        )
-
         bar_visible = self._state in (NodeState.RUNNING, NodeState.COMPLETED, NodeState.ERROR)
 
+        icon_rect = QRectF(
+            -self._node_w / 2 + 2,
+            -self._node_h / 2 + 2,
+            BAR_WIDTH - 4,
+            self._node_h - 4,
+        )
+
         if bar_visible:
-            # WPF: bar background = state color, icon = white
+            # ── Colored bar (WPF: Border Width=30, Background=parent BorderBrush) ──
+            bar_rect = QRectF(
+                -self._node_w / 2,
+                -self._node_h / 2,
+                BAR_WIDTH,
+                self._node_h,
+            )
             bar_path = QPainterPath()
             bar_path.addRoundedRect(bar_rect, NODE_CORNER_RADIUS, NODE_CORNER_RADIUS)
-            # Clip to left portion only (rounded top-left + bottom-left)
-            clip_path = QPainterPath()
-            clip_path.addRect(
+            clip = QPainterPath()
+            clip.addRect(
                 -self._node_w / 2, -self._node_h / 2,
                 BAR_WIDTH + NODE_CORNER_RADIUS, self._node_h,
             )
-            bar_path = clip_path.intersected(bar_path)
+            painter.fillPath(clip.intersected(bar_path), QBrush(state_color))
 
-            painter.fillPath(bar_path, QBrush(state_color))
-
-            # FontIcon centered in bar
+            # Icon = white (WPF DataTrigger: State=Running/Success/Error → icon Foreground=White)
             icon_color = QColor("#FFFFFF")
-            icon_f = icon_font(ICON_SIZE)
-            painter.setFont(icon_f)
-            painter.setPen(icon_color)
-            icon_rect = QRectF(
-                -self._node_w / 2 + 2,
-                -self._node_h / 2 + 2,
-                BAR_WIDTH - 4,
-                self._node_h - 4,
-            )
-            painter.drawText(icon_rect, Qt.AlignCenter, self._icon_text)
         else:
-            # WPF: bar hidden in idle — draw thin left edge hint with flag color
-            thin_bar = QRectF(
-                -self._node_w / 2, -self._node_h / 2,
-                3.0, self._node_h,
-            )
-            thin_path = QPainterPath()
-            thin_path.addRoundedRect(thin_bar, NODE_CORNER_RADIUS, NODE_CORNER_RADIUS)
-            clip_path = QPainterPath()
-            clip_path.addRect(
-                -self._node_w / 2, -self._node_h / 2,
-                3.0 + NODE_CORNER_RADIUS, self._node_h,
-            )
-            thin_path = clip_path.intersected(thin_path)
+            # ── IDLE: no bar, icon = black (WPF inherits TextBlock.Foreground="Black") ──
+            icon_color = NODE_TEXT_COLOR
 
-            if self._state == NodeState.DISABLED:
-                painter.fillPath(thin_path, QBrush(QColor(80, 80, 80)))
-            else:
-                painter.fillPath(thin_path, QBrush(self._flag_color))
+        # ── FontIcon (ALWAYS visible, centered in the 30px bar area) ──
+        icon_f = icon_font(ICON_SIZE)
+        painter.setFont(icon_f)
+        painter.setPen(icon_color)
+        painter.drawText(icon_rect, Qt.AlignCenter, self._icon_text)
 
     # ── Mouse events ────────────────────────────────────────────────────
 
