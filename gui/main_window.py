@@ -38,6 +38,7 @@ from gui.help_panel import HelpPanel
 
 # ── Windows frameless window border resize ──────────────────────────
 WM_NCHITTEST = 0x0084
+WM_NCCALCSIZE = 0x0083
 HTLEFT = 10
 HTRIGHT = 11
 HTTOP = 12
@@ -115,16 +116,26 @@ _CMD_BTN = """
 """
 
 _TAB_STYLE = """
-    QTabWidget::pane { border: 1px solid #3f3f46; background: #252526; }
+    QTabWidget::pane { border: none; background: #252526; }
     QTabBar::tab {
         background: #2d2d30;
         color: #dcdcdc;
-        padding: 6px 12px;
+        padding: 3px 8px;
         border: none;
         border-bottom: 2px solid transparent;
+        font-size: 11px;
     }
     QTabBar::tab:selected { background: #252526; border-bottom: 2px solid #0078d4; }
     QTabBar::tab:hover { background: #3e3e42; }
+    QTabBar::close-button {
+        subcontrol-position: right;
+        padding: 3px;
+        margin-left: 4px;
+    }
+    QTabBar::close-button:hover {
+        background: #c42b1c;
+        border-radius: 3px;
+    }
 """
 
 
@@ -160,44 +171,19 @@ class _DiagramTabHeader(QWidget):
         super().__init__(parent)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(6, 0, 6, 0)
-        layout.setSpacing(4)
-
-        self._icon = FontIconTextBlock(FontIcons.Photo2, font_size=11, color="#4caf50")
-        layout.addWidget(self._icon)
+        layout.setSpacing(0)
 
         self._name_edit = QLineEdit(name)
         self._name_edit.setFrame(False)
         self._name_edit.setFixedHeight(22)
+        self._name_edit.setMinimumWidth(60)
         self._name_edit.setStyleSheet(
-            "QLineEdit { background: transparent; color: #dcdcdc; border: none; padding: 0 2px; }"
+            "QLineEdit { background: transparent; color: #dcdcdc; border: none; padding: 0 2px;"
+            " font-family: 'Microsoft YaHei'; font-size: 12px; }"
             "QLineEdit:focus { border-bottom: 1px solid #0078d4; }"
         )
         self._name_edit.editingFinished.connect(self._emit_rename)
         layout.addWidget(self._name_edit, 1)
-
-        self._start_btn = self._make_btn(FontIcons.Replay, "启动")
-        self._start_btn.clicked.connect(self.run_requested.emit)
-        layout.addWidget(self._start_btn)
-
-        self._stop_btn = self._make_btn(FontIcons.Stop, "停止")
-        self._stop_btn.clicked.connect(self.stop_requested.emit)
-        layout.addWidget(self._stop_btn)
-
-        self._reset_btn = self._make_btn(FontIcons.Refresh, "重置")
-        self._reset_btn.clicked.connect(self.reset_requested.emit)
-        layout.addWidget(self._reset_btn)
-        self.set_active(False)
-
-    def _make_btn(self, text: str, tip: str) -> QPushButton:
-        button = QPushButton(text)
-        button.setToolTip(tip)
-        button.setFixedSize(18, 18)
-        button.setStyleSheet(
-            "QPushButton { background: transparent; border: 1px solid #505050; border-radius: 2px;"
-            "color: #dcdcdc; font-size: 10px; padding: 0; }"
-            "QPushButton:hover { background: #3e3e42; border-color: #0078d4; }"
-        )
-        return button
 
     def _emit_rename(self):
         self.rename_requested.emit(self._name_edit.text().strip())
@@ -207,8 +193,7 @@ class _DiagramTabHeader(QWidget):
             self._name_edit.setText(name)
 
     def set_active(self, active: bool):
-        for btn in (self._start_btn, self._stop_btn, self._reset_btn):
-            btn.setVisible(active)
+        pass
 
 
 class MainWindow(QMainWindow):
@@ -274,7 +259,7 @@ class MainWindow(QMainWindow):
         """Extend DWM frame into client area for native drop-shadow."""
         try:
             hwnd = int(self.winId())
-            margins = (ctypes.c_int * 4)(0, 0, 1, 0)
+            margins = (ctypes.c_int * 4)(-1, -1, -1, -1)
             ctypes.windll.dwmapi.DwmExtendFrameIntoClientArea(hwnd, margins)
         except Exception:
             pass
@@ -578,12 +563,17 @@ class MainWindow(QMainWindow):
         return False
 
     def nativeEvent(self, eventType, message):
-        """Handle WM_NCHITTEST so the frameless window keeps resize handles."""
+        """Handle WM_NCHITTEST (resize handles) + WM_NCCALCSIZE (remove white border)."""
         if eventType != b"windows_generic_MSG":
             return False, 0
 
         msg_ptr = ctypes.cast(int(message), ctypes.POINTER(_MSG))
         msg = msg_ptr.contents
+
+        # Remove non-client area to eliminate frameless-window white border
+        if msg.message == WM_NCCALCSIZE:
+            return True, 0
+
         if msg.message != WM_NCHITTEST:
             return False, 0
 
@@ -758,31 +748,11 @@ class MainWindow(QMainWindow):
 
         self._diagram_tab_widget = QTabWidget()
         self._diagram_tab_widget.setStyleSheet(_TAB_STYLE)
-        self._diagram_tab_widget.setTabsClosable(True)
+        self._diagram_tab_widget.setTabsClosable(False)
         self._diagram_tab_widget.tabCloseRequested.connect(self._on_close_diagram_tab)
         self._diagram_tab_widget.currentChanged.connect(self._on_diagram_tab_changed)
         self._diagram_tab_widget.setDocumentMode(True)
         layout.addWidget(self._diagram_tab_widget, 1)
-
-        corner = QWidget()
-        corner_layout = QHBoxLayout(corner)
-        corner_layout.setContentsMargins(4, 0, 4, 0)
-        corner_layout.setSpacing(4)
-        for icon, tip, slot in [
-            (FontIcons.Add, "新建流程图", self._on_add_diagram),
-            (FontIcons.Replay, "启动当前流程图", self._on_run_workflow),
-            (FontIcons.Stop, "停止当前流程图", self._on_stop_workflow),
-            (FontIcons.Refresh, "重置当前流程图视图", self._on_reset_workflow_view),
-        ]:
-            button = FontIconButton(icon, tooltip=tip, font_size=12)
-            button.setFixedSize(24, 24)
-            button.setStyleSheet(
-                "QPushButton { background: transparent; border: 1px solid #505050; border-radius: 2px; color: #dcdcdc; }"
-                "QPushButton:hover { background: #3e3e42; border-color: #0078d4; }"
-            )
-            button.clicked.connect(slot)
-            corner_layout.addWidget(button)
-        self._diagram_tab_widget.setCornerWidget(corner, Qt.TopRightCorner)
 
         self._diagram_status_strip = _InlineStatusStrip("#4caf50")
         self._diagram_status_strip.set_status("流程图就绪")
@@ -1023,6 +993,18 @@ class MainWindow(QMainWindow):
         header.reset_requested.connect(lambda current=diagram: self._reset_diagram_view(current.id))
         self._diagram_tab_widget.setTabToolTip(index, diagram.name)
         self._diagram_tab_widget.tabBar().setTabButton(index, QTabBar.LeftSide, header)
+
+        # Custom close button — custom styled for dark theme visibility
+        close_btn = QPushButton("×")
+        close_btn.setFixedSize(18, 18)
+        close_btn.setStyleSheet(
+            "QPushButton { background: transparent; border: none; color: #999;"
+            " font-size: 14px; padding: 0; }"
+            "QPushButton:hover { background: #c42b1c; color: white; border-radius: 2px; }"
+        )
+        close_btn.clicked.connect(lambda checked, idx=index: self._on_close_diagram_tab(idx))
+        self._diagram_tab_widget.tabBar().setTabButton(index, QTabBar.RightSide, close_btn)
+
         self._diagram_headers[diagram.id] = header
 
     def _rename_diagram(self, diagram: DiagramData, text: str):

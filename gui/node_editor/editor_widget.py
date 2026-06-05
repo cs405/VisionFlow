@@ -286,83 +286,6 @@ class DiagramEditorWidget(QWidget):
         self.view.node_dropped.connect(self._on_node_dropped)
         self._connect_socket_signals()
 
-        # ── Toolbar ──
-        toolbar = QHBoxLayout()
-        toolbar.setContentsMargins(4, 2, 4, 2)
-        toolbar.setSpacing(4)
-
-        bs = """
-            QPushButton { background: #3c3c3c; border: 1px solid #555; border-radius: 3px;
-                          padding: 4px 10px; color: #dcdcdc; font-size: 11px; }
-            QPushButton:hover { background: #4a4a4a; border-color: #0078d4; }
-            QPushButton:pressed { background: #0078d4; }
-            QPushButton:disabled { background: #2a2a2a; color: #666; }
-        """
-
-        # Run controls — FontIcon buttons (WPF alignment)
-        from gui.font_icons import FontIcons, FontIconButton
-        for icon, text, slot in [
-            (FontIcons.Replay, "运行", self._on_run),
-            (FontIcons.Stop, "停止", self._on_stop),
-            ("⚡", "单步", self._on_run_step),
-        ]:
-            b = FontIconButton(icon, text, font_size=12)
-            b.setStyleSheet(bs); b.clicked.connect(slot); toolbar.addWidget(b)
-        toolbar.addSpacing(8)
-
-        # Undo/Redo
-        self._undo_btn = FontIconButton(FontIcons.Undo, "撤销", font_size=12)
-        self._undo_btn.setStyleSheet(bs); self._undo_btn.clicked.connect(self._on_undo)
-        self._undo_btn.setEnabled(False)
-        toolbar.addWidget(self._undo_btn)
-
-        self._redo_btn = FontIconButton(FontIcons.Redo, "重做", font_size=12)
-        self._redo_btn.setStyleSheet(bs); self._redo_btn.clicked.connect(self._on_redo)
-        self._redo_btn.setEnabled(False)
-        toolbar.addWidget(self._redo_btn)
-        toolbar.addSpacing(8)
-
-        # Copy/Paste
-        copy_btn = FontIconButton(FontIcons.Copy, "复制", font_size=12)
-        copy_btn.setStyleSheet(bs); copy_btn.clicked.connect(lambda: self.scene.copy_selected())
-        toolbar.addWidget(copy_btn)
-
-        paste_btn = FontIconButton(FontIcons.Paste, "粘贴", font_size=12)
-        paste_btn.setStyleSheet(bs); paste_btn.clicked.connect(lambda: self.scene.paste())
-        toolbar.addWidget(paste_btn)
-        toolbar.addSpacing(8)
-
-        # Zoom controls
-        for t, slot in [("适应", self.view.fit_to_window), ("1:1", self.view.zoom_to_100),
-                         ("+", self.view.zoom_in), ("-", self.view.zoom_out)]:
-            b = QPushButton(t); b.setStyleSheet(bs)
-            b.clicked.connect(slot)
-            if t in ("+", "-"): b.setFixedWidth(30)
-            toolbar.addWidget(b)
-
-        self._zoom_lbl = QPushButton("100%")
-        self._zoom_lbl.setStyleSheet(bs + "QPushButton { background: transparent; border: none; color: #999; }")
-        self._zoom_lbl.setFixedWidth(50)
-        self.view.zoom_changed.connect(lambda z: self._zoom_lbl.setText(f"{z*100:.0f}%"))
-        toolbar.addWidget(self._zoom_lbl)
-        toolbar.addStretch()
-
-        # Grid toggle
-        grid_btn = QPushButton("网格")
-        grid_btn.setStyleSheet(bs); grid_btn.setCheckable(True); grid_btn.setChecked(True)
-        grid_btn.toggled.connect(lambda v: self.scene.toggle_grid())
-        toolbar.addWidget(grid_btn)
-
-        # Alignment dropdown placeholder
-        for t, m in [("↔ 水平居中", "center_h"), ("↕ 垂直居中", "center_v")]:
-            b = QPushButton(t); b.setStyleSheet(bs)
-            b.clicked.connect(lambda checked, mode=m: self.scene.align_selected(mode))
-            toolbar.addWidget(b)
-
-        tw = QWidget(); tw.setLayout(toolbar)
-        tw.setStyleSheet("background: #2d2d30; border-bottom: 1px solid #3f3f46;")
-        layout.addWidget(tw)
-
         body_lo.addWidget(self.view)
         layout.addWidget(body, 1)
 
@@ -386,9 +309,7 @@ class DiagramEditorWidget(QWidget):
             self._minimap.move(self.width() - 190, 10)
 
     def _update_toolbar_state(self):
-        cs = self.scene.command_stack
-        self._undo_btn.setEnabled(cs.can_undo)
-        self._redo_btn.setEnabled(cs.can_redo)
+        pass
 
     def _center_view_on_scene_point(self, scene_pos: QPointF):
         self.view.centerOn(scene_pos)
