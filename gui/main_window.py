@@ -445,9 +445,6 @@ class MainWindow(QMainWindow):
         self._tool_view_btn = FontIconButton(FontIcons.View, tooltip="查看", font_size=16)
         self._tool_view_btn.setStyleSheet(_CMD_BTN)
         tb.addWidget(self._tool_view_btn)
-        self._tool_tabedit_btn = FontIconButton(FontIcons.Edit, tooltip="编辑", font_size=16)
-        self._tool_tabedit_btn.setStyleSheet(_CMD_BTN)
-        tb.addWidget(self._tool_tabedit_btn)
 
         tb.addStretch(1)
         r1.addWidget(toolbar)
