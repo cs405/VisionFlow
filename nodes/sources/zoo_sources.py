@@ -14,13 +14,19 @@ from core.workflow import WorkflowEngine
 
 
 class _ZooSrcImageBase(SrcFilesVisionNodeData, OpenCVNodeDataBase):
-    """Base for zoo image sources with path filtering."""
+    """Base for zoo image sources with path filtering.
+
+    Each subclass defines a _path_filter string to select a subset
+    of the assets/images directory. The file list is populated
+    during __init__ so thumbnails appear immediately after node creation.
+    """
     __group__ = "系统数据源"
     _path_filter: str = ""
 
     def __init__(self):
         SrcFilesVisionNodeData.__init__(self)
         OpenCVNodeDataBase.__init__(self)
+        self.load_default()
 
     def load_default(self):
         super().load_default()
