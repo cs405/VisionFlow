@@ -903,11 +903,44 @@ class PropertyPanel(QWidget):
     # ── Helpers ───────────────────────────────────────────────────────
 
     def _browse_file_path(self, line_edit: QLineEdit):
-        path, _ = QFileDialog.getOpenFileName(
-            self, "选择文件", line_edit.text(),
-            "所有文件 (*.*);;图像文件 (*.png *.jpg *.bmp *.tiff)")
-        if path:
-            line_edit.setText(path)
+        from core.node_base import SrcFilesVisionNodeData
+
+        if isinstance(self._current_node, SrcFilesVisionNodeData):
+            # Source node: pick a folder → scan images → populate file list
+            folder = QFileDialog.getExistingDirectory(self, "选择图像文件夹")
+            if folder:
+                self._current_node.clear_files()
+                self._current_node.add_files_from_folder(folder)
+                paths = self._current_node.src_file_paths
+                if paths:
+                    self._current_node.src_file_path = paths[0]
+                    line_edit.setText(paths[0])
+                self._refresh_resource_panel()
+        else:
+            # Operator node: pick a single file
+            path, _ = QFileDialog.getOpenFileName(
+                self, "选择文件", line_edit.text(),
+                "所有文件 (*.*);;图像文件 (*.png *.jpg *.bmp *.tiff)")
+            if path:
+                line_edit.setText(path)
+
+    def _refresh_resource_panel(self):
+        """Notify FlowResourcePanel to reload thumbnails."""
+        from core.node_base import SrcFilesVisionNodeData
+        if not isinstance(self._current_node, SrcFilesVisionNodeData):
+            return
+        main = self._find_main_window()
+        if main and hasattr(main, '_resource_panel'):
+            main._resource_panel.set_node(self._current_node)
+
+    def _find_main_window(self):
+        w = self
+        while w is not None:
+            from gui.main_window import MainWindow
+            if isinstance(w, MainWindow):
+                return w
+            w = w.parent()
+        return None
 
     def _set_property_value(self, prop_name: str, new_value: Any, *, force: bool = False):
         if self._current_node is None:
