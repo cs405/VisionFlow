@@ -16,14 +16,14 @@ from PyQt5.QtWidgets import (
     QPushButton, QFrame, QMenuBar, QMenu, QLineEdit, QStackedWidget, QTabBar
 )
 from PyQt5.QtCore import Qt, QTimer, QSettings, pyqtSignal, QEvent
-from PyQt5.QtGui import QIcon, QPixmap, QCursor
+from PyQt5.QtGui import QIcon, QPixmap, QCursor, QFont
 
 from core.node_base import NodeBase, VisionNodeData, SrcFilesVisionNodeData, ROINodeData
 from core.workflow import WorkflowEngine
 from core.project import project_service, DiagramData, ProjectItem
 from core.events import EventType, event_system
 from core.registry import node_registry
-from gui.font_icons import FontIcons, FontIconButton, FontIconTextBlock
+from gui.font_icons import FontIcons, FontIconButton, FontIconTextBlock, FontIconToggleButton
 
 from gui.theme import theme_manager
 from gui.toolbox_panel import ToolboxPanel
@@ -258,6 +258,9 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1180, 720)
         self.setPalette(theme_manager.colors.to_palette())
         self.setStyleSheet(theme_manager.get_stylesheet())
+        # WPF SystemKeys.FontFamily = Microsoft YaHei
+        font = QFont("Microsoft YaHei", 9)
+        self.setFont(font)
         icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "icons", "logo.ico")
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
@@ -281,27 +284,39 @@ class MainWindow(QMainWindow):
         super().showEvent(event)
         self._init_dwm_shadow()
 
+    def changeEvent(self, event):
+        """Toggle Maximize ↔ Restore visibility on window state change (WPF triggers)."""
+        if event.type() == QEvent.WindowStateChange:
+            maximized = self.isMaximized()
+            if hasattr(self, '_max_btn'):
+                self._max_btn.setVisible(not maximized)
+            if hasattr(self, '_restore_btn'):
+                self._restore_btn.setVisible(maximized)
+        super().changeEvent(event)
+
     def _setup_caption_bar(self):
+        """1:1 port of WPF CaptionTemplate (CaptionHeight=85, UniformGrid Rows=2)."""
         bar = QWidget()
-        bar.setFixedHeight(66)
+        bar.setFixedHeight(85)
         bar.setStyleSheet("background: #1e1e1e; border-bottom: 1px solid #3f3f46;")
         main_layout = QVBoxLayout(bar)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
+        # ══════════ Row 1 (32 px) — menu bar + "项目名称:XXX" + 4 action icons + window chrome ══════════
         row1 = QWidget()
         row1.setFixedHeight(32)
-        row1_layout = QHBoxLayout(row1)
-        row1_layout.setContentsMargins(8, 0, 0, 0)
-        row1_layout.setSpacing(0)
+        r1 = QHBoxLayout(row1)
+        r1.setContentsMargins(8, 0, 0, 0)
+        r1.setSpacing(0)
 
+        # Logo — WPF SystemParameters.SmallIconWidth/Height = 16×16
         logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "icons", "logo.png")
         if os.path.exists(logo_path):
             logo = QLabel()
-            logo.setPixmap(QPixmap(logo_path).scaled(18, 18, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            logo.setPixmap(QPixmap(logo_path).scaled(16, 16, Qt.KeepAspectRatio, Qt.SmoothTransformation))
             logo.setStyleSheet("padding: 0 6px 0 0;")
-            row1_layout.addWidget(logo)
-        row1_layout.addWidget(self._lbl("VisionFlow", "#dcdcdc", 13, bold=True, pad="0 10px 0 2px"))
+            r1.addWidget(logo)
 
         menu_bar = QMenuBar()
         menu_bar.setStyleSheet(
@@ -314,103 +329,145 @@ class MainWindow(QMainWindow):
             "QMenu::separator { height: 1px; background: #505050; margin: 4px 10px; }"
         )
         self._build_menus(menu_bar)
-        row1_layout.addWidget(menu_bar, 1)
+        r1.addWidget(menu_bar, 1)
 
-        row1_layout.addWidget(self._lbl("项目名称：", "#c8c8c8", 11, pad="0 4px"))
+        r1.addWidget(self._lbl("项目名称：", "#c8c8c8", 11, pad="0 4px"))
         self._cap_proj_lbl = self._lbl("无项目", "#0078d4", 12, bold=True, pad="0 12px")
-        row1_layout.addWidget(self._cap_proj_lbl)
-        row1_layout.addWidget(_hsep())
+        r1.addWidget(self._cap_proj_lbl)
+        r1.addWidget(_hsep())
 
-        # WPF FontIcon action buttons (Setting / Theme / About / Guide)
-        action_style = """
-            QPushButton { background: transparent; border: none; color: #999; font-family: 'Segoe Fluent Icons', 'Segoe MDL2 Assets', 'Segoe UI Symbol'; font-size: 13px; padding: 0 8px; }
-            QPushButton:hover { background: #3e3e42; color: #dcdcdc; }
-        """
-        for icon, tip, slot in [
-            (FontIcons.Setting, "设置", None),
-            (FontIcons.Color, "切换主题 (亮/暗)", self._on_toggle_theme),
-            (FontIcons.Info, "关于", self._on_about),
-            (FontIcons.Help, "帮助", None),
-        ]:
-            button = FontIconButton(icon, tooltip=tip, font_size=13)
-            button.setStyleSheet(action_style)
-            if slot:
-                button.clicked.connect(slot)
-            row1_layout.addWidget(button)
-
-        window_style = (
-            "QPushButton { background: transparent; border: none; color: #999; font-size: 12px; padding: 0 14px; }"
-            "QPushButton:hover { background: #3e3e42; color: #dcdcdc; }"
-            "QPushButton#close_btn:hover { background: #e81123; color: white; }"
+        # WPF right-side action buttons: Color → Setting → About → Guide  (FontSizeKeys.Icon = 16)
+        _ACT = (
+            "QPushButton { background:transparent; border:none; color:#999;"
+            " font-family:'Segoe Fluent Icons','Segoe MDL2 Assets','Segoe UI Symbol';"
+            " font-size:16px; padding:0 8px; }"
+            "QPushButton:hover { background:#3e3e42; color:#dcdcdc; }"
         )
-        for text, slot in [("─", self.showMinimized), ("□", self._toggle_max), ("✕", self.close)]:
-            button = QPushButton(text)
-            button.setStyleSheet(window_style)
-            if text == "✕":
-                button.setObjectName("close_btn")
-            button.clicked.connect(slot)
-            row1_layout.addWidget(button)
+        # WPF: Color → Setting → [ISwitchThemeViewPresenter toggle] → About → Guide
+        for icon, tip, slot in [
+            (FontIcons.Color,   "颜色主题", self._on_toggle_theme),
+            (FontIcons.Setting, "设置",     None),
+        ]:
+            btn = FontIconButton(icon, tooltip=tip, font_size=16)
+            btn.setStyleSheet(_ACT)
+            if slot:
+                btn.clicked.connect(slot)
+            r1.addWidget(btn)
+
+        # Theme switch toggle (WPF ISwitchThemeViewPresenter)
+        self._theme_toggle = FontIconToggleButton(
+            FontIcons.Color, FontIcons.Color, font_size=16,
+        )
+        self._theme_toggle.setToolTip("切换主题")
+        _TOGGLE = (
+            "FontIconToggleButton { background:transparent; border:none; color:#999;"
+            " font-family:'Segoe Fluent Icons','Segoe MDL2 Assets','Segoe UI Symbol';"
+            " font-size:16px; padding:0 8px; }"
+            "FontIconToggleButton:hover { background:#3e3e42; color:#dcdcdc; }"
+            "FontIconToggleButton:checked { color:#dcdcdc; }"
+        )
+        self._theme_toggle.setStyleSheet(_TOGGLE)
+        self._theme_toggle.setChecked(theme_manager.is_dark)
+        self._theme_toggle.toggled.connect(lambda _: self._on_toggle_theme())
+        r1.addWidget(self._theme_toggle)
+
+        for icon, tip, slot in [
+            (FontIcons.Info,  "关于",   self._on_about),
+            (FontIcons.Mouse, "新手向导", None),
+        ]:
+            btn = FontIconButton(icon, tooltip=tip, font_size=16)
+            btn.setStyleSheet(_ACT)
+            if slot:
+                btn.clicked.connect(slot)
+            r1.addWidget(btn)
+
+        # Window chrome buttons — WPF Segoe MDL2 glyphs, FontSize=10
+        # Maximize hidden when maximized; Restore hidden when normal (WPF Window.xaml triggers)
+        _WIN = (
+            "QPushButton { background:transparent; border:none; color:#999;"
+            " font-family:'Segoe Fluent Icons','Segoe MDL2 Assets','Segoe UI Symbol';"
+            " font-size:10px; padding:0 12px; }"
+            "QPushButton:hover { background:#3e3e42; color:#dcdcdc; }"
+            "QPushButton#close_btn:hover { background:#e81123; color:white; }"
+        )
+        for icon, tip, slot, btn_attr in [
+            (FontIcons.ChromeMinimize, "最小化", self.showMinimized, None),
+            (FontIcons.ChromeMaximize, "最大化", self._toggle_max, "_max_btn"),
+            (FontIcons.ChromeRestore,  "还原",   self._toggle_max, "_restore_btn"),
+            (FontIcons.ChromeClose,    "关闭",   self.close,        None),
+        ]:
+            btn = QPushButton(icon)
+            btn.setToolTip(tip)
+            btn.setStyleSheet(_WIN)
+            if icon == FontIcons.ChromeClose:
+                btn.setObjectName("close_btn")
+            btn.clicked.connect(slot)
+            if btn_attr:
+                setattr(self, btn_attr, btn)
+            r1.addWidget(btn)
+        self._restore_btn.hide()  # start normal → hide Restore
 
         main_layout.addWidget(row1)
 
+        # ══════════ Row 2 — WPF 4-button-groups with 3 vertical separators ══════════
         row2 = QWidget()
-        row2.setStyleSheet("background: #2d2d30; border-top: 1px solid #3f3f46;")
-        row2_layout = QHBoxLayout(row2)
-        row2_layout.setContentsMargins(8, 2, 8, 2)
-        row2_layout.setSpacing(4)
+        row2.setStyleSheet("background:#2d2d30; border-top:1px solid #3f3f46;")
+        r2 = QHBoxLayout(row2)
+        r2.setContentsMargins(6, 3, 6, 3)
+        r2.setSpacing(2)
 
-        for text, slot in [
-            ("新建", self._on_new_project),
-            ("打开", self._on_open_project),
-            ("保存", self._on_save_project),
+        # Group 1 — file ops:  Page(New)  OpenFolderHorizontal(Open)  Edit  Save  (FontSizeKeys.Icon=16)
+        for icon, tip, slot in [
+            (FontIcons.Page,                "新建项目", self._on_new_project),
+            (FontIcons.OpenFolderHorizontal, "打开项目", self._on_open_project),
+            (FontIcons.Edit,                 "编辑项目", self._on_edit_project),
+            (FontIcons.Save,                 "保存项目", self._on_save_project),
         ]:
-            button = QPushButton(text)
-            button.setStyleSheet(_CMD_BTN)
-            button.clicked.connect(slot)
-            row2_layout.addWidget(button)
-        row2_layout.addWidget(_hsep())
+            btn = FontIconButton(icon, tooltip=tip, font_size=16)
+            btn.setStyleSheet(_CMD_BTN)
+            btn.clicked.connect(slot)
+            r2.addWidget(btn)
+        r2.addWidget(_hsep())
 
-        self._run_btn = FontIconButton(FontIcons.Replay, "运行", tooltip="运行流程 (F5)", font_size=12)
+        # Group 2 — project-level commands (ItemsControl placeholder)
+        self._tool_project_cmds = QWidget()
+        self._tool_project_cmds.setLayout(QHBoxLayout())
+        self._tool_project_cmds.layout().setContentsMargins(0, 0, 0, 0)
+        self._tool_project_cmds.layout().setSpacing(2)
+        r2.addWidget(self._tool_project_cmds)
+        r2.addWidget(_hsep())
+
+        # Group 3 — diagram commands:  Replay(Start)  Location(Stop)  (WPF FlowableDiagramDataBase)
+        self._tool_diagram_cmds = QWidget()
+        self._tool_diagram_cmds.setLayout(QHBoxLayout())
+        self._tool_diagram_cmds.layout().setContentsMargins(0, 0, 0, 0)
+        self._tool_diagram_cmds.layout().setSpacing(2)
+
+        self._run_btn = FontIconButton(FontIcons.Replay, tooltip="开始", font_size=16)
         self._run_btn.setStyleSheet(_CMD_BTN)
         self._run_btn.clicked.connect(self._on_run_workflow)
-        row2_layout.addWidget(self._run_btn)
+        self._tool_diagram_cmds.layout().addWidget(self._run_btn)
 
-        self._stop_btn = FontIconButton(FontIcons.Stop, "停止", tooltip="停止运行 (Shift+F5)", font_size=12)
+        self._stop_btn = FontIconButton(FontIcons.Location, tooltip="停止", font_size=16)
         self._stop_btn.setStyleSheet(_CMD_BTN)
         self._stop_btn.clicked.connect(self._on_stop_workflow)
-        row2_layout.addWidget(self._stop_btn)
-        row2_layout.addWidget(_hsep())
+        self._tool_diagram_cmds.layout().addWidget(self._stop_btn)
 
-        for text, slot in [
-            ("放大", lambda: self._active_visual_target().zoom_in()),
-            ("缩小", lambda: self._active_visual_target().zoom_out()),
-            ("适应", lambda: self._active_visual_target().fit_to_window()),
-            ("1:1", lambda: self._active_visual_target().zoom_to_100()),
-        ]:
-            button = QPushButton(text)
-            button.setStyleSheet(_CMD_BTN)
-            button.clicked.connect(slot)
-            row2_layout.addWidget(button)
-        row2_layout.addWidget(_hsep())
+        r2.addWidget(self._tool_diagram_cmds)
+        r2.addWidget(_hsep())
 
-        undo_btn = FontIconButton(FontIcons.Undo, "撤销", tooltip="撤销 (Ctrl+Z)", font_size=12)
-        undo_btn.setStyleSheet(_CMD_BTN)
-        undo_btn.clicked.connect(self._on_undo_diagram)
-        row2_layout.addWidget(undo_btn)
+        # Group 4 — View / TabEdit  (WPF ShowViewCommand + ShowTabEditCommand)
+        self._tool_view_btn = FontIconButton(FontIcons.View, tooltip="查看", font_size=16)
+        self._tool_view_btn.setStyleSheet(_CMD_BTN)
+        r2.addWidget(self._tool_view_btn)
+        self._tool_tabedit_btn = FontIconButton(FontIcons.Edit, tooltip="编辑", font_size=16)
+        self._tool_tabedit_btn.setStyleSheet(_CMD_BTN)
+        r2.addWidget(self._tool_tabedit_btn)
 
-        redo_btn = FontIconButton(FontIcons.Redo, "重做", tooltip="重做 (Ctrl+Y)", font_size=12)
-        redo_btn.setStyleSheet(_CMD_BTN)
-        redo_btn.clicked.connect(self._on_redo_diagram)
-        row2_layout.addWidget(redo_btn)
-
-        row2_layout.addStretch(1)
-        self._cmd_proj_lbl = self._lbl("无流程图", "#0078d4", 12, bold=True, pad="0 8px")
-        row2_layout.addWidget(self._cmd_proj_lbl)
-
+        r2.addStretch(1)
         main_layout.addWidget(row2)
 
-        # Install event filter on caption bar and ALL its descendants so
-        # clicks on empty areas between/on child widgets still trigger drag.
+        # ── drag support ──
         self._caption_bar = bar
         bar.installEventFilter(self)
         for child in bar.findChildren(QWidget):
@@ -1512,6 +1569,10 @@ class MainWindow(QMainWindow):
         """Toggle between dark and light themes (WPF ShowColorThemeViewCommand)."""
         theme_manager.toggle()
         self._apply_theme()
+        if hasattr(self, '_theme_toggle'):
+            self._theme_toggle.blockSignals(True)
+            self._theme_toggle.setChecked(theme_manager.is_dark)
+            self._theme_toggle.blockSignals(False)
 
     def _apply_theme(self):
         """Reapply the current theme to the entire window."""

@@ -64,7 +64,7 @@ class FontIcons:
     """
 
     # ── Navigation ──
-    GlobalNavButton = ""       # hamburger menu / back
+    GlobalNavButton = ""
     ChevronLeft = ""
     ChevronRight = ""
     ChevronUp = ""
@@ -73,37 +73,42 @@ class FontIcons:
     PageRight = ""
 
     # ── Actions ──
-    Replay = ""                # play / run
-    Play = ""
+    Replay = ""                #  — run / start
+    Play = ""
     Stop = ""
     Pause = ""
-    Sync = ""                  # sync / run-all
-    Refresh = ""
+    Sync = ""
+    Refresh = ""              #  — reset
     Undo = ""
     Redo = ""
-    Delete = ""                # trash can
-    Cancel = ""                 # × cancel
-    Add = ""                    # + add
+    Delete = ""               #  — trash / clear
+    Cancel = ""
+    Add = ""
     Copy = ""
     Paste = ""
-    Save = ""
-    OpenFile = ""
-    OpenFolderHorizontal = ""
-    Edit = ""
-    Setting = ""               # gear / settings
+    Save = ""                 # 
+    OpenFile = ""             # 
+    OpenFolderHorizontal = "" # 
+    Edit = ""                 # 
+    EditMirrored = ""         # 
+    Setting = ""              #  — gear / settings
+    Zoom = ""                 #  — zoom/fit
     ZoomIn = ""
     ZoomOut = ""
     FullScreen = ""
+    View = ""                 #  — eye/show view
+    Page = ""                 #  — new page/project
 
     # ── Status ──
-    Completed = ""             # checkmark
-    Error = ""                 # ✕ error circle
-    Info = ""                  # ⓘ info circle
-    Warning = ""               # ⚠ warning triangle
-    Help = ""                  # ? help circle
+    Completed = ""
+    Error = ""
+    Info = ""                 #  — info/about
+    Warning = ""
+    Help = ""
+    Location = ""             #  — stop location
 
     # ── Files / Objects ──
-    Photo2 = ""                # image/photo
+    Photo2 = ""
     Calendar = ""
     Folder = ""
     Document = ""
@@ -111,14 +116,25 @@ class FontIcons:
     Camera = ""
 
     # ── Layout / Views ──
-    AlignLeft = ""             # tree/list view
-    CaretBottomRightSolidCenter8 = ""  # grid/tile view (small squares)
+    AlignLeft = ""
+    AlignCenter = ""           # 
+    CaretBottomRightSolidCenter8 = ""
+    DisconnectDrive = ""      #  — delete/remove node
 
     # ── Tools ──
-    Color = ""                 # color palette
+    Color = ""                 #  — color palette / theme
     Crop = ""
     Cut = ""
     Filter = ""
+
+    # ── Window Chrome ──
+    ChromeMinimize = ""       # 
+    ChromeMaximize = ""       # 
+    ChromeRestore = ""        # 
+    ChromeClose = ""          # 
+
+    # ── Mouse / Guide ──
+    Mouse = ""                #  — guide/wizard
 
     # ── Power / System ──
     PowerButton = ""
@@ -226,7 +242,7 @@ class FontIconButton(QPushButton):
             self.setToolTip(tooltip)
 
         if self._icon_only:
-            self.setFixedSize(32, 28)
+            self.setFixedSize(34, 30)
 
         self.setCursor(Qt.PointingHandCursor)
         self._apply_style()
