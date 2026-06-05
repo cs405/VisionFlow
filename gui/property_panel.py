@@ -377,14 +377,6 @@ class PropertyPanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        title = QLabel("  属性面板")
-        title.setStyleSheet("""
-            QLabel {
-                background: #2d2d30; color: #dcdcdc; padding: 8px;
-                font-size: 13px; font-weight: bold; border-bottom: 1px solid #3f3f46;
-            }
-        """)
-        layout.addWidget(title)
 
         self._tabs = QTabWidget()
         self._tabs.setStyleSheet("""
@@ -401,16 +393,10 @@ class PropertyPanel(QWidget):
             QTabBar::tab:hover { background: #3e3e42; }
         """)
         layout.addWidget(self._tabs)
-        self._title_label = title
         connect_theme(self._refresh_qss)
 
     def _refresh_qss(self):
         tm = theme_manager
-        self._title_label.setStyleSheet(f"""
-            QLabel {{ background: {tm.color('bg_surface_raised').name()}; color: {tm.color('text_primary').name()};
-                      padding: 8px; font-size: 13px; font-weight: bold;
-                      border-bottom: 1px solid {tm.color('border').name()}; }}
-        """)
         self._tabs.setStyleSheet(f"""
             QTabWidget::pane {{ background: {tm.color('bg_surface').name()}; border: none; }}
             QTabBar::tab {{ background: {tm.color('bg_surface_raised').name()}; color: {tm.color('text_secondary').name()};
