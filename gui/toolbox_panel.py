@@ -455,6 +455,14 @@ class _CollapsibleGroup(QWidget):
         )
         hl.addWidget(self._arrow)
 
+        icon_lbl = QLabel(icon)
+        icon_lbl.setStyleSheet(
+            f"color: {color}; font-size: 14px; font-weight: bold;"
+            f"font-family: '{ICON_FONT_FAMILY}';"
+            "background: transparent; border: none;"
+        )
+        hl.addWidget(icon_lbl)
+
         name_lbl = QLabel(group_name)
         name_lbl.setStyleSheet(
             f"color: {color}; font-size: 12px; font-weight: bold;"
@@ -467,15 +475,6 @@ class _CollapsibleGroup(QWidget):
             "color: #888; font-size: 10px; background: transparent; border: none;"
         )
         hl.addWidget(count_lbl)
-
-        # Icon on right — WPF CaptionRightTemplate
-        icon_lbl = QLabel(icon)
-        icon_lbl.setStyleSheet(
-            f"color: {color}; font-size: 14px; font-weight: bold;"
-            f"font-family: '{ICON_FONT_FAMILY}';"
-            "background: transparent; border: none;"
-        )
-        hl.addWidget(icon_lbl)
 
         layout.addWidget(self._header)
 
