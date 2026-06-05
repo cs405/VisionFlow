@@ -619,12 +619,12 @@ class MainWindow(QMainWindow):
         self._tool_project_cmds.layout().setSpacing(2)
         for icon, tip, slot in [
             (FontIcons.Add,           "新建流程图",           self._on_add_diagram),
-            (FontIcons.Ethernet,      "运行模式",             None),
-            (FontIcons.Copy,          "重复流程图",           None),
-            (FontIcons.DictionaryAdd, "从模板添加流程图",     None),
-            (FontIcons.Manage,        "模板管理",             None),
-            (FontIcons.SaveAs,        "流程图另存为模板",     None),
-            (FontIcons.Cancel,        "删除流程图",           None),
+            (FontIcons.Ethernet,      "运行模式",             self._on_cycle_run_mode),
+            (FontIcons.Copy,          "重复流程图",           self._on_duplicate_diagram),
+            (FontIcons.DictionaryAdd, "从模板添加流程图",     self._on_add_from_template),
+            (FontIcons.Manage,        "模板管理",             self._on_manage_templates),
+            (FontIcons.SaveAs,        "流程图另存为模板",     self._on_save_as_template),
+            (FontIcons.Cancel,        "删除流程图",           self._on_delete_diagram),
         ]:
             btn = FontIconButton(icon, tooltip=tip, font_size=16)
             btn.setStyleSheet(_CMD_BTN)
@@ -1318,6 +1318,56 @@ class MainWindow(QMainWindow):
         self._log_panel.info(f"新建流程图: {diagram.name}")
         self._sync_proj_labels(project)
 
+    def _on_duplicate_diagram(self):
+        """Duplicate current diagram (WPF DuplicationDiagramCommand)."""
+        project = project_service.current_project
+        if project is None:
+            return
+        self._sync_workflow_to_project()
+        clone = project.duplicate_diagram()
+        if clone:
+            self._refresh_diagram_tabs(project)
+            self._log_panel.success(f"已复制流程图: {clone.name}")
+
+    def _on_add_from_template(self):
+        """Add diagram from template (WPF top template / index 0)."""
+        project = project_service.current_project
+        if project is None:
+            return
+        self._sync_workflow_to_project()
+        clone = project.add_diagram_from_template(0)
+        if clone:
+            self._refresh_diagram_tabs(project)
+            self._log_panel.success(f"从模板添加: {clone.name}")
+        else:
+            self._log_panel.warning("没有可用模板，请先将流程图另存为模板")
+
+    def _on_manage_templates(self):
+        """Open template management dialog (WPF ShowTemplateManagerCommand)."""
+        self._log_panel.info("模板管理功能开发中")
+
+    def _on_save_as_template(self):
+        """Save current diagram as template (WPF SaveDiagramAsTemplateCommand)."""
+        project = project_service.current_project
+        if project is None:
+            return
+        self._sync_workflow_to_project()
+        project.save_diagram_as_template()
+        self._log_panel.success("已保存当前流程图为模板")
+
+    def _on_delete_diagram(self):
+        """Delete current diagram."""
+        project = project_service.current_project
+        if project is None:
+            return
+        self._sync_workflow_to_project()
+        if project.delete_diagram():
+            self._refresh_diagram_tabs(project)
+            self._log_panel.info("已删除当前流程图")
+        else:
+            self._log_panel.warning("至少需要保留一个流程图")
+        self._sync_proj_labels(project)
+
     def _on_close_diagram_tab(self, index: int):
         project = project_service.current_project
         if project is None:
@@ -1599,6 +1649,27 @@ class MainWindow(QMainWindow):
             self._log_panel.warning("流程已停止")
             self._diagram_status_strip.set_status("流程图已停止", "#ff9800")
             self._side_status_strip.set_status("结果区已停止等待", "#ff9800")
+
+    def _on_cycle_run_mode(self):
+        """Cycle through run modes: Node → Link → Port → Node."""
+        if not self._workflow:
+            return
+        from core.workflow import DiagramFlowableMode
+        _MODE_LABELS = {
+            DiagramFlowableMode.NODE: "运行模式: 按节点",
+            DiagramFlowableMode.LINK: "运行模式: 节点+连线",
+            DiagramFlowableMode.PORT: "运行模式: 节点+连线+端口",
+        }
+        _NEXT = {
+            DiagramFlowableMode.NODE: DiagramFlowableMode.LINK,
+            DiagramFlowableMode.LINK: DiagramFlowableMode.PORT,
+            DiagramFlowableMode.PORT: DiagramFlowableMode.NODE,
+        }
+        current = self._workflow.flowable_mode
+        self._workflow.flowable_mode = _NEXT[current]
+        new_label = _MODE_LABELS[self._workflow.flowable_mode]
+        self._log_panel.info(new_label)
+        self._diagram_status_strip.set_status(new_label, "#0078d4")
 
     def _jump_to_node(self, node_id: str):
         project = project_service.current_project
