@@ -114,6 +114,19 @@ class FontIcons:
     Document = ""
     Video = ""
     Camera = ""
+    OpenAs = ""
+
+    # ── WPF node group icons (exact hex codepoints from WPF FontIcons.cs) ──
+    InPrivate = ""          # 滤波模块 BlurDataGroup
+    Annotation = ""         # 图像分割提取 TakeoffDataGroup
+    HomeGroup = ""          # 形态学模块 MorphologyDataGroup
+    Dial6 = ""              # 逻辑模块 ConditionDataGroup
+    GotoToday = ""          # 模板匹配 TemplateMatchingDataGroup
+    LargeErase = ""         # 对象识别 DetectorDataGroup
+    GenericScan = ""        # 特征识别 FeatureDetectorDataGroup
+    NarratorForward = ""    # 网络通讯 NetworkDataGroup
+    CommandPrompt = ""      # Onnx通用模型 OnnxDataGroup
+    More = ""               # 其他模块 OtherDataGroup
 
     # ── Layout / Views ──
     AlignLeft = ""

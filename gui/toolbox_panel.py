@@ -20,7 +20,7 @@ from PyQt5.QtCore import Qt, QEvent, pyqtSignal, QSettings, QMimeData, QPoint, Q
 from PyQt5.QtGui import QDrag, QColor
 
 from core.node_group import node_data_group_manager
-from gui.font_icons import FontIcons, FontIconToggleButton
+from gui.font_icons import FontIcons, FontIconToggleButton, ICON_FONT_FAMILY
 from gui.widgets.grid_splitter_box import GridSplitterBox, WIDTH_THRESHOLD
 from core.constants import get_group_meta as _group_meta
 
@@ -201,10 +201,12 @@ class _NarrowGroupPopup(QFrame):
 
 
 class _NarrowGroupButton(QPushButton):
-    """Compact group-icon button for narrow (≤90px) mode.
+    """Group-icon button for narrow mode — 1:1 WPF FontIconToggleButton.
 
-    Clicking toggles a popup with the group's nodes. Matches WPF
-    ContextMenuPresenter FontIconToggleButton.
+    WPF: <FontIconToggleButton Margin=\"0,5\" FontSize=\"25\"
+             UncheckedGlyph=\"{Binding Icon}\" />
+
+    No border, no background — just the icon glyph at large font size.
     """
 
     node_type_selected = pyqtSignal(str)
@@ -219,15 +221,17 @@ class _NarrowGroupButton(QPushButton):
 
         self.setText(icon)
         self.setToolTip(group_name)
-        self.setFixedSize(28, 28)
         self.setCheckable(True)
         self.setCursor(Qt.PointingHandCursor)
         self.setStyleSheet(
-            f"_NarrowGroupButton {{ background: transparent; border: 1px solid #3f3f46;"
-            f"border-radius: 4px; color: {color}; font-size: 14px; font-weight: bold;"
-            f"font-family: 'Segoe UI Symbol', 'Microsoft YaHei UI'; }}"
-            f"_NarrowGroupButton:hover {{ background: #3e3e42; border-color: #0078d4; }}"
-            f"_NarrowGroupButton:checked {{ background: #094771; border-color: #0078d4; }}"
+            f"_NarrowGroupButton {{"
+            f"background: transparent; border: none;"
+            f"color: {color}; font-size: 25px;"
+            f"font-family: '{ICON_FONT_FAMILY}';"
+            f"padding: 2px 0;"
+            f"}}"
+            f"_NarrowGroupButton:hover {{ color: #dcdcdc; }}"
+            f"_NarrowGroupButton:checked {{ color: #0078d4; }}"
         )
         self.toggled.connect(self._on_toggled)
 
