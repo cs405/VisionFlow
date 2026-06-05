@@ -667,14 +667,10 @@ class MainWindow(QMainWindow):
         return panel
 
     def _build_left_panel(self):
-        tabs = QTabWidget()
-        tabs.setStyleSheet(_TAB_STYLE)
         self._toolbox = ToolboxPanel()
-        tabs.addTab(self._toolbox, "流程资源")
-        self._log_panel = LogPanel()
-        tabs.addTab(self._log_panel, "日志")
-        tabs.setMinimumWidth(210)
-        return tabs
+        self._toolbox.setMinimumWidth(210)
+        self._log_panel = LogPanel()  # hidden, kept for API compatibility
+        return self._toolbox
 
     def _build_center_panel(self):
         panel = QWidget()
@@ -784,7 +780,6 @@ class MainWindow(QMainWindow):
         self._toolbox.node_type_selected.connect(self._on_node_type_selected)
         self._property_panel.property_changed.connect(self._on_property_changed)
         self._property_panel.set_image_viewer(self._img_panel.viewer)
-        self._log_panel.node_jump_requested.connect(self._jump_to_node)
         self._resource_panel.file_selected.connect(self._on_resource_file_selected)
         self._resource_panel.file_double_clicked.connect(self._on_resource_file_double_clicked)
 
