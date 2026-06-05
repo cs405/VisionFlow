@@ -483,7 +483,7 @@ class MainWindow(QMainWindow):
         _WIN = (
             "QPushButton { background:transparent; border:none; color:#999;"
             " font-family:'Segoe Fluent Icons','Segoe MDL2 Assets','Segoe UI Symbol';"
-            " font-size:10px; padding:0 12px; }"
+            " font-size:14px; min-width:46px; min-height:32px; }"
             "QPushButton:hover { background:#3e3e42; color:#dcdcdc; }"
             "QPushButton#close_btn:hover { background:#e81123; color:white; }"
         )
