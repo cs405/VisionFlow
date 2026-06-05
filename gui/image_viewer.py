@@ -141,7 +141,7 @@ class ImageViewer(QGraphicsView):
         self.setFrameShape(QGraphicsView.NoFrame)
 
         # Background — WPF Tile25 checkered pattern for transparent areas
-        self.setBackgroundBrush(self._create_tile_brush(QColor(45, 45, 48), QColor(52, 52, 55), 16))
+        self._refresh_tile_brush()
 
     def _create_tile_brush(self, color1: QColor, color2: QColor, size: int) -> QBrush:
         """Create a checkerboard tile brush (WPF Tile25 style)."""
@@ -154,6 +154,12 @@ class ImageViewer(QGraphicsView):
         painter.fillRect(size, size, size, size, color2)
         painter.end()
         return QBrush(pixmap)
+
+    def _refresh_tile_brush(self):
+        """Re-apply checkerboard brush from current theme colors."""
+        self.setBackgroundBrush(self._create_tile_brush(
+            theme_manager.color('canvas_checker_base'),
+            theme_manager.color('canvas_checker_alt'), 16))
 
         # Mouse tracking
         self.setMouseTracking(True)
@@ -862,7 +868,7 @@ class ImageViewerPanel(QWidget):
         connect_theme(self._refresh_qss)
 
     def _refresh_qss(self):
-        """Re-apply image viewer QSS on theme change."""
+        """Re-apply image viewer QSS + tile brush on theme change."""
         tm = theme_manager
         self._info_widget.setStyleSheet(
             f"background: {tm.color('bg_surface').name()}; border-top: 1px solid {tm.color('border').name()};"
@@ -870,6 +876,8 @@ class ImageViewerPanel(QWidget):
         self._pos_label.setStyleSheet(f"font-size: 11px; color: {tm.color('text_secondary').name()};")
         self._size_label.setStyleSheet(f"font-size: 11px; color: {tm.color('text_secondary').name()};")
         self._zoom_label.setStyleSheet(f"font-size: 11px; color: {tm.color('text_secondary').name()};")
+        self.viewer._refresh_tile_brush()
+        self.viewer.viewport().update()
 
     def set_image(self, image: np.ndarray | None):
         self.viewer.set_image(image)

@@ -36,8 +36,8 @@ from gui.node_editor.link_drawer import ILinkDrawer, BrokenLinkDrawer
 SCENE_RECT = QRectF(-5000, -5000, 10000, 10000)
 
 # Checkerboard tile — 1:1 port of WPF H.Theme BrushKeys Tile pattern
-CHECKER_TILE = 20
-CHECKER_CELL = 10
+CHECKER_TILE = 40
+CHECKER_CELL = 20
 from gui.theme import theme_manager
 
 
@@ -196,6 +196,22 @@ class DiagramScene(QGraphicsScene):
 
     def drawBackground(self, painter: QPainter, rect: QRectF):
         super().drawBackground(painter, rect)
+        if not self._show_grid:
+            return
+        grid_color = theme_manager.color("canvas_grid")
+        grid_pen = QPen(grid_color, 0.5)
+        painter.setPen(grid_pen)
+        gs = 20.0
+        left = int(rect.left() / gs) * gs
+        top = int(rect.top() / gs) * gs
+        x = left
+        while x < rect.right():
+            painter.drawLine(QPointF(x, rect.top()), QPointF(x, rect.bottom()))
+            x += gs
+        y = top
+        while y < rect.bottom():
+            painter.drawLine(QPointF(rect.left(), y), QPointF(rect.right(), y))
+            y += gs
 
     def toggle_grid(self):
         self._show_grid = not self._show_grid

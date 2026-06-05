@@ -16,6 +16,7 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QTableWidget, QTableWidgetIte
                               QTabWidget, QLabel, QHeaderView, QTextEdit,
                               QStyledItemDelegate, QStyle)
 from PyQt5.QtCore import Qt, pyqtSignal, QRect
+from gui.theme import theme_manager, connect_theme
 from PyQt5.QtGui import QColor, QFont, QPainter, QPixmap
 
 from core.node_base import VisionNodeData
@@ -72,15 +73,17 @@ class IconTextDelegate(QStyledItemDelegate):
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing)
 
-        # Background
+        # Background — from theme
+        tm = theme_manager
         if option.state & QStyle.State_Selected:
             painter.fillRect(option.rect, QColor("#094771"))
         else:
-            painter.fillRect(option.rect, QColor("#252526") if index.row() % 2 == 0 else QColor("#2a2a2c"))
+            bg = tm.color('bg_surface') if index.row() % 2 == 0 else tm.color('bg_alternating')
+            painter.fillRect(option.rect, bg)
 
         row = index.row()
         icon = self._icons.get(row, "")
-        color = self._colors.get(row, "#dcdcdc")
+        color = self._colors.get(row, tm.color('text_primary').name())
 
         x = option.rect.left() + 6
 
@@ -98,7 +101,7 @@ class IconTextDelegate(QStyledItemDelegate):
         text = index.data(Qt.DisplayRole) or ""
         font = QFont("Segoe UI", 10)
         painter.setFont(font)
-        painter.setPen(QColor("#dcdcdc"))
+        painter.setPen(theme_manager.color('text_primary'))
         text_rect = QRect(x, option.rect.top(),
                           option.rect.right() - x - 4, option.rect.height())
         painter.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft,
@@ -228,6 +231,36 @@ class ResultPanel(QWidget):
         self._tabs.addTab(self._help_text, "帮助")
 
         layout.addWidget(self._tabs)
+        self._title_label = title
+        connect_theme(self._refresh_qss)
+
+    def _refresh_qss(self):
+        tm = theme_manager
+        self._title_label.setStyleSheet(f"""
+            QLabel {{ background: {tm.color('bg_surface_raised').name()}; color: {tm.color('text_primary').name()};
+                      padding: 8px; font-size: 13px; font-weight: bold;
+                      border-bottom: 1px solid {tm.color('border').name()}; }}
+        """)
+        self._tabs.setStyleSheet(f"""
+            QTabWidget::pane {{ border: none; background: {tm.color('bg_surface').name()}; }}
+            QTabBar::tab {{ padding: 6px 12px; font-size: 11px; }}
+        """)
+        if hasattr(self, '_history_table'):
+            self._history_table.setStyleSheet(f"""
+                QTableWidget {{ background: {tm.color('bg_surface').name()}; color: {tm.color('text_primary').name()};
+                               border: none; gridline-color: {tm.color('border').name()};
+                               alternate-background-color: {tm.color('bg_alternating').name()}; }}
+                QHeaderView::section {{ background: {tm.color('bg_surface_raised').name()};
+                                       color: {tm.color('text_secondary').name()}; padding: 4px 8px;
+                                       border: none; border-bottom: 1px solid {tm.color('border').name()}; font-size: 11px; }}
+                QTableWidget::item {{ padding: 3px 6px; font-size: 11px; }}
+                QTableWidget::item:selected {{ background: #094771; color: {tm.color('text_primary').name()}; }}
+            """)
+        if hasattr(self, '_help_text'):
+            self._help_text.setStyleSheet(f"""
+                QTextEdit, QPlainTextEdit {{ background: {tm.color('bg_surface').name()};
+                    color: {tm.color('text_secondary').name()}; border: none; padding: 12px; font-size: 12px; }}
+            """)
 
     # ── Current node results (6.4) ──────────────────────────────────────
 
@@ -334,7 +367,7 @@ class ResultPanel(QWidget):
         msg_item = QTableWidgetItem(msg_text)
         msg_item.setData(Qt.UserRole, node.node_id)
         icon = STATE_ICONS.get(state, FontIcons.Info)
-        color = STATE_COLORS.get(state, "#dcdcdc")
+        color = STATE_COLORS.get(state, theme_manager.color('text_primary').name())
         self._icon_delegate.set_row_icon(row, icon, color)
         self._history_table.setItem(row, 3, msg_item)
 
@@ -351,7 +384,7 @@ class ResultPanel(QWidget):
             item = self._history_table.item(row, 0)
             if item and item.data(Qt.UserRole) == node_id:
                 icon = STATE_ICONS.get(state, FontIcons.Info)
-                color = STATE_COLORS.get(state, "#dcdcdc")
+                color = STATE_COLORS.get(state, theme_manager.color('text_primary').name())
                 self._icon_delegate.set_row_icon(row, icon, color)
                 if message:
                     msg_item = self._history_table.item(row, 3)

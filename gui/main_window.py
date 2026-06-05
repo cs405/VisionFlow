@@ -119,13 +119,13 @@ def _cmd_btn_qss():
 """
 
 def _tab_qss():
-    """Tab widget QSS — dynamic from theme."""
+    """Tab widget QSS — dynamic from theme. Tab text uses text_title for clarity."""
     c = theme_manager
     return f"""
     QTabWidget::pane {{ border: none; background: {c.color('bg_surface').name()}; }}
     QTabBar::tab {{
         background: {c.color('bg_surface_raised').name()};
-        color: {c.color('text_primary').name()};
+        color: {c.color('text_title').name()};
         padding: 3px 8px;
         border: none;
         border-bottom: 2px solid transparent;
@@ -183,13 +183,17 @@ class _DiagramTabHeader(QWidget):
         self._name_edit.setFrame(False)
         self._name_edit.setFixedHeight(22)
         self._name_edit.setMinimumWidth(60)
-        self._name_edit.setStyleSheet(
-            "QLineEdit { background: transparent; color: #dcdcdc; border: none; padding: 0 2px;"
-            " font-family: 'Microsoft YaHei'; font-size: 12px; }"
-            "QLineEdit:focus { border-bottom: 1px solid #0078d4; }"
-        )
         self._name_edit.editingFinished.connect(self._emit_rename)
+        self._refresh_qss()
         layout.addWidget(self._name_edit, 1)
+
+    def _refresh_qss(self):
+        tm = theme_manager
+        self._name_edit.setStyleSheet(
+            f"QLineEdit {{ background: transparent; color: {tm.color('text_title').name()};"
+            f" border: none; padding: 0 2px; font-family: 'Microsoft YaHei'; font-size: 12px; }}"
+            f"QLineEdit:focus {{ border-bottom: 1px solid {tm.color('accent').name()}; }}"
+        )
 
     def _emit_rename(self):
         self.rename_requested.emit(self._name_edit.text().strip())
@@ -1001,9 +1005,9 @@ class MainWindow(QMainWindow):
         close_btn = QPushButton("×")
         close_btn.setFixedSize(18, 18)
         close_btn.setStyleSheet(
-            "QPushButton { background: transparent; border: none; color: #999;"
-            " font-size: 14px; padding: 0; }"
-            "QPushButton:hover { background: #c42b1c; color: white; border-radius: 2px; }"
+            f"QPushButton {{ background: transparent; border: none; color: {theme_manager.color('text_secondary').name()};"
+            f" font-size: 14px; padding: 0; }}"
+            f"QPushButton:hover {{ background: #c42b1c; color: white; border-radius: 2px; }}"
         )
         close_btn.clicked.connect(lambda checked, idx=index: self._on_close_diagram_tab(idx))
         self._diagram_tab_widget.tabBar().setTabButton(index, QTabBar.RightSide, close_btn)
@@ -1626,6 +1630,12 @@ class MainWindow(QMainWindow):
                 FontIconToggleButton:checked {{ color: {tm.color('text_primary').name()}; }}
                 FontIconToggleButton:checked:hover {{ background: {tm.color('bg_surface_hover').name()}; }}
             """)
+        # Diagram tab widget (holds "新项目", flowchart tabs)
+        if hasattr(self, '_diagram_tab_widget'):
+            self._diagram_tab_widget.setStyleSheet(_TAB_STYLE)
+        # Center tabs (图像 / 模块结果 / 帮助)
+        if hasattr(self, '_center_tabs'):
+            self._center_tabs.setStyleSheet(_TAB_STYLE)
 
     def _apply_theme(self):
         """Reapply theme to ALL controls — WPF RefreshTheme() via DynamicResource."""
@@ -1673,7 +1683,12 @@ class MainWindow(QMainWindow):
             if hasattr(iv, '_setup_ui') and hasattr(iv, 'viewer'):
                 iv.viewer.viewport().update()
 
-        # 7. Title bar
+        # 7. Diagram tab headers (custom widgets in tab bar)
+        for header in self._diagram_headers.values():
+            if hasattr(header, '_refresh_qss'):
+                header._refresh_qss()
+
+        # 8. Title bar
         if hasattr(self, '_title_bar'):
             self._title_bar.update()
 
