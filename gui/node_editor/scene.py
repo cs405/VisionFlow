@@ -18,7 +18,7 @@ from PyQt5.QtWidgets import (QGraphicsScene, QGraphicsItem, QMenu, QAction,
                               QGraphicsSceneMouseEvent)
 from PyQt5.QtCore import Qt, QRectF, QPointF, pyqtSignal, QLineF, QMimeData
 from PyQt5.QtGui import (QPainter, QPen, QColor, QBrush, QFont, QPainterPath,
-                          QTransform)
+                          QTransform, QPixmap)
 
 from core.node_base import (NodeBase, Port, PortType, PortDock, LinkData,
                              VisionNodeData)
@@ -34,13 +34,26 @@ from gui.node_editor.socket_item import SocketItem, PORT_DIAMETER
 from gui.node_editor.edge_item import EdgeItem
 
 
-GRID_SIZE_MAJOR = 100
-GRID_SIZE_MINOR = 20
 SCENE_RECT = QRectF(-5000, -5000, 10000, 10000)
 
-GRID_MAJOR_COLOR = QColor(50, 50, 50)
-GRID_MINOR_COLOR = QColor(38, 38, 38)
-BACKGROUND_COLOR = QColor(30, 30, 30)
+# Checkerboard tile — 1:1 port of WPF H.Theme BrushKeys Tile pattern
+# Drawing: 100x100 tile with two 50x50 squares → tiled at smaller viewport
+CHECKER_TILE = 20       # px, viewport size for tiling
+CHECKER_CELL = 10       # px, half of tile (each checker square)
+CHECKER_BASE = QColor("#121317")   # WPF Dark0
+CHECKER_ALT = QColor("#191a20")    # WPF Dark0_1
+
+
+def _make_checker_brush(tile=CHECKER_TILE, cell=CHECKER_CELL,
+                         base=CHECKER_BASE, alt=CHECKER_ALT):
+    """Create a tiled checkerboard QBrush matching WPF DrawingBrush + Tile."""
+    pixmap = QPixmap(tile, tile)
+    pixmap.fill(base)
+    p = QPainter(pixmap)
+    p.fillRect(0, 0, cell, cell, alt)
+    p.fillRect(cell, cell, cell, cell, alt)
+    p.end()
+    return QBrush(pixmap)
 
 
 class DiagramScene(QGraphicsScene):
@@ -59,7 +72,7 @@ class DiagramScene(QGraphicsScene):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setSceneRect(SCENE_RECT)
-        self.setBackgroundBrush(QBrush(BACKGROUND_COLOR))
+        self.setBackgroundBrush(_make_checker_brush())
 
         self._workflow: WorkflowEngine | None = None
         self._node_items: dict[str, NodeItem] = {}
@@ -88,35 +101,16 @@ class DiagramScene(QGraphicsScene):
     # ── Grid ──────────────────────────────────────────────────────────
 
     def drawBackground(self, painter: QPainter, rect: QRectF):
+        """Checkerboard background tiled via background brush (WPF Tile pattern)."""
         super().drawBackground(painter, rect)
-        if not self._show_grid:
-            return
-        painter.setRenderHint(QPainter.Antialiasing, False)
-        left = int(rect.left()) - int(rect.left()) % GRID_SIZE_MINOR
-        top = int(rect.top()) - int(rect.top()) % GRID_SIZE_MINOR
-        right = int(rect.right())
-        bottom = int(rect.bottom())
-
-        pen = QPen(GRID_MINOR_COLOR, 0.5)
-        painter.setPen(pen)
-        lines = []
-        for x in range(left, right, GRID_SIZE_MINOR):
-            lines.append(QLineF(x, top, x, bottom))
-        for y in range(top, bottom, GRID_SIZE_MINOR):
-            lines.append(QLineF(left, y, right, y))
-        painter.drawLines(lines)
-
-        pen = QPen(GRID_MAJOR_COLOR, 1.0)
-        painter.setPen(pen)
-        lines = []
-        for x in range(left, right, GRID_SIZE_MAJOR):
-            lines.append(QLineF(x, top, x, bottom))
-        for y in range(top, bottom, GRID_SIZE_MAJOR):
-            lines.append(QLineF(left, y, right, y))
-        painter.drawLines(lines)
 
     def toggle_grid(self):
+        """Toggle between checkerboard and flat background."""
         self._show_grid = not self._show_grid
+        if self._show_grid:
+            self.setBackgroundBrush(_make_checker_brush())
+        else:
+            self.setBackgroundBrush(QBrush(CHECKER_BASE))
         self.update()
 
     # ── Node management ───────────────────────────────────────────────

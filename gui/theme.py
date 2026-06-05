@@ -72,10 +72,10 @@ class ThemeColors:
         self.link = QColor("#FF8C00")
         self.link_selected = QColor("#FFA726")
 
-        # Grid / Canvas
-        self.grid_major = QColor(60, 60, 60)
-        self.grid_minor = QColor(50, 50, 50)
-        self.canvas_bg = QColor(30, 30, 30)
+        # Grid / Canvas (checkerboard matching WPF Dark0 / Dark0_1)
+        self.checker_base = QColor("#121317")   # WPF Dark0
+        self.checker_alt = QColor("#191a20")    # WPF Dark0_1
+        self.canvas_bg = QColor("#121317")
 
         # Node body
         self.node_bg = QColor("#3c3c3c")
@@ -180,10 +180,10 @@ class ThemeColorsLight(ThemeColors):
         self.accent = QColor("#0078d4")
         self.accent_text = QColor(255, 255, 255)
 
-        # Grid / Canvas
-        self.grid_major = QColor(220, 220, 220)
-        self.grid_minor = QColor(235, 235, 235)
-        self.canvas_bg = QColor(245, 245, 245)
+        # Grid / Canvas (checkerboard matching WPF Dark0 / Dark0_1 in light theme)
+        self.checker_base = QColor("#ffffff")   # WPF Dark0 (light)
+        self.checker_alt = QColor("#fafafa")    # WPF Dark0_1 (light)
+        self.canvas_bg = QColor("#ffffff")
 
         # Node body (WPF light theme: white bg, black text)
         self.node_bg = QColor("#FFFFFF")
