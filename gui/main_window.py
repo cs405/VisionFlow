@@ -31,6 +31,7 @@ from gui.property_panel import PropertyPanel
 from gui.result_panel import ResultPanel
 from gui.image_viewer import ImageViewerPanel
 from gui.log_panel import LogPanel
+from gui.widgets.grid_splitter_box import GridSplitterBox
 from gui.flow_resource_panel import FlowResourcePanel
 from gui.node_editor.editor_widget import DiagramEditorWidget
 from gui.start_page import StartPage
@@ -217,7 +218,6 @@ class MainWindow(QMainWindow):
         self._project_loaded = False
         self._left_panel_visible = True
         self._right_panel_visible = True
-        self._saved_left_width = _ps.get_i("left_width", 280)
         self._saved_right_width = _ps.get_i("right_width", 420)
 
         self._setup_window()
@@ -626,12 +626,7 @@ class MainWindow(QMainWindow):
         editor_layout.setContentsMargins(0, 0, 0, 0)
         editor_layout.setSpacing(0)
 
-        self._workspace_splitter = QSplitter(Qt.Horizontal)
-        self._workspace_splitter.setHandleWidth(2)
-        self._workspace_splitter.setStyleSheet("QSplitter::handle { background: #505050; }")
-
-        self._left_tabs = self._build_left_panel()
-        self._workspace_splitter.addWidget(self._left_tabs)
+        self._left_box = self._build_left_panel()
 
         self._center_right_splitter = QSplitter(Qt.Horizontal)
         self._center_right_splitter.setHandleWidth(2)
@@ -643,8 +638,14 @@ class MainWindow(QMainWindow):
         self._right_panel = self._build_side_panel()
         self._center_right_splitter.addWidget(self._right_panel)
 
-        self._workspace_splitter.addWidget(self._center_right_splitter)
-        editor_layout.addWidget(self._workspace_splitter, 1)
+        # WPF Grid layout: GridSplitterBox | center+right splitter
+        workspace = QWidget()
+        ws_layout = QHBoxLayout(workspace)
+        ws_layout.setContentsMargins(0, 0, 0, 0)
+        ws_layout.setSpacing(0)
+        ws_layout.addWidget(self._left_box)
+        ws_layout.addWidget(self._center_right_splitter, 1)
+        editor_layout.addWidget(workspace, 1)
 
         self._root_stack.addWidget(self._editor_surface)
         root_layout.addWidget(self._root_stack, 1)
@@ -668,9 +669,11 @@ class MainWindow(QMainWindow):
 
     def _build_left_panel(self):
         self._toolbox = ToolboxPanel()
-        self._toolbox.setMinimumWidth(210)
         self._log_panel = LogPanel()  # hidden, kept for API compatibility
-        return self._toolbox
+
+        box = GridSplitterBox()
+        box.set_content(self._toolbox)
+        return box
 
     def _build_center_panel(self):
         panel = QWidget()
@@ -796,10 +799,8 @@ class MainWindow(QMainWindow):
         self._sync_workflow_to_project()
         _ps.set_i("window_width", self.width())
         _ps.set_i("window_height", self.height())
-        if hasattr(self, "_workspace_splitter"):
-            outer_sizes = self._workspace_splitter.sizes()
-            if len(outer_sizes) >= 2 and self._left_panel_visible:
-                _ps.set_i("left_width", outer_sizes[0])
+        if hasattr(self, "_left_box"):
+            _ps.set_i("left_width", self._left_box.menu_width())
             inner_sizes = self._center_right_splitter.sizes()
             if len(inner_sizes) >= 2 and self._right_panel_visible:
                 _ps.set_i("right_width", inner_sizes[1])
@@ -816,7 +817,7 @@ class MainWindow(QMainWindow):
         right_width = _ps.get_i("right_width", 420)
         bottom_height = _ps.get_i("bottom_height", 180)
 
-        self._workspace_splitter.setSizes([left_width, max(800, self.width() - left_width)])
+        self._left_box.set_menu_width(left_width)
         self._center_right_splitter.setSizes([max(640, self.width() - left_width - right_width), right_width])
         self._center_splitter.setSizes([max(380, self.height() - bottom_height - 140), bottom_height])
 
@@ -1414,19 +1415,9 @@ class MainWindow(QMainWindow):
             self._img_panel.viewer.fit_to_window()
 
     def toggle_left_panel(self):
-        if self._left_panel_visible:
-            sizes = self._workspace_splitter.sizes()
-            if sizes:
-                self._saved_left_width = max(0, sizes[0])
-            self._left_tabs.setVisible(False)
-            self._workspace_splitter.setSizes([0, max(1, sum(sizes))])
-            self._left_panel_visible = False
-        else:
-            self._left_tabs.setVisible(True)
-            total = max(self.width(), 1200)
-            left = self._saved_left_width or _ps.get_i("left_width", 280)
-            self._workspace_splitter.setSizes([left, max(800, total - left)])
-            self._left_panel_visible = True
+        """Toggle left panel via GridSplitterBox (WPF Mode=Extend)."""
+        self._left_box.toggle_expand()
+        self._left_panel_visible = self._left_box.is_expanded
 
     def toggle_right_panel(self):
         if self._right_panel_visible:

@@ -15,8 +15,8 @@ Aligns with WPF MainWindow.xaml left-side panel:
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                               QLineEdit, QScrollArea, QFrame, QGridLayout,
                               QTreeWidget, QTreeWidgetItem, QPushButton,
-                              QApplication)
-from PyQt5.QtCore import Qt, pyqtSignal, QSettings, QMimeData, QPoint
+                              QApplication, QLayout)
+from PyQt5.QtCore import Qt, QEvent, pyqtSignal, QSettings, QMimeData, QPoint, QRect, QSize
 from PyQt5.QtGui import QDrag, QColor
 
 from core.node_group import node_data_group_manager
@@ -142,28 +142,280 @@ class _NodeTileButton(QFrame):
         super().mouseDoubleClickEvent(event)
 
 
-# ── Narrow mode compact button ─────────────────────────────────────────────
+# ── Narrow mode: group icon buttons + popup (WPF ContextMenuPresenter) ──────
 
-class _NarrowNodeButton(QPushButton):
-    """Compact icon-only button for narrow (≤90px) mode."""
+class _NarrowGroupPopup(QFrame):
+    """Popup showing a group's nodes in 2-column grid (WPF UniformGrid Columns=2)."""
 
-    activated = pyqtSignal(str)
+    node_type_selected = pyqtSignal(str)
 
-    def __init__(self, type_name: str, display_name: str, group_name: str, parent=None):
+    def __init__(self, group_name: str, icon: str, color: str, metas: list[dict], parent=None):
+        super().__init__(None, Qt.Popup | Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground, False)
+        self.setStyleSheet(
+            "_NarrowGroupPopup { background: #2d2d30; border: 1px solid #555; border-radius: 6px; }"
+        )
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(6)
+
+        header = QLabel(f"{icon}  {group_name}")
+        header.setStyleSheet(
+            f"color: {color}; font-size: 12px; font-weight: bold;"
+            "background: transparent; border: none;"
+        )
+        layout.addWidget(header)
+
+        sep = QFrame()
+        sep.setFrameShape(QFrame.HLine)
+        sep.setStyleSheet("background: #505050; max-height: 1px; border: none;")
+        layout.addWidget(sep)
+
+        grid_widget = QWidget()
+        grid = QGridLayout(grid_widget)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(4)
+        grid.setVerticalSpacing(4)
+
+        for i, m in enumerate(metas):
+            btn = QPushButton(m["display_name"])
+            btn.setFixedSize(110, 28)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setToolTip(f"{m['display_name']}\n{m['description']}")
+            btn.setStyleSheet(
+                "QPushButton { background: #3c3c3c; color: #dcdcdc; border: 1px solid #3f3f46;"
+                "border-radius: 4px; font-size: 11px; padding: 3px 8px; text-align: left; }"
+                "QPushButton:hover { background: #094771; border-color: #0078d4; color: white; }"
+            )
+            btn.clicked.connect(lambda checked, tn=m["type_name"]: self._on_node_clicked(tn))
+            row, col = divmod(i, 2)
+            grid.addWidget(btn, row, col)
+
+        layout.addWidget(grid_widget)
+        self.adjustSize()
+
+    def _on_node_clicked(self, type_name: str):
+        self.node_type_selected.emit(type_name)
+        self.close()
+
+
+class _NarrowGroupButton(QPushButton):
+    """Compact group-icon button for narrow (≤90px) mode.
+
+    Clicking toggles a popup with the group's nodes. Matches WPF
+    ContextMenuPresenter FontIconToggleButton.
+    """
+
+    node_type_selected = pyqtSignal(str)
+
+    def __init__(self, group_name: str, icon: str, color: str, metas: list[dict], parent=None):
         super().__init__(parent)
-        self.type_name = type_name
-        meta = _group_meta(group_name)
-        self.setText(meta["icon"])
-        self.setToolTip(f"{display_name}\n{group_name}\n类型: {type_name}")
+        self._group_name = group_name
+        self._icon = icon
+        self._color = color
+        self._metas = metas
+        self._popup = None
+
+        self.setText(icon)
+        self.setToolTip(group_name)
         self.setFixedSize(28, 28)
+        self.setCheckable(True)
         self.setCursor(Qt.PointingHandCursor)
         self.setStyleSheet(
-            f"_NarrowNodeButton {{ background: transparent; border: 1px solid #3f3f46;"
-            f"border-radius: 4px; color: {meta['color']}; font-size: 14px; font-weight: bold;"
+            f"_NarrowGroupButton {{ background: transparent; border: 1px solid #3f3f46;"
+            f"border-radius: 4px; color: {color}; font-size: 14px; font-weight: bold;"
             f"font-family: 'Segoe UI Symbol', 'Microsoft YaHei UI'; }}"
-            f"_NarrowNodeButton:hover {{ background: #3e3e42; border-color: #0078d4; }}"
+            f"_NarrowGroupButton:hover {{ background: #3e3e42; border-color: #0078d4; }}"
+            f"_NarrowGroupButton:checked {{ background: #094771; border-color: #0078d4; }}"
         )
-        self.clicked.connect(lambda: self.activated.emit(self.type_name))
+        self.toggled.connect(self._on_toggled)
+
+    def _on_toggled(self, checked: bool):
+        if checked:
+            self._show_popup()
+        else:
+            self._hide_popup()
+
+    def _show_popup(self):
+        self._hide_popup()
+        gmeta = _group_meta(self._group_name)
+        icon = gmeta.get("icon", self._icon)
+        self._popup = _NarrowGroupPopup(self._group_name, icon, self._color, self._metas)
+        self._popup.node_type_selected.connect(self._on_node_selected)
+        self._popup.installEventFilter(self)
+        pos = self.mapToGlobal(QPoint(self.width() + 4, 0))
+        self._popup.move(pos)
+        self._popup.show()
+
+    def _hide_popup(self):
+        if self._popup:
+            self._popup.removeEventFilter(self)
+            self._popup.close()
+            self._popup.deleteLater()
+            self._popup = None
+
+    def _on_node_selected(self, type_name: str):
+        self.node_type_selected.emit(type_name)
+        self.setChecked(False)
+
+    def eventFilter(self, obj, event):
+        if obj is self._popup and event.type() == QEvent.Hide:
+            self.setChecked(False)
+        return super().eventFilter(obj, event)
+
+
+# ── Flow layout (WPF WrapPanel port) ────────────────────────────────────────
+
+class FlowLayout(QLayout):
+    """Horizontal flow layout — items wrap to next row (WPF WrapPanel)."""
+
+    def __init__(self, parent=None, margin=0, h_spacing=8, v_spacing=8):
+        super().__init__(parent)
+        self._items: list[QLayout] = []
+        self._h_spacing = h_spacing
+        self._v_spacing = v_spacing
+        self.setContentsMargins(margin, margin, margin, margin)
+
+    def addItem(self, item):
+        self._items.append(item)
+
+    def count(self):
+        return len(self._items)
+
+    def itemAt(self, index):
+        if 0 <= index < len(self._items):
+            return self._items[index]
+        return None
+
+    def takeAt(self, index):
+        if 0 <= index < len(self._items):
+            return self._items.pop(index)
+        return None
+
+    def expandingDirections(self):
+        return Qt.Orientations(0)
+
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, width):
+        return self._do_layout(QRect(0, 0, width, 0), dry_run=True)
+
+    def setGeometry(self, rect):
+        super().setGeometry(rect)
+        self._do_layout(rect, dry_run=False)
+
+    def sizeHint(self):
+        return self.minimumSize()
+
+    def minimumSize(self):
+        s = QSize()
+        for item in self._items:
+            s = s.expandedTo(item.minimumSize())
+        m = self.contentsMargins()
+        return s + QSize(m.left() + m.right(), m.top() + m.bottom())
+
+    def _do_layout(self, rect: QRect, dry_run: bool) -> int:
+        m = self.contentsMargins()
+        x = rect.x() + m.left()
+        y = rect.y() + m.top()
+        line_h = 0
+        right = rect.right() - m.right()
+
+        for item in self._items:
+            hint = item.sizeHint()
+            space_x = self._h_spacing if x > rect.x() + m.left() else 0
+            if x + space_x + hint.width() > right and line_h > 0:
+                x = rect.x() + m.left()
+                y += line_h + self._v_spacing
+                line_h = 0
+                space_x = 0
+            if not dry_run:
+                item.setGeometry(QRect(QPoint(x + space_x, y), hint))
+            x += space_x + hint.width()
+            line_h = max(line_h, hint.height())
+
+        return y + line_h - rect.y() + m.bottom()
+
+
+# ── Collapsible group section (WPF Expander port) ────────────────────────────
+
+class _CollapsibleGroup(QWidget):
+    """Collapsible group panel matching WPF Expander.
+
+    Header: expand arrow + icon + group name, clickable.
+    Body: FlowLayout of _NodeTileButton, hidden when collapsed.
+    WPF default: IsExpanded=\"False\".
+    """
+
+    def __init__(self, group_name: str, icon: str, color: str,
+                 metas: list[dict], expanded: bool = False, parent=None):
+        super().__init__(parent)
+        self._expanded = expanded
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # ── Header (clickable toggle) ──
+        self._header = QPushButton()
+        self._header.setFlat(True)
+        self._header.setCursor(Qt.PointingHandCursor)
+        self._header.setStyleSheet(
+            "QPushButton { background: #2d2d30; border: none;"
+            "border-bottom: 1px solid #3f3f46; padding: 5px 6px; text-align: left; }"
+            "QPushButton:hover { background: #353538; }"
+        )
+        self._header.clicked.connect(self._toggle)
+
+        hl = QHBoxLayout(self._header)
+        hl.setContentsMargins(0, 0, 0, 0)
+        hl.setSpacing(4)
+
+        self._arrow = QLabel("▾" if self._expanded else "▸")
+        self._arrow.setFixedWidth(14)
+        self._arrow.setStyleSheet(
+            "color: #999; font-size: 10px; background: transparent; border: none;"
+        )
+        hl.addWidget(self._arrow)
+
+        icon_lbl = QLabel(icon)
+        icon_lbl.setStyleSheet(
+            f"color: {color}; font-size: 12px; font-weight: bold;"
+            "background: transparent; border: none;"
+        )
+        hl.addWidget(icon_lbl)
+
+        name_lbl = QLabel(group_name)
+        name_lbl.setStyleSheet(
+            f"color: {color}; font-size: 12px; font-weight: bold;"
+            "background: transparent; border: none;"
+        )
+        hl.addWidget(name_lbl, 1)
+
+        count_lbl = QLabel(str(len(metas)))
+        count_lbl.setStyleSheet(
+            "color: #888; font-size: 10px; background: transparent; border: none;"
+        )
+        hl.addWidget(count_lbl)
+
+        layout.addWidget(self._header)
+
+        # ── Body (collapsible, FlowLayout) ──
+        self._body = QWidget()
+        self._body.setStyleSheet("background: transparent;")
+        self._body_layout = FlowLayout(self._body, margin=6, h_spacing=8, v_spacing=8)
+        self._body.setVisible(self._expanded)
+        layout.addWidget(self._body)
+
+    def _toggle(self):
+        self._expanded = not self._expanded
+        self._body.setVisible(self._expanded)
+        self._arrow.setText("▾" if self._expanded else "▸")
+
+    def flow_layout(self) -> FlowLayout:
+        return self._body_layout
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -267,11 +519,11 @@ class ToolboxPanel(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # ── Header: "流程资源" + tree/grid toggle ──
-        header = QWidget()
-        header.setFixedHeight(32)
-        header.setStyleSheet("background: #2d2d30; border-bottom: 1px solid #3f3f46;")
-        h_layout = QHBoxLayout(header)
+        # ── Header: "流程资源" + tree/grid toggle (hidden in narrow mode) ──
+        self._header = QWidget()
+        self._header.setFixedHeight(32)
+        self._header.setStyleSheet("background: #2d2d30; border-bottom: 1px solid #3f3f46;")
+        h_layout = QHBoxLayout(self._header)
         h_layout.setContentsMargins(8, 0, 2, 0)
         h_layout.setSpacing(2)
 
@@ -295,7 +547,7 @@ class ToolboxPanel(QWidget):
         )
         self._view_toggle.toggled.connect(self._on_view_toggled)
         h_layout.addWidget(self._view_toggle)
-        main_layout.addWidget(header)
+        main_layout.addWidget(self._header)
 
         # ── Search bar ──
         self._search_box = QLineEdit()
@@ -332,25 +584,18 @@ class ToolboxPanel(QWidget):
         self._grid_scroll.setWidget(self._grid_content)
         vf_layout.addWidget(self._grid_scroll)
 
-        # Narrow mode (compact vertical icon list)
+        # Narrow mode (compact vertical icon list — WPF ContextMenu presenter)
         self._narrow_widget = QWidget()
         self._narrow_layout = QVBoxLayout(self._narrow_widget)
-        self._narrow_layout.setContentsMargins(4, 12, 4, 4)
-        self._narrow_layout.setSpacing(4)
+        self._narrow_layout.setContentsMargins(0, 20, 0, 0)
+        self._narrow_layout.setSpacing(5)
+        self._narrow_layout.setAlignment(Qt.AlignHCenter | Qt.AlignTop)
         vf_layout.addWidget(self._narrow_widget)
 
         self._tree.hide()
         self._grid_scroll.show()
         self._narrow_widget.hide()
         main_layout.addWidget(self._view_frame, 1)
-
-        # ── Stats footer ──
-        self._stats_label = QLabel()
-        self._stats_label.setStyleSheet(
-            "color: #666; font-size: 10px; padding: 3px 8px; background: #1e1e1e;"
-            "border-top: 1px solid #3f3f46;"
-        )
-        main_layout.addWidget(self._stats_label)
 
     # ── Tree view ─────────────────────────────────────────────────────
 
@@ -404,17 +649,27 @@ class ToolboxPanel(QWidget):
             self._view_toggle.setChecked(tree)
 
     def _apply_view(self):
-        """Show the correct view based on width + toggle state."""
+        """Show the correct view based on width + toggle state.
+
+        WPF DataTrigger: MenuWidth < 90 → hide GroupBox, show icon bar.
+        """
         w = self.width()
         if w <= WIDTH_THRESHOLD:
+            # Narrow: hide header + search, show only group icon bar (WPF ContextMenu)
+            self._header.hide()
+            self._search_box.hide()
             self._tree.hide()
             self._grid_scroll.hide()
             self._narrow_widget.show()
         elif self._view_is_tree:
+            self._header.show()
+            self._search_box.show()
             self._tree.show()
             self._grid_scroll.hide()
             self._narrow_widget.hide()
         else:
+            self._header.show()
+            self._search_box.show()
             self._tree.hide()
             self._grid_scroll.show()
             self._narrow_widget.hide()
@@ -504,7 +759,6 @@ class ToolboxPanel(QWidget):
                 self._add_tree_node(p, m)
 
         self._tree.expandAll()
-        self._update_stats(metas)
 
     def _add_tree_group(self, name: str, color: str) -> QTreeWidgetItem:
         item = QTreeWidgetItem(self._tree)
@@ -535,63 +789,52 @@ class ToolboxPanel(QWidget):
         for m in metas:
             grouped.setdefault(m["group_name"], []).append(m)
 
-        vg = 0; vn = 0
-
         # Recents
         recents = [m for m in metas if m["type_name"] in self._recents]
         if recents:
             recents.sort(key=lambda m: self._recents.index(m["type_name"]))
-            c = self._build_grid_group("🕐 最近使用", recents)
-            vg += 1; vn += c
+            self._build_grid_group("🕐 最近使用", recents)
 
         # Favorites
         favs = [m for m in metas if m["is_favorite"]]
         if favs:
-            c = self._build_grid_group("★ 收藏", favs)
-            vg += 1; vn += c
+            self._build_grid_group("★ 收藏", favs)
 
         for grp in node_data_group_manager.get_all_groups():
             items = grouped.get(grp.name, [])
             if not items:
                 continue
-            c = self._build_grid_group(grp.name, items)
-            vg += 1; vn += c
+            self._build_grid_group(grp.name, items)
 
         self._grid_layout.addStretch(1)
-        self._update_stats(metas, vg, vn)
 
     def _build_grid_group(self, group_name: str, metas: list[dict]) -> int:
+        """Build a collapsible group section (WPF Expander + WrapPanel)."""
         if not metas:
             return 0
         meta = _group_meta(group_name)
-        section = QWidget()
-        sl = QVBoxLayout(section); sl.setContentsMargins(0, 0, 0, 0); sl.setSpacing(6)
-        hdr = QLabel(f"{meta['icon']}  {group_name}")
-        hdr.setStyleSheet(f"color: {meta['color']}; font-size: 12px; font-weight: bold; padding: 2px 2px;")
-        sl.addWidget(hdr)
+        section = _CollapsibleGroup(group_name, meta["icon"], meta["color"], metas)
 
-        host = QWidget()
-        grid = QGridLayout(host); grid.setContentsMargins(0, 0, 0, 0)
-        grid.setHorizontalSpacing(8); grid.setVerticalSpacing(8)
-
-        for i, m in enumerate(metas):
+        for m in metas:
             tile = _NodeTileButton(m["type_name"], m["display_name"], m["description"],
                                     m["group_name"], m["is_favorite"])
             tile.activated.connect(self.node_type_selected.emit)
             tile.selected.connect(self._set_selected_type)
             tile.favorite_toggled.connect(self.toggle_favorite)
             self._tile_widgets[m["type_name"]] = tile
-            row, col = divmod(i, 2)
-            grid.addWidget(tile, row, col)
             if m["type_name"] == self._selected_type:
                 tile.set_selected(True)
+            section.flow_layout().addWidget(tile)
 
-        sl.addWidget(host)
         self._grid_layout.addWidget(section)
         return len(metas)
 
     def _refresh_narrow(self):
-        """Build compact vertical icon-only list for narrow mode."""
+        """Build compact group-icon list (WPF ContextMenuPresenter).
+
+        One button per node group. Clicking a group icon opens a popup
+        showing that group's nodes in a 2-column grid.
+        """
         while self._narrow_layout.count():
             w = self._narrow_layout.takeAt(0)
             if w.widget():
@@ -602,34 +845,21 @@ class ToolboxPanel(QWidget):
         for m in metas:
             grouped.setdefault(m["group_name"], []).append(m)
 
-        favs = [m for m in metas if m["is_favorite"]]
-        for m in favs[:4]:
-            btn = _NarrowNodeButton(m["type_name"], m["display_name"], m["group_name"])
-            btn.activated.connect(self.node_type_selected.emit)
+        for grp in node_data_group_manager.get_all_groups():
+            items = grouped.get(grp.name, [])
+            if not items:
+                continue
+            gmeta = _group_meta(grp.name)
+            btn = _NarrowGroupButton(grp.name, gmeta["icon"], gmeta["color"], items)
+            btn.node_type_selected.connect(self.node_type_selected.emit)
             self._narrow_layout.addWidget(btn)
 
-        for grp in node_data_group_manager.get_all_groups():
-            for m in grouped.get(grp.name, [])[:2]:
-                btn = _NarrowNodeButton(m["type_name"], m["display_name"], m["group_name"])
-                btn.activated.connect(self.node_type_selected.emit)
-                self._narrow_layout.addWidget(btn)
-
         self._narrow_layout.addStretch(1)
-        self._update_stats(metas)
 
     def _set_selected_type(self, type_name: str):
         self._selected_type = type_name
         for current, tile in self._tile_widgets.items():
             tile.set_selected(current == type_name)
-
-    def _update_stats(self, metas: list[dict], groups: int = 0, nodes: int = 0):
-        if not groups:
-            groups = len(set(m["group_name"] for m in metas))
-            nodes = len(metas)
-        parts = [f"  {groups} 个分组 · {nodes} 个节点"]
-        if self._favorites:
-            parts.append(f"★ 收藏 {len(self._favorites)} 个")
-        self._stats_label.setText(" · ".join(parts))
 
     # ── Public API ──────────────────────────────────────────────────
 
