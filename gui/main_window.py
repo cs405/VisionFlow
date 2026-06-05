@@ -1343,8 +1343,16 @@ class MainWindow(QMainWindow):
             self._log_panel.warning("没有可用模板，请先将流程图另存为模板")
 
     def _on_manage_templates(self):
-        """Open template management dialog (WPF ShowTemplateManagerCommand)."""
-        self._log_panel.info("模板管理功能开发中")
+        """Open template management dialog (WPF ManageTemplatesCommand)."""
+        project = project_service.current_project
+        if project is None:
+            return
+        from gui.template_dialog import TemplateManagerDialog
+        dlg = TemplateManagerDialog(project, self)
+        dlg.exec_()
+        if dlg.added_diagram:
+            self._refresh_diagram_tabs(project)
+            self._log_panel.success(f"从模板创建: {dlg.added_diagram.name}")
 
     def _on_save_as_template(self):
         """Save current diagram as template (WPF SaveDiagramAsTemplateCommand)."""
