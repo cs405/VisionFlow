@@ -284,14 +284,10 @@ class _NarrowGroupPopup(QFrame):
         self.adjustSize()
 
     def _make_node_card(self, m: dict) -> QPushButton:
-        """WPF StyleNodeDataBase card: white bg, icon + text stacked, drag-to-canvas."""
+        """WPF StyleNodeDataBase card: drag-to-canvas only."""
         btn = _DraggableCard(m["type_name"], m["display_name"], m["color"], m["icon"])
-        btn.clicked.connect(lambda checked, tn=m["type_name"]: self._on_node_clicked(tn))
+        btn.clicked.connect(lambda: self.close())
         return btn
-
-    def _on_node_clicked(self, type_name: str):
-        self.node_type_selected.emit(type_name)
-        self.close()
 
 
 class _NarrowGroupButton(QPushButton):
@@ -758,12 +754,9 @@ class ToolboxPanel(QWidget):
         type_name = item.data(0, Qt.UserRole)
         if type_name:
             self._set_selected_type(type_name)
-            self.node_type_selected.emit(type_name)
 
     def _on_tree_item_double_clicked(self, item: QTreeWidgetItem, col: int):
-        type_name = item.data(0, Qt.UserRole)
-        if type_name:
-            self.node_type_selected.emit(type_name)
+        pass
 
     # ── View toggle ──────────────────────────────────────────────────
 
@@ -947,8 +940,7 @@ class ToolboxPanel(QWidget):
         for i, m in enumerate(metas):
             tile = _NodeTileButton(m["type_name"], m["display_name"], m["description"],
                                     m["group_name"], m["is_favorite"])
-            tile.activated.connect(self.node_type_selected.emit)
-            tile.selected.connect(self.node_type_selected.emit)
+            tile.selected.connect(self._set_selected_type)
             tile.favorite_toggled.connect(self.toggle_favorite)
             self._tile_widgets[m["type_name"]] = tile
             if m["type_name"] == self._selected_type:

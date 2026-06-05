@@ -1187,21 +1187,15 @@ class MainWindow(QMainWindow):
         self._select_node(node_data)
 
     def _on_editor_node_double_clicked(self, node_data: NodeBase):
-        """Handle node double-click — open settings panel (WPF ShowViewCommand / ShowTabEditCommand).
+        """Handle node double-click — open tabbed property dialog (WPF ShowTabEditCommand).
 
-        Behaviour aligned with WPF:
-          1. Select the node (same as single click).
-          2. Switch right panel to「模块结果」tab and focus the property panel.
-          3. Flash the first property group header to draw attention.
-          4. If the node is a SrcFilesVisionNodeData, also show the resource panel.
+        Decoupled: calls open_node_dialog which uses get_property_presenter()
+        to resolve the settings object. Different node types can override
+        get_property_presenter() to provide custom settings panels.
         """
+        from gui.property_panel import open_node_dialog
         self._select_node(node_data)
-        # Switch to module result tab showing the property panel
-        if hasattr(self, '_center_tabs'):
-            self._center_tabs.setCurrentIndex(1)  # index 1 = 模块结果
-        # Flash highlight on the property panel
-        if hasattr(self, '_property_panel'):
-            self._property_panel.flash_highlight()
+        open_node_dialog(node_data, parent=self)
 
     def _on_node_executed(self, node_data, state: str, time_span: str):
         """Log node execution to history (WPF Messages.Add)."""

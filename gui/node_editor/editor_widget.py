@@ -172,11 +172,18 @@ class DiagramEditorView(QGraphicsView):
         super().mouseReleaseEvent(event)
 
     def mouseDoubleClickEvent(self, event: QMouseEvent):
-        """Double-click → FitToBounds (WPF Zoombox behavior)."""
+        """Double-click: node → open panel; empty area → fit (WPF Zoombox)."""
         if event.button() == Qt.LeftButton:
-            self.fit_to_window()
-            event.accept()
-            return
+            item = self.itemAt(event.pos())
+            if item is not None:
+                # Let the item handle it (NodeItem emits node_double_clicked)
+                super().mouseDoubleClickEvent(event)
+                event.accept()
+                return
+            else:
+                self.fit_to_window()
+                event.accept()
+                return
         super().mouseDoubleClickEvent(event)
 
     # ── Keyboard ──────────────────────────────────────────────────────

@@ -1,12 +1,15 @@
-"""Property panel - dynamic form editor for node properties with custom editor registry.
+"""Property panel — WPF TabFormPresenter + Form port.
 
-Ported from H.Controls.Form.PropertyItem + H.Controls.PropertyGrid.
-Reads node's Property descriptors and generates appropriate input widgets.
+Tabbed property editor: each Property group (运行参数, 结果参数, etc.)
+becomes a separate tab. Custom editors via EditorRegistry.
+
+Decoupled from node rendering — nodes expose properties via Property
+descriptors and get_property_presenter() (WPF IDiagramShowPropertyView).
 
 Features:
-  - Editor registry: property type -> custom editor widget
+  - Tab-per-group layout (WPF TabFormPresenter)
+  - Editor registry: editor hint -> custom editor widget
   - Extended metadata: choices, range bounds, validator, step/decimals
-  - Grouped property display with collapsible sections
   - Inline HSV triplet editor for color range properties
   - ROI editor with viewer integration
   - Condition editor for condition nodes
@@ -21,8 +24,9 @@ from typing import Any, Callable
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QScrollArea, QFormLayout,
                               QLineEdit, QSpinBox, QDoubleSpinBox, QCheckBox,
                               QComboBox, QLabel, QPushButton, QGroupBox,
-                              QHBoxLayout, QFileDialog, QSlider, QListWidget)
-from PyQt5.QtCore import Qt, pyqtSignal, QTimer
+                              QHBoxLayout, QFileDialog, QSlider, QListWidget,
+                              QTabWidget, QDialog, QDialogButtonBox)
+from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QSize
 
 from core.node_base import (
     Property,
@@ -336,23 +340,19 @@ def _create_image_selector_editor(parent, prop_name, prop_desc, current_value):
 # ── Property Panel ────────────────────────────────────────────────────────
 
 class PropertyPanel(QWidget):
-    """Right-side panel showing editable properties for the selected node.
+    """WPF TabFormPresenter port: tabbed property editor for NodeBase objects.
 
-    Dynamically generates form widgets based on the node's Property descriptors.
-    Uses the editor registry to resolve custom editors.
+    Each Property group (运行参数, 结果参数, etc.) becomes a separate tab.
+    Custom editors resolved via EditorRegistry.
+
+    Decoupled from node rendering — nodes expose properties via Property
+    descriptors and get_property_presenter().
     """
 
-    property_changed = pyqtSignal(str, object, object)  # name, old_value, new_value
+    property_changed = pyqtSignal(str, object, object)
 
     def __init__(self, parent=None, group_filter: list[str] | None = None,
                  readonly: bool = False):
-        """Create property panel.
-
-        Args:
-            group_filter: If set, only show properties in these groups (e.g. [RESULT_PARAMETERS]).
-                         If None, show all properties. Used by module results tab.
-            readonly: If True, all editors are read-only. Used by module results tab.
-        """
         super().__init__(parent)
         self._current_node: NodeBase | None = None
         self._image_viewer = None
@@ -361,7 +361,7 @@ class PropertyPanel(QWidget):
         self._force_readonly = readonly
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setSingleShot(True)
-        self._refresh_timer.setInterval(500)  # 500ms debounce
+        self._refresh_timer.setInterval(500)
         self._refresh_timer.timeout.connect(self._do_refresh)
         self._setup_ui()
 
@@ -369,7 +369,6 @@ class PropertyPanel(QWidget):
         self._image_viewer = viewer
 
     def _is_readonly(self, prop_desc: Property) -> bool:
-        """Check read-only combining force_readonly mode and property-level flag."""
         return self._force_readonly or prop_desc.readonly
 
     def _setup_ui(self):
@@ -386,18 +385,21 @@ class PropertyPanel(QWidget):
         """)
         layout.addWidget(title)
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("QScrollArea { background: #252526; border: none; }")
-
-        self._form_widget = QWidget()
-        self._form_layout = QVBoxLayout(self._form_widget)
-        self._form_layout.setContentsMargins(8, 4, 8, 4)
-        self._form_layout.setSpacing(0)
-        self._form_layout.addStretch()
-
-        scroll.setWidget(self._form_widget)
-        layout.addWidget(scroll)
+        self._tabs = QTabWidget()
+        self._tabs.setStyleSheet("""
+            QTabWidget::pane { background: #252526; border: none; }
+            QTabBar::tab {
+                background: #2d2d30; color: #999; padding: 6px 16px;
+                border: none; border-bottom: 2px solid transparent;
+                font-size: 12px;
+            }
+            QTabBar::tab:selected {
+                background: #252526; color: #dcdcdc;
+                border-bottom: 2px solid #0078d4;
+            }
+            QTabBar::tab:hover { background: #3e3e42; }
+        """)
+        layout.addWidget(self._tabs)
 
     # ── Node binding ──────────────────────────────────────────────────
 
@@ -408,13 +410,8 @@ class PropertyPanel(QWidget):
         self._refresh_timer.start()
 
     def _do_refresh(self):
-        """Rebuild the property form for the current node."""
-        # Clear old widgets
-        while self._form_layout.count() > 1:
-            item = self._form_layout.takeAt(0)
-            widget = item.widget()
-            if widget is not None:
-                widget.deleteLater()
+        """Rebuild tabbed property form — WPF TabFormPresenter port."""
+        self._tabs.clear()
         for w in list(self._property_widgets.values()):
             w.deleteLater()
         self._property_widgets.clear()
@@ -423,10 +420,9 @@ class PropertyPanel(QWidget):
             empty = QLabel("未选择节点\n\n选择工作流中的节点后可编辑参数")
             empty.setAlignment(Qt.AlignCenter)
             empty.setStyleSheet("color: #666; font-size: 12px; padding: 20px;")
-            self._form_layout.insertWidget(self._form_layout.count() - 1, empty)
+            self._tabs.addTab(empty, "属性")
             return
 
-        # Discover properties
         properties = self._discover_properties()
 
         # Group by property group
@@ -445,7 +441,6 @@ class PropertyPanel(QWidget):
         ]
 
         for group_name in group_order:
-            # Apply group filter (module results tab shows only selected groups)
             if self._group_filter is not None and group_name not in self._group_filter:
                 continue
             props = groups.get(group_name, [])
@@ -455,21 +450,21 @@ class PropertyPanel(QWidget):
             prop_map = {name: desc for name, desc in props}
             consumed: set[str] = set()
 
-            group_box = QGroupBox(group_name)
-            group_box.setStyleSheet("""
-                QGroupBox {
-                    color: #0078d4; border: 1px solid #3f3f46; border-radius: 3px;
-                    margin-top: 10px; padding-top: 14px; font-weight: bold; font-size: 11px;
-                }
-                QGroupBox::title {
-                    subcontrol-origin: margin; left: 8px; padding: 0 4px;
-                }
-            """)
-
-            form = QFormLayout(group_box)
+            tab = QWidget()
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setStyleSheet(
+                "QScrollArea { background: #252526; border: none; }"
+                "QSpinBox, QDoubleSpinBox, QLineEdit, QComboBox {"
+                " min-height: 28px; padding: 4px 8px; font-size: 13px;"
+                "}"
+            )
+            form_widget = QWidget()
+            form = QFormLayout(form_widget)
             form.setLabelAlignment(Qt.AlignLeft)
-            form.setContentsMargins(4, 4, 4, 4)
-            form.setSpacing(4)
+            form.setContentsMargins(12, 12, 12, 12)
+            form.setSpacing(10)
+            form.setVerticalSpacing(12)
 
             # HSV triplet detection
             for suffix, label_text in (("low", "HSV下限"), ("high", "HSV上限")):
@@ -491,11 +486,15 @@ class PropertyPanel(QWidget):
                     widget,
                 )
 
-            self._form_layout.insertWidget(self._form_layout.count() - 1, group_box)
+            scroll.setWidget(form_widget)
+            tab_layout = QVBoxLayout(tab)
+            tab_layout.setContentsMargins(0, 0, 0, 0)
+            tab_layout.addWidget(scroll)
+            self._tabs.addTab(tab, group_name)
 
     def _make_label(self, text: str, tooltip: str = "") -> QLabel:
         label = QLabel(text)
-        label.setStyleSheet("color: #999; font-size: 11px; font-weight: normal;")
+        label.setStyleSheet("color: #bbb; font-size: 13px;")
         if tooltip:
             label.setToolTip(tooltip)
         return label
@@ -783,12 +782,17 @@ class PropertyPanel(QWidget):
         top.addWidget(combo, 1)
 
         edit_btn = QPushButton("编辑...")
-        edit_btn.setFixedHeight(24)
+        edit_btn.setFixedHeight(28)
+        edit_btn.setStyleSheet(
+            "QPushButton { background: #3c3c3c; color: #dcdcdc; border: 1px solid #555;"
+            "border-radius: 3px; padding: 4px 14px; font-size: 12px; }"
+            "QPushButton:hover { background: #4a4a4a; }"
+        )
         top.addWidget(edit_btn)
 
         summary = QLabel()
         summary.setWordWrap(True)
-        summary.setStyleSheet("color: #999; font-size: 11px;")
+        summary.setStyleSheet("color: #aaa; font-size: 12px;")
 
         layout.addLayout(top)
         layout.addWidget(summary)
@@ -850,16 +854,21 @@ class PropertyPanel(QWidget):
         top.setSpacing(4)
 
         count_label = QLabel()
-        count_label.setStyleSheet("color: #999; font-size: 11px;")
+        count_label.setStyleSheet("color: #aaa; font-size: 12px;")
         top.addWidget(count_label, 1)
 
         edit_btn = QPushButton("编辑条件...")
-        edit_btn.setFixedHeight(24)
+        edit_btn.setFixedHeight(28)
+        edit_btn.setStyleSheet(
+            "QPushButton { background: #3c3c3c; color: #dcdcdc; border: 1px solid #555;"
+            "border-radius: 3px; padding: 4px 14px; font-size: 12px; }"
+            "QPushButton:hover { background: #4a4a4a; }"
+        )
         top.addWidget(edit_btn)
 
         summary = QLabel()
         summary.setWordWrap(True)
-        summary.setStyleSheet("color: #999; font-size: 11px;")
+        summary.setStyleSheet("color: #aaa; font-size: 12px;")
 
         layout.addLayout(top)
         layout.addWidget(summary)
@@ -908,23 +917,15 @@ class PropertyPanel(QWidget):
             self.property_changed.emit(prop_name, old_value, current_value)
 
     def flash_highlight(self):
-        """Briefly flash the first GroupBox border to draw attention (WPF ShowViewCommand feedback).
-
-        Finds the first QGroupBox in the form layout and cycles its border color
-        from #0078d4 (accent blue) → #ff9800 (alert orange) → #0078d4 over ~500ms.
-        """
-        from PyQt5.QtCore import QPropertyAnimation, QTimer
-        # Find the first group box
-        first_group = None
-        for i in range(self._form_layout.count()):
-            w = self._form_layout.itemAt(i).widget()
-            if isinstance(w, QGroupBox):
-                first_group = w
-                break
-        if first_group is None:
+        """Briefly flash the first tab to draw attention (WPF ShowViewCommand feedback)."""
+        from PyQt5.QtCore import QTimer
+        if self._tabs.count() == 0:
+            return
+        first_tab = self._tabs.widget(0)
+        if first_tab is None:
             return
 
-        original = first_group.styleSheet()
+        original = first_tab.styleSheet()
         # Flash: set bright accent border, then restore after 300ms
         flash_style = (
             "QGroupBox {"
@@ -935,10 +936,57 @@ class PropertyPanel(QWidget):
             "subcontrol-origin: margin; left: 8px; padding: 0 4px; color: #ff9800;"
             "}"
         )
-        first_group.setStyleSheet(flash_style)
-        QTimer.singleShot(350, lambda: first_group.setStyleSheet(original))
+        first_tab.setStyleSheet(flash_style)
+        QTimer.singleShot(350, lambda: first_tab.setStyleSheet(original))
 
     def refresh(self):
         """Force refresh of the property display."""
         if self._current_node:
             self._do_refresh()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# NodePropertyDialog — WPF IocMessage.ShowDialog + TabFormPresenter
+# ═══════════════════════════════════════════════════════════════════════════
+
+def open_node_dialog(node, parent=None):
+    """Open a tabbed property dialog for a node (WPF ShowTabEditCommand).
+
+    Decoupled: the node's get_property_presenter() provides the object
+    whose Property descriptors are rendered. Different node types can
+    return different presenters for type-specific settings panels.
+    """
+    presenter = node.get_property_presenter() if hasattr(node, 'get_property_presenter') else node
+    title = getattr(presenter, 'title', None) or getattr(presenter, 'name', '节点设置')
+
+    dlg = QDialog(parent)
+    dlg.setWindowTitle(title)
+    dlg.setMinimumSize(560, 380)
+    dlg.resize(660, 420)
+
+    layout = QVBoxLayout(dlg)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(0)
+
+    panel = PropertyPanel(dlg)
+    panel.set_node(presenter)
+    layout.addWidget(panel, 1)
+
+    # Bottom button bar
+    btn_row = QWidget()
+    btn_row.setStyleSheet("background: #2d2d30; border-top: 1px solid #3f3f46;")
+    btn_layout = QHBoxLayout(btn_row)
+    btn_layout.setContentsMargins(12, 8, 12, 8)
+
+    close_btn = QPushButton("关闭")
+    close_btn.setStyleSheet(
+        "QPushButton { background: #3c3c3c; color: #dcdcdc; border: 1px solid #555;"
+        "border-radius: 3px; padding: 6px 24px; font-size: 12px; }"
+        "QPushButton:hover { background: #4a4a4a; }"
+    )
+    close_btn.clicked.connect(dlg.accept)
+    btn_layout.addStretch()
+    btn_layout.addWidget(close_btn)
+    layout.addWidget(btn_row)
+
+    dlg.exec_()
