@@ -23,6 +23,7 @@ from core.node_group import node_data_group_manager
 from gui.font_icons import FontIcons, FontIconToggleButton, ICON_FONT_FAMILY
 from gui.widgets.grid_splitter_box import GridSplitterBox, WIDTH_THRESHOLD
 from core.constants import get_group_meta as _group_meta
+from gui.theme import theme_manager, connect_theme
 
 
 # ── Node tile button (grid view) ───────────────────────────────────────────
@@ -575,6 +576,7 @@ class ToolboxPanel(QWidget):
         self._load_persisted()
         self._setup_ui()
         self.refresh()
+        connect_theme(self._refresh_qss)
 
     # ── Persistence ────────────────────────────────────────────────────
 
@@ -986,3 +988,30 @@ class ToolboxPanel(QWidget):
 
     def get_selected_node_type(self) -> str | None:
         return self._selected_type
+
+    def _refresh_qss(self):
+        """Re-apply panel QSS on theme change — WPF DynamicResource refresh."""
+        tm = theme_manager
+        if hasattr(self, '_search_box'):
+            self._search_box.setStyleSheet(
+                f"QLineEdit {{ background: {tm.color('bg_surface_input').name()}; "
+                f"color: {tm.color('text_primary').name()}; "
+                f"border: 1px solid {tm.color('border').name()}; "
+                f"border-radius: 4px; padding: 6px 10px; font-size: 12px; }}"
+                f"QLineEdit:focus {{ border-color: {tm.color('accent').name()}; }}"
+            )
+        if hasattr(self, '_grid_scroll'):
+            self._grid_scroll.setStyleSheet(
+                f"QScrollArea {{ background: {tm.color('bg_surface').name()}; border: none; }}"
+            )
+        if hasattr(self, '_tree_scroll'):
+            self._tree_scroll.setStyleSheet(
+                f"QScrollArea {{ background: {tm.color('bg_surface').name()}; border: none; }}"
+            )
+        if hasattr(self, '_tree'):
+            self._tree.setStyleSheet(
+                f"QTreeWidget {{ background: {tm.color('bg_surface').name()}; "
+                f"color: {tm.color('text_primary').name()}; border: none; }}"
+                f"QTreeWidget::item:hover {{ background: {tm.color('bg_surface_hover').name()}; }}"
+                f"QTreeWidget::item:selected {{ background: #094771; color: white; }}"
+            )

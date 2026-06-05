@@ -22,6 +22,7 @@ from PyQt5.QtCore import Qt, pyqtSignal, QSettings
 from PyQt5.QtGui import QTextCursor, QColor, QFont
 
 from core.events import EventType, event_system
+from gui.theme import theme_manager, connect_theme
 
 
 class LogLevel(Enum):
@@ -53,6 +54,7 @@ class LogPanel(QWidget):
         self._load_filters()
         self._setup_ui()
         self._connect_events()
+        connect_theme(self._refresh_qss)
 
     # ── Filter Persistence ────────────────────────────────────────────
 
@@ -106,20 +108,11 @@ class LogPanel(QWidget):
         toolbar.addStretch()
 
         # Filter buttons
-        filter_style = """
-            QPushButton {
-                background: #3c3c3c; border: none; border-radius: 2px;
-                padding: 2px 8px; font-size: 11px; color: #dcdcdc;
-            }
-            QPushButton:checked { background: #0078d4; color: white; }
-        """
-
         self._filter_info = QPushButton("信息")
         self._filter_info.setFixedHeight(24)
         self._filter_info.setCheckable(True)
         self._filter_info.setChecked(self._filters.get("info", True))
         self._filter_info.toggled.connect(lambda v: self._set_filter("info", v))
-        self._filter_info.setStyleSheet(filter_style)
         toolbar.addWidget(self._filter_info)
 
         self._filter_success = QPushButton("成功")
@@ -127,7 +120,6 @@ class LogPanel(QWidget):
         self._filter_success.setCheckable(True)
         self._filter_success.setChecked(self._filters.get("success", True))
         self._filter_success.toggled.connect(lambda v: self._set_filter("success", v))
-        self._filter_success.setStyleSheet(filter_style)
         toolbar.addWidget(self._filter_success)
 
         self._filter_warn = QPushButton("警告")
@@ -135,7 +127,6 @@ class LogPanel(QWidget):
         self._filter_warn.setCheckable(True)
         self._filter_warn.setChecked(self._filters.get("warn", True))
         self._filter_warn.toggled.connect(lambda v: self._set_filter("warn", v))
-        self._filter_warn.setStyleSheet(filter_style)
         toolbar.addWidget(self._filter_warn)
 
         self._filter_error = QPushButton("错误")
@@ -143,39 +134,73 @@ class LogPanel(QWidget):
         self._filter_error.setCheckable(True)
         self._filter_error.setChecked(self._filters.get("error", True))
         self._filter_error.toggled.connect(lambda v: self._set_filter("error", v))
-        self._filter_error.setStyleSheet(filter_style)
         toolbar.addWidget(self._filter_error)
 
-        toolbar_widget = QWidget()
-        toolbar_widget.setLayout(toolbar)
-        toolbar_widget.setStyleSheet("background: #2d2d30; border-bottom: 1px solid #3f3f46;")
-        layout.addWidget(toolbar_widget)
+        self._toolbar_widget = QWidget()
+        self._toolbar_widget.setLayout(toolbar)
+        layout.addWidget(self._toolbar_widget)
 
         # Log text display
         self._text_edit = QTextEdit()
         self._text_edit.setReadOnly(True)
         self._text_edit.setFont(QFont("Consolas", 9))
-        self._text_edit.setStyleSheet("""
-            QTextEdit {
-                background: #1e1e1e; color: #dcdcdc; border: none; padding: 4px;
-            }
-        """)
         self._text_edit.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self._text_edit.setContextMenuPolicy(Qt.CustomContextMenu)
         self._text_edit.customContextMenuRequested.connect(self._on_log_context_menu)
         layout.addWidget(self._text_edit)
 
-        # Button styling
-        btn_style = """
-            QPushButton {
-                background: transparent; border: 1px solid #505050; border-radius: 2px;
-                padding: 2px 10px; font-size: 11px; color: #dcdcdc;
-            }
-            QPushButton:hover { background: #3e3e42; }
+        # Apply initial QSS
+        self._refresh_qss()
+
+    # ── Theme refresh ──────────────────────────────────────────────────
+
+    def _refresh_qss(self):
+        """Re-apply all QSS using theme colors."""
+        bg_raised = theme_manager.color('bg_surface_raised').name()
+        border = theme_manager.color('border').name()
+        bg_deep = theme_manager.color('bg_surface_deep').name()
+        bg_surface = theme_manager.color('bg_surface').name()
+        text_primary = theme_manager.color('text_primary').name()
+        text_secondary = theme_manager.color('text_secondary').name()
+        accent = theme_manager.color('accent').name()
+        scroll_handle = theme_manager.color('scroll_handle').name()
+        hover_bg = theme_manager.color('bg_surface_hover').name()
+        input_bg = theme_manager.color('bg_surface_input').name()
+
+        # Filter button QSS
+        filter_style = f"""
+            QPushButton {{
+                background: {input_bg}; border: none; border-radius: 2px;
+                padding: 2px 8px; font-size: 11px; color: {text_primary};
+            }}
+            QPushButton:checked {{ background: {accent}; color: white; }}
         """
-        self._clear_btn.setStyleSheet(btn_style)
-        self._export_btn.setStyleSheet(btn_style)
-        self._copy_btn.setStyleSheet(btn_style)
+        for btn in [self._filter_info, self._filter_success,
+                     self._filter_warn, self._filter_error]:
+            btn.setStyleSheet(filter_style)
+
+        # Toolbar background
+        self._toolbar_widget.setStyleSheet(
+            f"background: {bg_raised}; border-bottom: 1px solid {border};"
+        )
+
+        # Log text area
+        self._text_edit.setStyleSheet(f"""
+            QTextEdit {{
+                background: {bg_surface}; color: {text_primary}; border: none; padding: 4px;
+            }}
+        """)
+
+        # Action button QSS (clear, export, copy)
+        btn_style = f"""
+            QPushButton {{
+                background: transparent; border: 1px solid {scroll_handle}; border-radius: 2px;
+                padding: 2px 10px; font-size: 11px; color: {text_primary};
+            }}
+            QPushButton:hover {{ background: {hover_bg}; }}
+        """
+        for btn in [self._clear_btn, self._export_btn, self._copy_btn]:
+            btn.setStyleSheet(btn_style)
 
     # ── Event Connections ─────────────────────────────────────────────
 
@@ -343,11 +368,16 @@ class LogPanel(QWidget):
 
     def _on_log_context_menu(self, pos):
         """Right-click context menu on log entries."""
+        bg_raised = theme_manager.color('bg_surface_raised').name()
+        text_primary = theme_manager.color('text_primary').name()
+        scroll_handle = theme_manager.color('scroll_handle').name()
+        accent = theme_manager.color('accent').name()
+
         menu = QMenu(self)
-        menu.setStyleSheet("""
-            QMenu { background: #2d2d30; color: #dcdcdc; border: 1px solid #505050; }
-            QMenu::item { padding: 6px 20px; }
-            QMenu::item:selected { background: #0078d4; }
+        menu.setStyleSheet(f"""
+            QMenu {{ background: {bg_raised}; color: {text_primary}; border: 1px solid {scroll_handle}; }}
+            QMenu::item {{ padding: 6px 20px; }}
+            QMenu::item:selected {{ background: {accent}; }}
         """)
 
         copy_act = QAction("复制选中", self)

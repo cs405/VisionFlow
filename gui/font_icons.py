@@ -18,6 +18,8 @@ from PyQt5.QtWidgets import QPushButton, QLabel, QWidget, QHBoxLayout
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QFont, QFontDatabase, QPainter
 
+from gui.theme import theme_manager, connect_theme
+
 
 # ── Font family resolution ──────────────────────────────────────────────────
 
@@ -266,6 +268,7 @@ class FontIconButton(QPushButton):
 
         self.setCursor(Qt.PointingHandCursor)
         self._apply_style()
+        connect_theme(self._refresh_qss)
 
     def set_icon(self, icon: str):
         self._icon = icon
@@ -274,27 +277,35 @@ class FontIconButton(QPushButton):
         else:
             self.setText(icon)
 
+    def _refresh_qss(self):
+        """Re-apply QSS on theme change."""
+        self._apply_style()
+
     def _apply_style(self):
         """WPF FontIconButtonKeys.Default + ButtonKeys.Default styles."""
-        self.setStyleSheet("""
-            FontIconButton {
+        text_primary = theme_manager.color('text_primary').name()
+        hover_bg = theme_manager.color('bg_surface_hover').name()
+        accent = theme_manager.color('accent').name()
+        text_secondary = theme_manager.color('text_secondary').name()
+        self.setStyleSheet(f"""
+            FontIconButton {{
                 background: transparent;
                 border: none;
                 border-radius: 2px;
-                color: #dcdcdc;
+                color: {text_primary};
                 padding: 5px 0;
-            }
-            FontIconButton:hover {
-                background: #3e3e42;
-            }
-            FontIconButton:pressed {
-                background: #0078d4;
+            }}
+            FontIconButton:hover {{
+                background: {hover_bg};
+            }}
+            FontIconButton:pressed {{
+                background: {accent};
                 color: white;
-            }
-            FontIconButton:disabled {
-                color: #666;
+            }}
+            FontIconButton:disabled {{
+                color: {text_secondary};
                 background: transparent;
-            }
+            }}
         """)
 
     # Support WPF-like style key pattern
@@ -329,6 +340,7 @@ class FontIconToggleButton(QPushButton):
         self._update_text()
         self.toggled.connect(lambda _: self._update_text())
         self._apply_style()
+        connect_theme(self._refresh_qss)
 
     def _update_text(self):
         icon = self._checked_icon if self.isChecked() else self._unchecked_icon
@@ -345,26 +357,33 @@ class FontIconToggleButton(QPushButton):
         self._unchecked_icon = icon
         self._update_text()
 
+    def _refresh_qss(self):
+        """Re-apply QSS on theme change."""
+        self._apply_style()
+
     def _apply_style(self):
         """WPF FontIconToggleButtonKeys.Switch style."""
-        self.setStyleSheet("""
-            FontIconToggleButton {
+        text_secondary = theme_manager.color('text_secondary').name()
+        hover_bg = theme_manager.color('bg_surface_hover').name()
+        text_primary = theme_manager.color('text_primary').name()
+        self.setStyleSheet(f"""
+            FontIconToggleButton {{
                 background: transparent;
                 border: none;
                 border-radius: 2px;
-                color: #999;
+                color: {text_secondary};
                 padding: 5px 0;
-            }
-            FontIconToggleButton:hover {
-                background: #3e3e42;
-                color: #dcdcdc;
-            }
-            FontIconToggleButton:checked {
-                color: #dcdcdc;
-            }
-            FontIconToggleButton:checked:hover {
-                background: #3e3e42;
-            }
+            }}
+            FontIconToggleButton:hover {{
+                background: {hover_bg};
+                color: {text_primary};
+            }}
+            FontIconToggleButton:checked {{
+                color: {text_primary};
+            }}
+            FontIconToggleButton:checked:hover {{
+                background: {hover_bg};
+            }}
         """)
 
     # WPF style key constants

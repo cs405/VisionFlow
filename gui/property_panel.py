@@ -27,6 +27,7 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QScrollArea, QFormLayout,
                               QHBoxLayout, QFileDialog, QSlider, QListWidget,
                               QTabWidget, QDialog, QDialogButtonBox)
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QSize
+from gui.theme import theme_manager, connect_theme
 
 from core.node_base import (
     Property,
@@ -270,7 +271,7 @@ def _create_file_collection_editor(parent, prop_name, prop_desc, current_value):
 
     list_w = QListWidget()
     list_w.setMaximumHeight(80)
-    list_w.setStyleSheet("QListWidget { background: #333337; border: 1px solid #3f3f46; color: #dcdcdc; font-size: 11px; }")
+    list_w.setStyleSheet(f"QListWidget {{ background: {tm.c('bg_surface_input')}; border: 1px solid {tm.c('border')}; color: {tm.c('text_primary')}; font-size: 11px; }}")
     lo.addWidget(list_w)
 
     def _refresh():
@@ -400,6 +401,24 @@ class PropertyPanel(QWidget):
             QTabBar::tab:hover { background: #3e3e42; }
         """)
         layout.addWidget(self._tabs)
+        self._title_label = title
+        connect_theme(self._refresh_qss)
+
+    def _refresh_qss(self):
+        tm = theme_manager
+        self._title_label.setStyleSheet(f"""
+            QLabel {{ background: {tm.color('bg_surface_raised').name()}; color: {tm.color('text_primary').name()};
+                      padding: 8px; font-size: 13px; font-weight: bold;
+                      border-bottom: 1px solid {tm.color('border').name()}; }}
+        """)
+        self._tabs.setStyleSheet(f"""
+            QTabWidget::pane {{ background: {tm.color('bg_surface').name()}; border: none; }}
+            QTabBar::tab {{ background: {tm.color('bg_surface_raised').name()}; color: {tm.color('text_secondary').name()};
+                           padding: 6px 16px; border: none; border-bottom: 2px solid transparent; font-size: 12px; }}
+            QTabBar::tab:selected {{ background: {tm.color('bg_surface').name()}; color: {tm.color('text_primary').name()};
+                                    border-bottom: 2px solid {tm.color('accent').name()}; }}
+            QTabBar::tab:hover {{ background: {tm.color('bg_surface_hover').name()}; }}
+        """)
 
     # ── Node binding ──────────────────────────────────────────────────
 

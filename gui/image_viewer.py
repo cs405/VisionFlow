@@ -16,7 +16,8 @@ from PyQt5.QtWidgets import (QGraphicsView, QGraphicsScene, QGraphicsPixmapItem,
                               QVBoxLayout, QLabel, QHBoxLayout, QStackedLayout)
 from PyQt5.QtCore import Qt, QRectF, QPointF, pyqtSignal, QPropertyAnimation, QEasingCurve, QVariantAnimation
 from PyQt5.QtGui import (QPixmap, QImage, QPen, QColor, QBrush, QPainter,
-                          QWheelEvent, QMouseEvent, QFont)
+                           QWheelEvent, QMouseEvent, QFont)
+from gui.theme import theme_manager, connect_theme
 
 
 def numpy_to_qimage(array: np.ndarray) -> QImage:
@@ -842,22 +843,33 @@ class ImageViewerPanel(QWidget):
         info_layout.addStretch()
 
         self._size_label = QLabel("尺寸: -")
-        self._size_label.setStyleSheet("font-size: 11px; color: #999;")
+        self._size_label.setStyleSheet(f"font-size: 11px; color: {theme_manager.color('text_secondary').name()};")
         info_layout.addWidget(self._size_label)
 
         self._zoom_label = QLabel("缩放: 100%")
-        self._zoom_label.setStyleSheet("font-size: 11px; color: #999;")
+        self._zoom_label.setStyleSheet(f"font-size: 11px; color: {theme_manager.color('text_secondary').name()};")
         info_layout.addWidget(self._zoom_label)
 
-        info_widget = QWidget()
-        info_widget.setLayout(info_layout)
-        info_widget.setStyleSheet("background: #252526; border-top: 1px solid #3f3f46;")
-        layout.addWidget(info_widget)
+        self._info_widget = QWidget()
+        self._info_widget.setLayout(info_layout)
+        layout.addWidget(self._info_widget)
 
         # Connect signals
         self.viewer.mouse_moved.connect(self._on_mouse_moved)
         self.viewer.zoom_changed.connect(self._on_zoom_changed)
         self.viewer.pixel_clicked.connect(self._on_pixel_clicked)
+
+        connect_theme(self._refresh_qss)
+
+    def _refresh_qss(self):
+        """Re-apply image viewer QSS on theme change."""
+        tm = theme_manager
+        self._info_widget.setStyleSheet(
+            f"background: {tm.color('bg_surface').name()}; border-top: 1px solid {tm.color('border').name()};"
+        )
+        self._pos_label.setStyleSheet(f"font-size: 11px; color: {tm.color('text_secondary').name()};")
+        self._size_label.setStyleSheet(f"font-size: 11px; color: {tm.color('text_secondary').name()};")
+        self._zoom_label.setStyleSheet(f"font-size: 11px; color: {tm.color('text_secondary').name()};")
 
     def set_image(self, image: np.ndarray | None):
         self.viewer.set_image(image)

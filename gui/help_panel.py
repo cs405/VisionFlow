@@ -16,6 +16,8 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
 from PyQt5.QtCore import Qt, QUrl
 from PyQt5.QtGui import QDesktopServices, QFont
 
+from gui.theme import theme_manager, connect_theme
+
 
 class HelpPanel(QWidget):
     """Standalone help panel widget showing node documentation.
@@ -27,6 +29,7 @@ class HelpPanel(QWidget):
         super().__init__(parent)
         self._current_node = None
         self._setup_ui()
+        connect_theme(self._refresh_qss)
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -37,13 +40,11 @@ class HelpPanel(QWidget):
         header = QHBoxLayout()
 
         self._title_label = QLabel("节点帮助")
-        self._title_label.setStyleSheet("color: #dcdcdc; font-size: 16px; font-weight: bold; background: transparent;")
         header.addWidget(self._title_label)
 
         header.addStretch()
 
         self._source_label = QLabel("")
-        self._source_label.setStyleSheet("color: #666; font-size: 10px; background: transparent;")
         self._source_label.setWordWrap(True)
         header.addWidget(self._source_label)
 
@@ -52,12 +53,10 @@ class HelpPanel(QWidget):
         # Description
         self._desc_label = QLabel("选择一个节点以查看帮助信息")
         self._desc_label.setWordWrap(True)
-        self._desc_label.setStyleSheet("color: #aaa; font-size: 13px; padding: 4px 0; background: transparent;")
         layout.addWidget(self._desc_label)
 
         # Splitter: parameter table | detail text
-        splitter = QSplitter(Qt.Vertical)
-        splitter.setStyleSheet("QSplitter::handle { background: #505050; }")
+        self._splitter = QSplitter(Qt.Vertical)
 
         # Parameter table
         self._param_table = QTableWidget(0, 4)
@@ -67,43 +66,19 @@ class HelpPanel(QWidget):
         self._param_table.verticalHeader().setVisible(False)
         self._param_table.setSelectionBehavior(QTableWidget.SelectRows)
         self._param_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self._param_table.setStyleSheet("""
-            QTableWidget {
-                background: #252526; color: #dcdcdc; border: 1px solid #3f3f46;
-                gridline-color: #3f3f46; font-size: 12px;
-            }
-            QTableWidget::item { padding: 3px 6px; }
-            QHeaderView::section {
-                background: #2d2d30; color: #ccc; border: none;
-                border-bottom: 1px solid #3f3f46; padding: 4px;
-            }
-        """)
-        splitter.addWidget(self._param_table)
+        self._splitter.addWidget(self._param_table)
 
         # Detail text browser
         self._detail_browser = QTextBrowser()
         self._detail_browser.setOpenExternalLinks(True)
-        self._detail_browser.setStyleSheet("""
-            QTextBrowser {
-                background: #252526; color: #dcdcdc; border: 1px solid #3f3f46;
-                font-size: 12px; padding: 8px;
-            }
-        """)
-        splitter.addWidget(self._detail_browser)
+        self._splitter.addWidget(self._detail_browser)
 
-        layout.addWidget(splitter, 1)
+        layout.addWidget(self._splitter, 1)
 
         # Bottom bar
         bottom = QHBoxLayout()
 
-        self._url_btn = QPushButton("📖 在线文档")
-        self._url_btn.setStyleSheet("""
-            QPushButton {
-                background: transparent; border: 1px solid #505050; border-radius: 3px;
-                padding: 4px 12px; color: #0078d4; font-size: 11px;
-            }
-            QPushButton:hover { background: #3e3e42; }
-        """)
+        self._url_btn = QPushButton("\U0001F4D6 在线文档")
         self._url_btn.clicked.connect(self._open_help_url)
         self._url_btn.setVisible(False)
         bottom.addWidget(self._url_btn)
@@ -111,10 +86,80 @@ class HelpPanel(QWidget):
         bottom.addStretch()
 
         self._status_label = QLabel("")
-        self._status_label.setStyleSheet("color: #666; font-size: 11px; background: transparent;")
         bottom.addWidget(self._status_label)
 
         layout.addLayout(bottom)
+
+        # Apply initial QSS
+        self._refresh_qss()
+
+    # ── Theme refresh ──────────────────────────────────────────────────
+
+    def _refresh_qss(self):
+        """Re-apply all QSS using theme colors."""
+        text_primary = theme_manager.color('text_primary').name()
+        text_secondary = theme_manager.color('text_secondary').name()
+        bg_surface = theme_manager.color('bg_surface').name()
+        bg_raised = theme_manager.color('bg_surface_raised').name()
+        border = theme_manager.color('border').name()
+        scroll_handle = theme_manager.color('scroll_handle').name()
+        accent = theme_manager.color('accent').name()
+        hover_bg = theme_manager.color('bg_surface_hover').name()
+
+        # Title label
+        self._title_label.setStyleSheet(
+            f"color: {text_primary}; font-size: 16px; font-weight: bold; background: transparent;"
+        )
+
+        # Source label
+        self._source_label.setStyleSheet(
+            f"color: {text_secondary}; font-size: 10px; background: transparent;"
+        )
+
+        # Description label
+        self._desc_label.setStyleSheet(
+            f"color: {text_secondary}; font-size: 13px; padding: 4px 0; background: transparent;"
+        )
+
+        # Splitter handle
+        self._splitter.setStyleSheet(
+            f"QSplitter::handle {{ background: {scroll_handle}; }}"
+        )
+
+        # Parameter table
+        self._param_table.setStyleSheet(f"""
+            QTableWidget {{
+                background: {bg_surface}; color: {text_primary}; border: 1px solid {border};
+                gridline-color: {border}; font-size: 12px;
+            }}
+            QTableWidget::item {{ padding: 3px 6px; }}
+            QHeaderView::section {{
+                background: {bg_raised}; color: {text_primary}; border: none;
+                border-bottom: 1px solid {border}; padding: 4px;
+            }}
+        """)
+
+        # Detail browser
+        self._detail_browser.setStyleSheet(f"""
+            QTextBrowser {{
+                background: {bg_surface}; color: {text_primary}; border: 1px solid {border};
+                font-size: 12px; padding: 8px;
+            }}
+        """)
+
+        # URL button
+        self._url_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent; border: 1px solid {scroll_handle}; border-radius: 3px;
+                padding: 4px 12px; color: {accent}; font-size: 11px;
+            }}
+            QPushButton:hover {{ background: {hover_bg}; }}
+        """)
+
+        # Status label
+        self._status_label.setStyleSheet(
+            f"color: {text_secondary}; font-size: 11px; background: transparent;"
+        )
 
     # -- Public API --
 
@@ -138,7 +183,7 @@ class HelpPanel(QWidget):
         url = help_info.get("url", "")
         source = help_info.get("source", "")
 
-        self._title_label.setText(f"📋 {name}")
+        self._title_label.setText(f"\U0001F4CB {name}")
         self._desc_label.setText(description or f"{type(node).__name__} — 视觉处理节点")
         self._source_label.setText(source)
 
@@ -205,7 +250,8 @@ class HelpPanel(QWidget):
 
     def _populate_detail(self, node, help_info: dict):
         """Populate the detail text browser."""
-        html_parts = ["<html><body style='color:#dcdcdc; font-size:12px;'>"]
+        text_primary = theme_manager.color('text_primary').name()
+        html_parts = [f"<html><body style='color:{text_primary}; font-size:12px;'>"]
 
         cls = type(node)
         html_parts.append(f"<h3>{cls.__name__}</h3>")

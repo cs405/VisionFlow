@@ -140,41 +140,88 @@ def _build_palette(colors) -> QPalette:
 
 
 def _build_stylesheet(colors) -> str:
-    """Build QSS from resolved colors (WPF ThemeColors.stylesheet equivalent)."""
+    """Comprehensive QSS covering all widget classes — WPF merged ResourceDictionary.
+
+    Applied via QApplication.setStyleSheet() for maximum coverage.
+    Uses ID selectors (e.g. QFrame#panel_bg) for panel overrides.
+    """
     c = colors   # shorthand
     return f"""
+        /* ── Global defaults ── */
+        QWidget {{ background: {c.bg_surface.name()}; color: {c.text_primary.name()}; }}
+        QMainWindow {{ background: {c.bg_surface_deep.name()}; }}
+        QMainWindow::separator {{ background: {c.border.name()}; width: 1px; height: 1px; }}
+
+        /* ── Tooltip ── */
         QToolTip {{ color: {c.text_primary.name()}; background: {c.bg_surface_input.name()}; border: 1px solid {c.border.name()}; padding: 4px; }}
+
+        /* ── Menu ── */
         QMenuBar {{ background: {c.bg_surface.name()}; color: {c.text_primary.name()}; }}
         QMenuBar::item:selected {{ background: {c.bg_surface_hover.name()}; }}
         QMenu {{ background: {c.bg_surface.name()}; color: {c.text_primary.name()}; border: 1px solid {c.border.name()}; }}
-        QMenu::item:selected {{ background: {c.accent.name()}; }}
+        QMenu::item:selected {{ background: {c.accent.name()}; color: {c.accent_text.name()}; }}
         QMenu::separator {{ height: 1px; background: {c.border.name()}; margin: 4px 10px; }}
+
+        /* ── StatusBar ── */
         QStatusBar {{ background: #007acc; color: white; }}
+
+        /* ── ScrollBar ── */
         QScrollBar:vertical {{ background: {c.scroll_bg.name()}; width: 10px; }}
         QScrollBar::handle:vertical {{ background: {c.scroll_handle.name()}; min-height: 20px; border-radius: 5px; }}
         QScrollBar::handle:vertical:hover {{ background: {c.scroll_handle_hover.name()}; }}
         QScrollBar:horizontal {{ background: {c.scroll_bg.name()}; height: 10px; }}
         QScrollBar::handle:horizontal {{ background: {c.scroll_handle.name()}; min-width: 20px; border-radius: 5px; }}
         QScrollBar::handle:horizontal:hover {{ background: {c.scroll_handle_hover.name()}; }}
-        QTreeWidget {{ background: {c.bg_surface.name()}; color: {c.text_primary.name()}; border: none; }}
-        QTreeWidget::item:hover {{ background: {c.bg_surface_hover.name()}; }}
-        QTreeWidget::item:selected {{ background: #094771; }}
+        QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; width: 0; }}
+
+        /* ── Tree / List ── */
+        QTreeWidget, QTreeView, QListView, QListWidget {{ background: {c.bg_surface.name()}; color: {c.text_primary.name()}; border: none; outline: none; }}
+        QTreeWidget::item:hover, QTreeView::item:hover, QListView::item:hover, QListWidget::item:hover {{ background: {c.bg_surface_hover.name()}; }}
+        QTreeWidget::item:selected, QTreeView::item:selected, QListWidget::item:selected {{ background: #094771; color: white; }}
+
+        /* ── Splitter ── */
         QSplitter::handle {{ background: {c.border.name()}; }}
+
+        /* ── Tab ── */
         QTabWidget::pane {{ border: 1px solid {c.border.name()}; background: {c.bg_surface.name()}; }}
         QTabBar::tab {{ background: {c.bg_surface_raised.name()}; color: {c.text_primary.name()}; padding: 6px 12px; border-bottom: 2px solid transparent; }}
         QTabBar::tab:selected {{ background: {c.bg_surface.name()}; border-bottom: 2px solid {c.accent.name()}; }}
         QTabBar::tab:hover {{ background: {c.bg_surface_hover.name()}; }}
+
+        /* ── Table ── */
         QTableView, QTableWidget {{ background: {c.bg_surface.name()}; color: {c.text_primary.name()}; border: 1px solid {c.border.name()}; gridline-color: {c.border.name()}; selection-background-color: #094771; }}
         QHeaderView::section {{ background: {c.bg_surface_raised.name()}; color: {c.text_primary.name()}; padding: 4px 8px; border: none; border-right: 1px solid {c.border.name()}; border-bottom: 1px solid {c.border.name()}; }}
-        QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {{ background: {c.bg_surface_input.name()}; color: {c.text_primary.name()}; border: 1px solid {c.border.name()}; padding: 4px 8px; border-radius: 3px; }}
-        QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {{ border-color: {c.accent.name()}; }}
+
+        /* ── Input ── */
+        QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QPlainTextEdit, QTextEdit {{ background: {c.bg_surface_input.name()}; color: {c.text_primary.name()}; border: 1px solid {c.border.name()}; padding: 4px 8px; border-radius: 3px; selection-background-color: {c.accent.name()}; }}
+        QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus, QPlainTextEdit:focus, QTextEdit:focus {{ border-color: {c.accent.name()}; }}
         QComboBox QAbstractItemView {{ background: {c.bg_surface.name()}; color: {c.text_primary.name()}; selection-background-color: {c.accent.name()}; }}
-        QCheckBox {{ color: {c.text_primary.name()}; }}
+        QComboBox::drop-down {{ border: none; }}
+
+        /* ── Button ── */
         QPushButton {{ background: {c.accent.name()}; color: {c.accent_text.name()}; border: none; padding: 6px 16px; border-radius: 3px; }}
         QPushButton:hover {{ background: #1a8ad4; }}
         QPushButton:pressed {{ background: #005a9e; }}
         QPushButton:disabled {{ background: {c.border.name()}; color: {c.text_disabled.name()}; }}
+        QToolButton {{ background: transparent; border: none; color: {c.text_primary.name()}; }}
+        QToolButton:hover {{ background: {c.bg_surface_hover.name()}; }}
+
+        /* ── Checkbox / Radio ── */
+        QCheckBox, QRadioButton {{ color: {c.text_primary.name()}; }}
+
+        /* ── Label ── */
         QLabel {{ color: {c.text_primary.name()}; }}
+
+        /* ── GroupBox ── */
+        QGroupBox {{ color: {c.text_primary.name()}; border: 1px solid {c.border.name()}; margin-top: 12px; padding-top: 16px; font-weight: bold; }}
+        QGroupBox::title {{ subcontrol-origin: margin; left: 10px; padding: 0 6px; }}
+
+        /* ── Frame / Separator ── */
+        QFrame[frameShape=\"4\"] {{ color: {c.border.name()}; }}  /* HLine */
+        QFrame[frameShape=\"5\"] {{ color: {c.border.name()}; }}  /* VLine */
+
+        /* ── Dialog ── */
+        QDialog {{ background: {c.bg_surface.name()}; }}
     """
 
 
@@ -325,6 +372,22 @@ class ThemeManager(QObject):
 
 # Global singleton — WPF ThemeOptions.Instance
 theme_manager = ThemeManager()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Theme-aware helper — WPF DynamicResource pattern for QWidget panels
+# ═══════════════════════════════════════════════════════════════════════════
+
+def connect_theme(refresh_fn):
+    """Register a callback to run on every theme change + immediately.
+
+    Usage in any panel __init__:
+        connect_theme(self._refresh_qss)
+
+    WPF equivalent: {DynamicResource BrushKeys.Xxx} auto-refresh.
+    """
+    refresh_fn()
+    theme_manager.theme_changed.connect(lambda _: refresh_fn())
 
 
 # ═══════════════════════════════════════════════════════════════════════════
