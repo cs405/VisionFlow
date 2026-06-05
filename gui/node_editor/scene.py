@@ -287,12 +287,32 @@ class DiagramScene(QGraphicsScene):
         item = self._node_items.pop(node_id, None)
         if item is None:
             return
-        # Remove connected edges first
-        for eid in list(self._edge_items.keys()):
-            edge = self._edge_items[eid]
-            if (edge.from_socket and edge.from_socket.port.node_id == node_id) or \
-               (edge.to_socket and edge.to_socket.port.node_id == node_id):
-                self.remove_edge_item(eid, sync_workflow=sync_workflow)
+
+        # Collect incoming and outgoing edges before removal
+        incoming_sockets: list[SocketItem] = []
+        outgoing_sockets: list[SocketItem] = []
+        edges_to_remove: list[str] = []
+        for eid, edge in list(self._edge_items.items()):
+            if edge.from_socket and edge.from_socket.port.node_id == node_id:
+                # This node is the source — find the target socket
+                if edge.to_socket:
+                    outgoing_sockets.append(edge.to_socket)
+                edges_to_remove.append(eid)
+            elif edge.to_socket and edge.to_socket.port.node_id == node_id:
+                # This node is the target — find the source socket
+                if edge.from_socket:
+                    incoming_sockets.append(edge.from_socket)
+                edges_to_remove.append(eid)
+
+        # Remove connected edges
+        for eid in edges_to_remove:
+            self.remove_edge_item(eid, sync_workflow=sync_workflow)
+
+        # Bridge: reconnect each incoming source to each outgoing target
+        for in_sock in incoming_sockets:
+            for out_sock in outgoing_sockets:
+                self.create_edge(in_sock, out_sock, sync_workflow=sync_workflow)
+
         self.removeItem(item)
         if sync_workflow and self._workflow:
             self._workflow.remove_node(node_id)
