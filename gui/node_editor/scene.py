@@ -31,6 +31,7 @@ from gui.node_editor.node_item import NodeItem, NodeState
 from gui.node_editor.socket_item import SocketItem, PORT_DIAMETER
 from gui.node_editor.edge_item import EdgeItem, EdgeState
 from gui.node_editor.link_drawer import ILinkDrawer, BrokenLinkDrawer
+from core.node_group import node_data_group_manager
 
 
 SCENE_RECT = QRectF(-5000, -5000, 10000, 10000)
@@ -768,19 +769,10 @@ class DiagramScene(QGraphicsScene):
             return None
 
         else:
+            px, py = pos.x(), pos.y()
             add_menu = menu.addMenu("添加节点")
-            for node_type in node_registry.get_all_instantiable():
-                action = QAction(node_type.__name__, menu)
-                action.triggered.connect(lambda c, nt=node_type:
-                    self._cmd_stack.execute(AddNodeCommand(self, nt(), pos)))
-                add_menu.addAction(action)
-            menu.addSeparator()
-            paste_act = QAction("粘贴", menu)
-            paste_act.setEnabled(bool(self._clipboard))
-            paste_act.triggered.connect(self.paste)
-            menu.addAction(paste_act)
-
-        return menu
+            self._build_node_type_menu(add_menu, menu, px, py)
+            return menu
 
     def _run_single_node(self, node_data: NodeBase):
         if self._workflow and isinstance(node_data, VisionNodeData):
@@ -789,6 +781,60 @@ class DiagramScene(QGraphicsScene):
             if item:
                 item.update_from_node()
             self.status_message.emit(f"已执行: {node_data.name}")
+
+    def _build_node_type_menu(self, parent_menu: QMenu, root_menu: QMenu,
+                               px: float, py: float):
+        """Build hierarchical node-type menu from registered groups."""
+        import re
+        import inspect
+        all_instantiable = {
+            t.__name__: t
+            for t in node_registry._nodes.values()
+            if not inspect.isabstract(t)
+        }
+
+        def _node_label(node_type: type) -> str:
+            """Resolve display name: try instantiation, fall back to class name."""
+            try:
+                inst = node_type()
+                name = inst.name or ''
+                if name and name != node_type.__name__ and len(name) < 30:
+                    return name
+            except Exception:
+                pass
+            cls_name = node_type.__name__
+            spaced = re.sub(r'([a-z])([A-Z])', r'\1 \2', cls_name)
+            spaced = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1 \2', spaced)
+            return spaced
+
+        used: set[str] = set()
+        for group in node_data_group_manager.get_all_groups():
+            group_types: list[type] = []
+            for nt in group.node_types:
+                if nt.__name__ in all_instantiable and nt.__name__ not in used:
+                    group_types.append(nt)
+                    used.add(nt.__name__)
+            if not group_types:
+                continue
+            sub_menu = parent_menu.addMenu(group.name)
+            for node_type in group_types:
+                label = _node_label(node_type)
+                action = QAction(label, root_menu)
+                action.triggered.connect(
+                    lambda checked, nt=node_type, x=px, y=py:
+                        self._cmd_stack.execute(AddNodeCommand(self, nt(), (x, y))))
+                sub_menu.addAction(action)
+        # Ungrouped nodes
+        ungrouped = [t for n, t in all_instantiable.items() if n not in used]
+        if ungrouped:
+            sub_menu = parent_menu.addMenu("其他")
+            for node_type in ungrouped:
+                label = _node_label(node_type)
+                action = QAction(label, root_menu)
+                action.triggered.connect(
+                    lambda checked, nt=node_type, x=px, y=py:
+                        self._cmd_stack.execute(AddNodeCommand(self, nt(), (x, y))))
+                sub_menu.addAction(action)
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Serialization
