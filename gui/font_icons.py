@@ -123,9 +123,15 @@ class FontIcons:
 
     # ── Tools ──
     Color = ""                 #  — color palette / theme
+    Brightness = ""           #  — sun / brightness
+    QuietHours = ""           #  — moon / night
     Crop = ""
     Cut = ""
     Filter = ""
+    DictionaryAdd = ""       #  — add from template
+    Manage = ""              #  — manage/template manager
+    SaveAs = ""              #  — save as template
+    Ethernet = ""            #  — run mode
 
     # ── Window Chrome ──
     ChromeMinimize = ""       # 
@@ -135,6 +141,7 @@ class FontIcons:
 
     # ── Mouse / Guide ──
     Mouse = ""                #  — guide/wizard
+    Smartcard = ""            #  — WPF ShowGuideCommand icon (alias)
 
     # ── Power / System ──
     PowerButton = ""
@@ -225,7 +232,7 @@ class FontIconButton(QPushButton):
     """
 
     def __init__(self, icon: str = "", text: str = "", tooltip: str = "",
-                 font_size: int = 14, parent=None):
+                 font_size: int = 16, parent=None):
         super().__init__(parent)
         self._icon = icon
         self._icon_size = font_size
@@ -242,7 +249,7 @@ class FontIconButton(QPushButton):
             self.setToolTip(tooltip)
 
         if self._icon_only:
-            self.setFixedSize(34, 30)
+            self.setFixedSize(35, 35)
 
         self.setCursor(Qt.PointingHandCursor)
         self._apply_style()
@@ -255,21 +262,20 @@ class FontIconButton(QPushButton):
             self.setText(icon)
 
     def _apply_style(self):
+        """WPF FontIconButtonKeys.Default + ButtonKeys.Default styles."""
         self.setStyleSheet("""
             FontIconButton {
                 background: transparent;
-                border: 1px solid transparent;
-                border-radius: 3px;
+                border: none;
+                border-radius: 2px;
                 color: #dcdcdc;
-                padding: 3px 8px;
+                padding: 5px 0;
             }
             FontIconButton:hover {
                 background: #3e3e42;
-                border-color: #505050;
             }
             FontIconButton:pressed {
                 background: #0078d4;
-                border-color: #0078d4;
                 color: white;
             }
             FontIconButton:disabled {
@@ -296,7 +302,7 @@ class FontIconToggleButton(QPushButton):
     """
 
     def __init__(self, checked_icon: str = "", unchecked_icon: str = "",
-                 text: str = "", font_size: int = 14, parent=None):
+                 text: str = "", font_size: int = 16, parent=None):
         super().__init__(parent)
         self._checked_icon = checked_icon
         self._unchecked_icon = unchecked_icon
@@ -327,13 +333,14 @@ class FontIconToggleButton(QPushButton):
         self._update_text()
 
     def _apply_style(self):
+        """WPF FontIconToggleButtonKeys.Switch style."""
         self.setStyleSheet("""
             FontIconToggleButton {
                 background: transparent;
-                border: 1px solid transparent;
-                border-radius: 3px;
+                border: none;
+                border-radius: 2px;
                 color: #999;
-                padding: 3px 8px;
+                padding: 5px 0;
             }
             FontIconToggleButton:hover {
                 background: #3e3e42;

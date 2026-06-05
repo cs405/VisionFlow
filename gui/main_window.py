@@ -48,7 +48,7 @@ HTBOTTOMLEFT = 16
 HTBOTTOMRIGHT = 17
 HTCAPTION = 2
 
-_BORDER = 6  # resize margin in pixels
+_BORDER = 8  # resize margin in pixels (WPF ResizeBorderThickness)
 
 
 class _MSG(ctypes.Structure):
@@ -105,13 +105,12 @@ def _hsep():
 _CMD_BTN = """
     QPushButton {
         background: transparent;
-        border: 1px solid #505050;
-        border-radius: 3px;
-        padding: 3px 10px;
+        border: none;
+        border-radius: 2px;
+        padding: 5px 0;
         color: #dcdcdc;
-        font-size: 11px;
     }
-    QPushButton:hover { background: #3e3e42; border-color: #0078d4; }
+    QPushButton:hover { background: #3e3e42; }
     QPushButton:pressed { background: #0078d4; }
 """
 
@@ -295,32 +294,57 @@ class MainWindow(QMainWindow):
         super().changeEvent(event)
 
     def _setup_caption_bar(self):
-        """1:1 port of WPF CaptionTemplate (CaptionHeight=85, UniformGrid Rows=2)."""
+        """1:1 port of WPF CaptionTemplate lines 22-203.
+
+        Outer DockPanel (DataContext=Project):
+          Separator(H=20, Right) | ActionDockPanel(Right) | UniformGrid(Rows=2)
+            Row0: DockPanel:  Menu(Left) | "项目名称:XXX"(Center)
+            Row1: Border(top) | DockPanel(LastChildFill=False): 4 button groups
+        """
         bar = QWidget()
         bar.setFixedHeight(85)
-        bar.setStyleSheet("background: #1e1e1e; border-bottom: 1px solid #3f3f46;")
-        main_layout = QVBoxLayout(bar)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
+        bar.setStyleSheet("background: #1e1e1e;")
 
-        # ══════════ Row 1 (32 px) — menu bar + "项目名称:XXX" + 4 action icons + window chrome ══════════
-        row1 = QWidget()
-        row1.setFixedHeight(32)
-        r1 = QHBoxLayout(row1)
-        r1.setContentsMargins(8, 0, 0, 0)
-        r1.setSpacing(0)
+        # ── WPF outer DockPanel (line 24) ──
+        outer = QHBoxLayout(bar)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
 
-        # Logo — WPF SystemParameters.SmallIconWidth/Height = 16×16
+        # ══════════ Column 0: Icon + Title (Framework MainWindow.xaml lines 108-133) ══════════
+        col0 = QWidget()
+        col0_layout = QHBoxLayout(col0)
+        col0_layout.setContentsMargins(10, 20, 0, 20)  # WPF TitleMargin="10 20"
+        col0_layout.setSpacing(0)
+
         logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "icons", "logo.png")
         if os.path.exists(logo_path):
             logo = QLabel()
             logo.setPixmap(QPixmap(logo_path).scaled(16, 16, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-            logo.setStyleSheet("padding: 0 6px 0 0;")
-            r1.addWidget(logo)
+            logo.setStyleSheet("padding: 0 5px 0 0;")  # WPF Margin="0,0,5,0"
+            col0_layout.addWidget(logo)
 
+        title_lbl = QLabel("VisionFlow")
+        title_lbl.setStyleSheet("color: #dcdcdc; font-size: 30px; font-weight: bold; padding: 0 0 0 5px;")
+        col0_layout.addWidget(title_lbl)
+
+        outer.addWidget(col0)
+
+        # ══════════ UniformGrid Rows="2" Margin="0,2" (lines 41-42) — fills remaining space ══════════
+        grid = QWidget()
+        grid_layout = QVBoxLayout(grid)
+        grid_layout.setContentsMargins(0, 2, 0, 2)
+        grid_layout.setSpacing(0)
+
+        # ---- Row 0: DockPanel with Menu(left) + "项目名称:XXX"(center) (lines 43-145) ----
+        row0 = QWidget()
+        r0 = QHBoxLayout(row0)
+        r0.setContentsMargins(8, 0, 0, 0)
+        r0.setSpacing(0)
+
+        # Menu — HorizontalAlignment="Left", Background="Transparent", Margin="0,1" (lines 44-47)
         menu_bar = QMenuBar()
         menu_bar.setStyleSheet(
-            "QMenuBar { background: transparent; color: #dcdcdc; padding: 0; }"
+            "QMenuBar { background: transparent; color: #dcdcdc; padding: 0; margin: 1px 0; }"
             "QMenuBar::item { padding: 6px 12px; background: transparent; }"
             "QMenuBar::item:selected { background: #3e3e42; }"
             "QMenu { background: #2d2d30; color: #dcdcdc; border: 1px solid #505050; }"
@@ -329,60 +353,151 @@ class MainWindow(QMainWindow):
             "QMenu::separator { height: 1px; background: #505050; margin: 4px 10px; }"
         )
         self._build_menus(menu_bar)
-        r1.addWidget(menu_bar, 1)
+        r0.addWidget(menu_bar)  # NO stretch → left-aligned (WPF HorizontalAlignment="Left")
 
-        r1.addWidget(self._lbl("项目名称：", "#c8c8c8", 11, pad="0 4px"))
+        # "项目名称：XXX" — Margin="10,0", HorizontalAlignment="Center" (lines 137-144)
+        r0.addStretch(1)
+        r0.addWidget(self._lbl("项目名称：", "#c8c8c8", 12, pad="0 4px"))
         self._cap_proj_lbl = self._lbl("无项目", "#0078d4", 12, bold=True, pad="0 12px")
-        r1.addWidget(self._cap_proj_lbl)
-        r1.addWidget(_hsep())
+        r0.addWidget(self._cap_proj_lbl)
+        r0.addStretch(1)
 
-        # WPF right-side action buttons: Color → Setting → About → Guide  (FontSizeKeys.Icon = 16)
-        _ACT = (
-            "QPushButton { background:transparent; border:none; color:#999;"
-            " font-family:'Segoe Fluent Icons','Segoe MDL2 Assets','Segoe UI Symbol';"
-            " font-size:16px; padding:0 8px; }"
-            "QPushButton:hover { background:#3e3e42; color:#dcdcdc; }"
-        )
-        # WPF: Color → Setting → [ISwitchThemeViewPresenter toggle] → About → Guide
+        grid_layout.addWidget(row0)
+
+        # ---- Row 1: Border(top) + DockPanel toolbar (lines 146-200) ----
+        row1 = QWidget()
+        row1.setStyleSheet("background:#2d2d30; border-top:1px solid #3f3f46;")
+        r1 = QHBoxLayout(row1)
+        r1.setContentsMargins(0, 1, 0, 0)  # WPF Margin="0,1" (line 149)
+        r1.setSpacing(0)
+
+        # Inner DockPanel LastChildFill="False" → 4 groups (lines 149-199)
+        toolbar = QWidget()
+        tb = QHBoxLayout(toolbar)
+        tb.setContentsMargins(6, 3, 6, 3)
+        tb.setSpacing(2)
+
+        # Group 1 — New | Open | Edit | Save (lines 155-158)
+        for icon, tip, slot in [
+            (FontIcons.Page,                "新建项目", self._on_new_project),
+            (FontIcons.OpenFolderHorizontal, "打开项目", self._on_open_project),
+            (FontIcons.Edit,                 "编辑项目", self._on_edit_project),
+            (FontIcons.Save,                 "保存项目", self._on_save_project),
+        ]:
+            btn = FontIconButton(icon, tooltip=tip, font_size=16)
+            btn.setStyleSheet(_CMD_BTN)
+            btn.clicked.connect(slot)
+            tb.addWidget(btn)
+        tb.addWidget(_hsep())
+
+        # Group 2 — project-level commands (VisionProjectItemBase, 7 commands) (lines 161-175)
+        self._tool_project_cmds = QWidget()
+        self._tool_project_cmds.setLayout(QHBoxLayout())
+        self._tool_project_cmds.layout().setContentsMargins(0, 0, 0, 0)
+        self._tool_project_cmds.layout().setSpacing(2)
+        for icon, tip, slot in [
+            (FontIcons.Add,           "新建流程图",           self._on_add_diagram),
+            (FontIcons.Ethernet,      "运行模式",             None),
+            (FontIcons.Copy,          "重复流程图",           None),
+            (FontIcons.DictionaryAdd, "从模板添加流程图",     None),
+            (FontIcons.Manage,        "模板管理",             None),
+            (FontIcons.SaveAs,        "流程图另存为模板",     None),
+            (FontIcons.Cancel,        "删除流程图",           None),
+        ]:
+            btn = FontIconButton(icon, tooltip=tip, font_size=16)
+            btn.setStyleSheet(_CMD_BTN)
+            if slot:
+                btn.clicked.connect(slot)
+            self._tool_project_cmds.layout().addWidget(btn)
+        tb.addWidget(self._tool_project_cmds)
+        tb.addWidget(_hsep())
+
+        # Group 3 — diagram commands (DiagramDataBase hierarchy, 9 commands) (lines 179-193)
+        self._tool_diagram_cmds = QWidget()
+        self._tool_diagram_cmds.setLayout(QHBoxLayout())
+        self._tool_diagram_cmds.layout().setContentsMargins(0, 0, 0, 0)
+        self._tool_diagram_cmds.layout().setSpacing(2)
+
+        for icon, tip, slot in [
+            (FontIcons.Replay,         "开始",         self._on_run_workflow),
+            (FontIcons.Location,       "停止",         self._on_stop_workflow),
+            (FontIcons.Refresh,        "重置",         self._on_reset_workflow_view),
+            (FontIcons.EditMirrored,   "编辑面板",     None),
+            (FontIcons.View,           "查看面板",     None),
+            (FontIcons.DisconnectDrive,"删除选中节点", None),
+            (FontIcons.Delete,         "清空节点",     None),
+            (FontIcons.Zoom,           "缩放定位",     None),
+            (FontIcons.AlignCenter,    "对齐节点",     None),
+        ]:
+            btn = FontIconButton(icon, tooltip=tip, font_size=16)
+            btn.setStyleSheet(_CMD_BTN)
+            if slot:
+                btn.clicked.connect(slot)
+            self._tool_diagram_cmds.layout().addWidget(btn)
+        # Keep _run_btn/_stop_btn refs for workflow state handlers
+        self._run_btn = self._tool_diagram_cmds.layout().itemAt(0).widget()
+        self._stop_btn = self._tool_diagram_cmds.layout().itemAt(1).widget()
+
+        tb.addWidget(self._tool_diagram_cmds)
+        tb.addWidget(_hsep())
+
+        # Group 4 — View | TabEdit (lines 195-198)
+        self._tool_view_btn = FontIconButton(FontIcons.View, tooltip="查看", font_size=16)
+        self._tool_view_btn.setStyleSheet(_CMD_BTN)
+        tb.addWidget(self._tool_view_btn)
+        self._tool_tabedit_btn = FontIconButton(FontIcons.Edit, tooltip="编辑", font_size=16)
+        self._tool_tabedit_btn.setStyleSheet(_CMD_BTN)
+        tb.addWidget(self._tool_tabedit_btn)
+
+        tb.addStretch(1)
+        r1.addWidget(toolbar)
+        grid_layout.addWidget(row1)
+
+        outer.addWidget(grid, 1)  # stretch=1 → fills remaining space (WPF LastChildFill)
+
+        # ══════════ Right-docked action buttons — WPF FontIconButtonKeys.Command (lines 28-39) ══════════
+        # Same style as Row 2 toolbar — _CMD_BTN matches WPF ButtonKeys.Default + FontIconButtonKeys.Default
+        # Color → Setting (lines 30-34)
         for icon, tip, slot in [
             (FontIcons.Color,   "颜色主题", self._on_toggle_theme),
             (FontIcons.Setting, "设置",     None),
         ]:
             btn = FontIconButton(icon, tooltip=tip, font_size=16)
-            btn.setStyleSheet(_ACT)
+            btn.setStyleSheet(_CMD_BTN)
             if slot:
                 btn.clicked.connect(slot)
-            r1.addWidget(btn)
+            outer.addWidget(btn)
 
-        # Theme switch toggle (WPF ISwitchThemeViewPresenter)
-        self._theme_toggle = FontIconToggleButton(
-            FontIcons.Color, FontIcons.Color, font_size=16,
-        )
-        self._theme_toggle.setToolTip("切换主题")
-        _TOGGLE = (
-            "FontIconToggleButton { background:transparent; border:none; color:#999;"
-            " font-family:'Segoe Fluent Icons','Segoe MDL2 Assets','Segoe UI Symbol';"
-            " font-size:16px; padding:0 8px; }"
-            "FontIconToggleButton:hover { background:#3e3e42; color:#dcdcdc; }"
-            "FontIconToggleButton:checked { color:#dcdcdc; }"
-        )
-        self._theme_toggle.setStyleSheet(_TOGGLE)
+        # ISwitchThemeViewPresenter — Brightness(sun)=checked, QuietHours(moon)=unchecked (line 35)
+        self._theme_toggle = FontIconToggleButton(FontIcons.Brightness, FontIcons.QuietHours, font_size=16)
+        self._theme_toggle.setToolTip("切换明/暗主题")
+        self._theme_toggle.setStyleSheet(_CMD_BTN + """
+            FontIconToggleButton:checked { color: #dcdcdc; }
+            FontIconToggleButton:checked:hover { background: #3e3e42; }
+        """)
         self._theme_toggle.setChecked(theme_manager.is_dark)
         self._theme_toggle.toggled.connect(lambda _: self._on_toggle_theme())
-        r1.addWidget(self._theme_toggle)
+        outer.addWidget(self._theme_toggle)
 
+        # About → Guide (lines 36-39)
         for icon, tip, slot in [
-            (FontIcons.Info,  "关于",   self._on_about),
-            (FontIcons.Mouse, "新手向导", None),
+            (FontIcons.Info,  "关于",     self._on_about),
+            (FontIcons.Smartcard, "新手向导", None),
         ]:
             btn = FontIconButton(icon, tooltip=tip, font_size=16)
-            btn.setStyleSheet(_ACT)
+            btn.setStyleSheet(_CMD_BTN)
             if slot:
                 btn.clicked.connect(slot)
-            r1.addWidget(btn)
+            outer.addWidget(btn)
 
-        # Window chrome buttons — WPF Segoe MDL2 glyphs, FontSize=10
-        # Maximize hidden when maximized; Restore hidden when normal (WPF Window.xaml triggers)
+        # ══════════ Rightmost 20px separator (lines 25-27) ══════════
+        sep20 = QFrame()
+        sep20.setFrameShape(QFrame.VLine)
+        sep20.setStyleSheet("color: #505050;")
+        sep20.setFixedSize(1, 20)
+        outer.addWidget(sep20)
+
+        # ══════════ Window chrome buttons (from Framework/MainWindow.xaml Column 2) ══════════
         _WIN = (
             "QPushButton { background:transparent; border:none; color:#999;"
             " font-family:'Segoe Fluent Icons','Segoe MDL2 Assets','Segoe UI Symbol';"
@@ -394,7 +509,7 @@ class MainWindow(QMainWindow):
             (FontIcons.ChromeMinimize, "最小化", self.showMinimized, None),
             (FontIcons.ChromeMaximize, "最大化", self._toggle_max, "_max_btn"),
             (FontIcons.ChromeRestore,  "还原",   self._toggle_max, "_restore_btn"),
-            (FontIcons.ChromeClose,    "关闭",   self.close,        None),
+            (FontIcons.ChromeClose,    "关闭",   self._on_close_window, None),
         ]:
             btn = QPushButton(icon)
             btn.setToolTip(tip)
@@ -404,68 +519,8 @@ class MainWindow(QMainWindow):
             btn.clicked.connect(slot)
             if btn_attr:
                 setattr(self, btn_attr, btn)
-            r1.addWidget(btn)
-        self._restore_btn.hide()  # start normal → hide Restore
-
-        main_layout.addWidget(row1)
-
-        # ══════════ Row 2 — WPF 4-button-groups with 3 vertical separators ══════════
-        row2 = QWidget()
-        row2.setStyleSheet("background:#2d2d30; border-top:1px solid #3f3f46;")
-        r2 = QHBoxLayout(row2)
-        r2.setContentsMargins(6, 3, 6, 3)
-        r2.setSpacing(2)
-
-        # Group 1 — file ops:  Page(New)  OpenFolderHorizontal(Open)  Edit  Save  (FontSizeKeys.Icon=16)
-        for icon, tip, slot in [
-            (FontIcons.Page,                "新建项目", self._on_new_project),
-            (FontIcons.OpenFolderHorizontal, "打开项目", self._on_open_project),
-            (FontIcons.Edit,                 "编辑项目", self._on_edit_project),
-            (FontIcons.Save,                 "保存项目", self._on_save_project),
-        ]:
-            btn = FontIconButton(icon, tooltip=tip, font_size=16)
-            btn.setStyleSheet(_CMD_BTN)
-            btn.clicked.connect(slot)
-            r2.addWidget(btn)
-        r2.addWidget(_hsep())
-
-        # Group 2 — project-level commands (ItemsControl placeholder)
-        self._tool_project_cmds = QWidget()
-        self._tool_project_cmds.setLayout(QHBoxLayout())
-        self._tool_project_cmds.layout().setContentsMargins(0, 0, 0, 0)
-        self._tool_project_cmds.layout().setSpacing(2)
-        r2.addWidget(self._tool_project_cmds)
-        r2.addWidget(_hsep())
-
-        # Group 3 — diagram commands:  Replay(Start)  Location(Stop)  (WPF FlowableDiagramDataBase)
-        self._tool_diagram_cmds = QWidget()
-        self._tool_diagram_cmds.setLayout(QHBoxLayout())
-        self._tool_diagram_cmds.layout().setContentsMargins(0, 0, 0, 0)
-        self._tool_diagram_cmds.layout().setSpacing(2)
-
-        self._run_btn = FontIconButton(FontIcons.Replay, tooltip="开始", font_size=16)
-        self._run_btn.setStyleSheet(_CMD_BTN)
-        self._run_btn.clicked.connect(self._on_run_workflow)
-        self._tool_diagram_cmds.layout().addWidget(self._run_btn)
-
-        self._stop_btn = FontIconButton(FontIcons.Location, tooltip="停止", font_size=16)
-        self._stop_btn.setStyleSheet(_CMD_BTN)
-        self._stop_btn.clicked.connect(self._on_stop_workflow)
-        self._tool_diagram_cmds.layout().addWidget(self._stop_btn)
-
-        r2.addWidget(self._tool_diagram_cmds)
-        r2.addWidget(_hsep())
-
-        # Group 4 — View / TabEdit  (WPF ShowViewCommand + ShowTabEditCommand)
-        self._tool_view_btn = FontIconButton(FontIcons.View, tooltip="查看", font_size=16)
-        self._tool_view_btn.setStyleSheet(_CMD_BTN)
-        r2.addWidget(self._tool_view_btn)
-        self._tool_tabedit_btn = FontIconButton(FontIcons.Edit, tooltip="编辑", font_size=16)
-        self._tool_tabedit_btn.setStyleSheet(_CMD_BTN)
-        r2.addWidget(self._tool_tabedit_btn)
-
-        r2.addStretch(1)
-        main_layout.addWidget(row2)
+            outer.addWidget(btn)
+        self._restore_btn.hide()
 
         # ── drag support ──
         self._caption_bar = bar
@@ -838,7 +893,7 @@ class MainWindow(QMainWindow):
         file_menu.addSeparator()
         exit_action = QAction("退出(&X)", self)
         exit_action.setShortcut("Alt+F4")
-        exit_action.triggered.connect(self.close)
+        exit_action.triggered.connect(self._on_close_window)
         file_menu.addAction(exit_action)
 
         edit_menu = menu_bar.addMenu("编辑(&E)")
@@ -1564,6 +1619,15 @@ class MainWindow(QMainWindow):
             return f"{filename}    |    {size_text}    |    {modified}"
         except OSError:
             return os.path.basename(path)
+
+    def _on_close_window(self):
+        """WPF CloseAfterSaveWindowCommand: save project then close."""
+        try:
+            if project_service.current_project:
+                self._on_save_project()
+        except Exception:
+            pass
+        self.close()
 
     def _on_toggle_theme(self):
         """Toggle between dark and light themes (WPF ShowColorThemeViewCommand)."""
