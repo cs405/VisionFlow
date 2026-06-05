@@ -6,6 +6,7 @@
   - 右：图像 / 模块结果 + 底部历史/当前/帮助
 """
 
+import ctypes
 import os
 from datetime import datetime
 
@@ -14,8 +15,8 @@ from PyQt5.QtWidgets import (
     QLabel, QTabWidget, QMessageBox, QFileDialog, QApplication,
     QPushButton, QFrame, QMenuBar, QMenu, QLineEdit, QStackedWidget, QTabBar
 )
-from PyQt5.QtCore import Qt, QTimer, QSettings, pyqtSignal
-from PyQt5.QtGui import QIcon, QPixmap
+from PyQt5.QtCore import Qt, QTimer, QSettings, pyqtSignal, QEvent
+from PyQt5.QtGui import QIcon, QPixmap, QCursor
 
 from core.node_base import NodeBase, VisionNodeData, SrcFilesVisionNodeData, ROINodeData
 from core.workflow import WorkflowEngine
@@ -34,6 +35,30 @@ from gui.flow_resource_panel import FlowResourcePanel
 from gui.node_editor.editor_widget import DiagramEditorWidget
 from gui.start_page import StartPage
 from gui.help_panel import HelpPanel
+
+# ── Windows frameless window border resize ──────────────────────────
+WM_NCHITTEST = 0x0084
+HTLEFT = 10
+HTRIGHT = 11
+HTTOP = 12
+HTTOPLEFT = 13
+HTTOPRIGHT = 14
+HTBOTTOM = 15
+HTBOTTOMLEFT = 16
+HTBOTTOMRIGHT = 17
+HTCAPTION = 2
+
+_BORDER = 6  # resize margin in pixels
+
+
+class _MSG(ctypes.Structure):
+    _fields_ = [
+        ("hwnd", ctypes.c_void_p),
+        ("message", ctypes.c_uint),
+        ("_pad", ctypes.c_uint),
+        ("wParam", ctypes.c_ulonglong),
+        ("lParam", ctypes.c_longlong),
+    ]
 
 
 class PanelState:
@@ -241,6 +266,21 @@ class MainWindow(QMainWindow):
             geometry = screen.geometry()
             self.move((geometry.width() - width) // 2, (geometry.height() - height) // 2)
 
+        self._init_dwm_shadow()
+
+    def _init_dwm_shadow(self):
+        """Extend DWM frame into client area for native drop-shadow."""
+        try:
+            hwnd = int(self.winId())
+            margins = (ctypes.c_int * 4)(0, 0, 1, 0)
+            ctypes.windll.dwmapi.DwmExtendFrameIntoClientArea(hwnd, margins)
+        except Exception:
+            pass
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._init_dwm_shadow()
+
     def _setup_caption_bar(self):
         bar = QWidget()
         bar.setFixedHeight(66)
@@ -369,26 +409,105 @@ class MainWindow(QMainWindow):
 
         main_layout.addWidget(row2)
 
-        # Make caption bar draggable for frameless window
-        bar.mousePressEvent = self._caption_mouse_press
-        bar.mouseMoveEvent = self._caption_mouse_move
-        bar.mouseDoubleClickEvent = self._caption_double_click
+        # Install event filter on caption bar and ALL its descendants so
+        # clicks on empty areas between/on child widgets still trigger drag.
+        self._caption_bar = bar
+        bar.installEventFilter(self)
+        for child in bar.findChildren(QWidget):
+            child.installEventFilter(self)
 
         self.setMenuWidget(bar)
 
-    def _caption_mouse_press(self, event):
-        if event.button() == Qt.LeftButton:
+    def eventFilter(self, obj, event):
+        """Intercept mouse events on caption widgets for window drag / double-click."""
+        etype = event.type()
+        if etype == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
+            if self._is_interactive_widget(obj):
+                return False
             self._drag_pos = event.globalPos()
+            self._caption_bar.grabMouse()
+            return True
 
-    def _caption_mouse_move(self, event):
-        if event.buttons() == Qt.LeftButton and hasattr(self, '_drag_pos'):
+        if etype == QEvent.MouseMove and hasattr(self, '_drag_pos'):
             delta = event.globalPos() - self._drag_pos
             self.move(self.x() + delta.x(), self.y() + delta.y())
             self._drag_pos = event.globalPos()
+            return True
 
-    def _caption_double_click(self, event):
-        if event.button() == Qt.LeftButton:
-            self._toggle_max()
+        if etype == QEvent.MouseButtonRelease and hasattr(self, '_drag_pos'):
+            del self._drag_pos
+            self._caption_bar.releaseMouse()
+            return True
+
+        if etype == QEvent.MouseButtonDblClick and event.button() == Qt.LeftButton:
+            if not self._is_interactive_widget(obj):
+                self._toggle_max()
+                return True
+
+        return False
+
+    def _is_caption_descendant(self, widget) -> bool:
+        """Return True if *widget* is the caption bar or any of its descendants."""
+        while widget is not None:
+            if widget is self._caption_bar:
+                return True
+            widget = widget.parentWidget()
+        return False
+
+    def _is_interactive_widget(self, widget) -> bool:
+        """Return True if *widget* is a button/menu-item that needs mouse events."""
+        w = widget
+        while w is not None and w is not self._caption_bar:
+            if isinstance(w, QPushButton):
+                return True
+            if isinstance(w, QMenuBar):
+                cp = w.mapFromGlobal(QCursor.pos())
+                return w.actionAt(cp) is not None
+            if isinstance(w, QLineEdit):
+                return True
+            w = w.parentWidget()
+        return False
+
+    def nativeEvent(self, eventType, message):
+        """Handle WM_NCHITTEST so the frameless window keeps resize handles."""
+        if eventType != b"windows_generic_MSG":
+            return False, 0
+
+        msg_ptr = ctypes.cast(int(message), ctypes.POINTER(_MSG))
+        msg = msg_ptr.contents
+        if msg.message != WM_NCHITTEST:
+            return False, 0
+
+        # Convert screen coords from lParam (handles sign extension for multi-monitor)
+        x_raw = msg.lParam & 0xFFFF
+        y_raw = (msg.lParam >> 16) & 0xFFFF
+        x = x_raw - 65536 if x_raw > 32767 else x_raw
+        y = y_raw - 65536 if y_raw > 32767 else y_raw
+
+        g = self.geometry()
+        on_left = x < g.x() + _BORDER
+        on_right = x > g.x() + g.width() - _BORDER
+        on_top = y < g.y() + _BORDER
+        on_bottom = y > g.y() + g.height() - _BORDER
+
+        if on_top and on_left:
+            return True, HTTOPLEFT
+        if on_top and on_right:
+            return True, HTTOPRIGHT
+        if on_bottom and on_left:
+            return True, HTBOTTOMLEFT
+        if on_bottom and on_right:
+            return True, HTBOTTOMRIGHT
+        if on_left:
+            return True, HTLEFT
+        if on_right:
+            return True, HTRIGHT
+        if on_top:
+            return True, HTTOP
+        if on_bottom:
+            return True, HTBOTTOM
+
+        return False, 0
 
     def _setup_main_surface(self):
         root = QWidget()
