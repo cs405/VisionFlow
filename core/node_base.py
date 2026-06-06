@@ -1471,6 +1471,7 @@ class SrcFilesVisionNodeData(ROINodeData):
         assets_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "images")
         if os.path.isdir(assets_dir):
             self.add_files_from_folder(assets_dir)
+        self.src_file_path = ""
 
     def to_dict(self) -> dict:
         data = super().to_dict()

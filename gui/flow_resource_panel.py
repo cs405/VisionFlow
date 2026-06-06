@@ -145,8 +145,11 @@ class ThumbnailLoader(QThread):
 
     For image files: loads and scales to 75×75.
     For video files: captures first frame and scales.
+
+    Emits QImage (not QPixmap) for thread safety — QPixmap must only be
+    created in the GUI thread because its Windows GDI handles are thread-affine.
     """
-    thumbnail_ready = pyqtSignal(str, QPixmap)   # file_path, pixmap
+    thumbnail_ready = pyqtSignal(str, QImage)   # file_path, qimage (thread-safe)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -179,14 +182,13 @@ class ThumbnailLoader(QThread):
                     new_w, new_h = int(w * scale), int(h * scale)
                     img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
-                # Convert BGR → RGB → QImage → QPixmap
+                # Convert BGR → RGB → QImage (deep copy for thread safety)
                 rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                 h, w, ch = rgb.shape
                 bytes_per_line = ch * w
-                qimg = QImage(rgb.data, w, h, bytes_per_line, QImage.Format_RGB888)
-                pixmap = QPixmap.fromImage(qimg)
+                qimg = QImage(rgb.data, w, h, bytes_per_line, QImage.Format_RGB888).copy()
 
-                self.thumbnail_ready.emit(path, pixmap)
+                self.thumbnail_ready.emit(path, qimg)
             except Exception:
                 continue
 
@@ -577,11 +579,15 @@ class FlowResourcePanel(QWidget):
     # ── Node binding ────────────────────────────────────────────────────
 
     def set_node(self, node: "SrcFilesVisionNodeData | None"):
-        """Bind to a source file node and load its thumbnails."""
+        """Bind to a source file node and load its thumbnails.
+
+        WPF: ItemsSource="{Binding SrcFilePaths}" auto-refreshes on binding change.
+        VisionFlow: explicit rebuild + showEvent ensures correct sizing.
+        """
         self._stop_loader()
         self._current_node = node
         self._clear_thumbnails()
-        self._build_thumbnails()   # create buttons first, then load images
+        self._build_thumbnails()   # create buttons + update_container_size
         self._refresh_header()
 
         if node is None:
@@ -597,14 +603,20 @@ class FlowResourcePanel(QWidget):
         self._loader.thumbnail_ready.connect(self._on_thumbnail_ready)
         self._loader.start()
 
+    def showEvent(self, event):
+        """Re-size container when panel becomes visible — guaranteed post-layout."""
+        super().showEvent(event)
+        QTimer.singleShot(0, self._update_container_size)  # singleShot(0) = next event loop tick
+
     def _stop_loader(self):
         if self._loader and self._loader.isRunning():
             self._loader.stop()
             self._loader.wait(1000)
         self._loader = None
 
-    def _on_thumbnail_ready(self, file_path: str, pixmap: QPixmap):
-        """Receive a loaded thumbnail from the background thread."""
+    def _on_thumbnail_ready(self, file_path: str, qimg: QImage):
+        """Receive a loaded thumbnail QImage and convert to QPixmap in GUI thread."""
+        pixmap = QPixmap.fromImage(qimg)
         self._pixmaps[file_path] = pixmap
         btn = self._thumbnails.get(file_path)
         if btn:
@@ -662,14 +674,17 @@ class FlowResourcePanel(QWidget):
     def _clear_thumbnails(self):
         """Remove all thumbnail buttons and cached pixmaps."""
         for btn in list(self._thumbnails.values()):
+            btn.hide()           # hide immediately before deferred delete
             btn.deleteLater()
         self._thumbnails.clear()
         self._pixmaps.clear()
         # Remove all layout items (no stretch to preserve)
         while self._thumb_layout.count():
             item = self._thumb_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+            w = item.widget()
+            if w:
+                w.hide()         # hide immediately before deferred delete
+                w.deleteLater()
         self._selected_path = ""
         self._update_container_size()
 
@@ -702,6 +717,7 @@ class FlowResourcePanel(QWidget):
             self._thumbnails[path] = btn
 
         self._update_container_size()
+        QTimer.singleShot(50, self._update_container_size)  # deferred re-size after layout settles
 
     # ── Interaction ─────────────────────────────────────────────────────
 
@@ -897,8 +913,8 @@ class FlowResourcePanel(QWidget):
             self._thumbnails[path] = btn
 
         self._update_container_size()
+        QTimer.singleShot(50, self._update_container_size)  # deferred re-size
 
-        # Start async loading for new paths only
         if new_paths:
             loader = ThumbnailLoader(self)
             loader.set_paths(new_paths)
