@@ -1,0 +1,577 @@
+{
+  "name": "demo",
+  "version": "2.0.0",
+  "description": "",
+  "author": "",
+  "created_at": "2026-06-06T05:59:57.067966",
+  "modified_at": "2026-06-06T12:47:59.223054",
+  "selected_diagram_index": 0,
+  "diagrams": [
+    {
+      "id": "6218800b-4005-4884-859b-11d45eef5ab9",
+      "name": "新建项目",
+      "description": "",
+      "width": 1000.0,
+      "height": 1500.0,
+      "location": "0,0",
+      "workflow": {
+        "name": "新建项目",
+        "nodes": [
+          {
+            "id": "7e696789",
+            "type": "CameraCaptureNodeData",
+            "name": "摄像头",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "f098e541",
+                "node_id": "7e696789",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "8fc752f1",
+                "node_id": "7e696789",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "b8cbf17e",
+                "node_id": "7e696789",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "302fba91",
+                "node_id": "7e696789",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "camera_index": 0,
+              "frame_width": 640,
+              "frame_height": 480,
+              "pixel_width": 0,
+              "pixel_height": 0,
+              "image_color_type": 0,
+              "use_all_image": false,
+              "use_auto_switch": true,
+              "src_file_path": "D:\\projects\\VisionFlow\\assets\\images\\16bit.png",
+              "use_invoked_part": true,
+              "demo_base_parameter1": "",
+              "demo_run_parameter1": "",
+              "demo_result1": "",
+              "preview_milliseconds_delay": 15,
+              "invoke_milliseconds_delay": 5
+            },
+            "pos_x": -243.0,
+            "pos_y": -500.0,
+            "use_invoked_part": true,
+            "preview_milliseconds_delay": 15,
+            "invoke_milliseconds_delay": 5,
+            "roi": {
+              "type": "FromROI",
+              "name": "使用上游ROI"
+            },
+            "src_file_paths": [
+              "D:\\projects\\VisionFlow\\assets\\images\\16bit.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\Balloon.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\Girl.bmp",
+              "D:\\projects\\VisionFlow\\assets\\images\\Mandrill.bmp",
+              "D:\\projects\\VisionFlow\\assets\\images\\aruco_markers_photo.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\aruco_markers_source.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\asahiyama.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\binarization_sample.bmp",
+              "D:\\projects\\VisionFlow\\assets\\images\\box.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\box_in_scene.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\cake.bmp",
+              "D:\\projects\\VisionFlow\\assets\\images\\cat.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\circle.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\cvmorph.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\fruits.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\goryokaku.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\hand_p.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\lenna.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\lenna511.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\maltese.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\match1.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\match2.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\penguin1.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\penguin1b.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\penguin2.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\pentagon.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\shapes.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\space_shuttle.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\tsukuba_left.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\tsukuba_right.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\very_old_newspaper.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\walkman.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\yalta.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\16bit.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\Balloon.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\Girl.bmp",
+              "D:\\projects\\VisionFlow\\assets\\images\\Mandrill.bmp",
+              "D:\\projects\\VisionFlow\\assets\\images\\aruco_markers_photo.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\aruco_markers_source.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\asahiyama.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\binarization_sample.bmp",
+              "D:\\projects\\VisionFlow\\assets\\images\\box.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\box_in_scene.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\cake.bmp",
+              "D:\\projects\\VisionFlow\\assets\\images\\cat.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\circle.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\cvmorph.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\fruits.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\goryokaku.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\hand_p.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\lenna.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\lenna511.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\maltese.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\match1.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\match2.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\penguin1.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\penguin1b.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\penguin2.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\pentagon.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\shapes.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\space_shuttle.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\tsukuba_left.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\tsukuba_right.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\very_old_newspaper.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\walkman.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\yalta.jpg"
+            ],
+            "src_file_path": "D:\\projects\\VisionFlow\\assets\\images\\16bit.png",
+            "use_all_image": false,
+            "use_auto_switch": true
+          },
+          {
+            "id": "0b8bef63",
+            "type": "BitwiseNot",
+            "name": "按位取反",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "272ed7e7",
+                "node_id": "0b8bef63",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "2af5df71",
+                "node_id": "0b8bef63",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "e34fabce",
+                "node_id": "0b8bef63",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "5fea8c54",
+                "node_id": "0b8bef63",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "use_invoked_part": true,
+              "demo_base_parameter1": "",
+              "demo_run_parameter1": "",
+              "demo_result1": "",
+              "preview_milliseconds_delay": 1500,
+              "invoke_milliseconds_delay": 500
+            },
+            "pos_x": -244.0,
+            "pos_y": -368.0,
+            "use_invoked_part": true,
+            "preview_milliseconds_delay": 1500,
+            "invoke_milliseconds_delay": 500,
+            "roi": {
+              "type": "FromROI",
+              "name": "使用上游ROI"
+            }
+          },
+          {
+            "id": "44490ffc",
+            "type": "CvtColor",
+            "name": "色彩空间转换",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "b9ac3745",
+                "node_id": "44490ffc",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "4d237c48",
+                "node_id": "44490ffc",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "9002b341",
+                "node_id": "44490ffc",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "3e842477",
+                "node_id": "44490ffc",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "color_code": "BGR2GRAY",
+              "dst_cn": 0,
+              "use_invoked_part": true,
+              "demo_base_parameter1": "",
+              "demo_run_parameter1": "",
+              "demo_result1": "",
+              "preview_milliseconds_delay": 1500,
+              "invoke_milliseconds_delay": 500
+            },
+            "pos_x": -364.0,
+            "pos_y": -197.0,
+            "use_invoked_part": true,
+            "preview_milliseconds_delay": 1500,
+            "invoke_milliseconds_delay": 500,
+            "roi": {
+              "type": "FromROI",
+              "name": "使用上游ROI"
+            }
+          },
+          {
+            "id": "485e909f",
+            "type": "Pow",
+            "name": "幂运算",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "770152ea",
+                "node_id": "485e909f",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "d83f7171",
+                "node_id": "485e909f",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "c7272d1d",
+                "node_id": "485e909f",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "5eecaf49",
+                "node_id": "485e909f",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "power": 2.0,
+              "use_invoked_part": true,
+              "demo_base_parameter1": "",
+              "demo_run_parameter1": "",
+              "demo_result1": "",
+              "preview_milliseconds_delay": 1500,
+              "invoke_milliseconds_delay": 500
+            },
+            "pos_x": -122.0,
+            "pos_y": -196.0,
+            "use_invoked_part": true,
+            "preview_milliseconds_delay": 1500,
+            "invoke_milliseconds_delay": 500,
+            "roi": {
+              "type": "FromROI",
+              "name": "使用上游ROI"
+            }
+          }
+        ],
+        "links": [
+          {
+            "link_id": "7a9a604a",
+            "from_node_id": "7e696789",
+            "from_port_id": "8fc752f1",
+            "to_node_id": "0b8bef63",
+            "to_port_id": "272ed7e7",
+            "text": ""
+          },
+          {
+            "link_id": "c947304a",
+            "from_node_id": "0b8bef63",
+            "from_port_id": "2af5df71",
+            "to_node_id": "44490ffc",
+            "to_port_id": "b9ac3745",
+            "text": ""
+          },
+          {
+            "link_id": "c577ed1d",
+            "from_node_id": "0b8bef63",
+            "from_port_id": "2af5df71",
+            "to_node_id": "485e909f",
+            "to_port_id": "770152ea",
+            "text": ""
+          }
+        ]
+      }
+    }
+  ],
+  "templates": [
+    {
+      "id": "365d25e0-2253-4fee-8c6f-299762c4cdfa",
+      "name": "模板1",
+      "description": "",
+      "width": 1000.0,
+      "height": 1500.0,
+      "location": "0,0",
+      "workflow": {
+        "name": "新建项目",
+        "nodes": [
+          {
+            "id": "f2e7ed78",
+            "type": "SrcImageFilesNodeData",
+            "name": "图像文件",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "07a4d434",
+                "node_id": "f2e7ed78",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "3154d8ef",
+                "node_id": "f2e7ed78",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "c79f0eae",
+                "node_id": "f2e7ed78",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "35c94d4b",
+                "node_id": "f2e7ed78",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "pixel_width": 0,
+              "pixel_height": 0,
+              "image_color_type": 0,
+              "use_all_image": false,
+              "use_auto_switch": true,
+              "src_file_path": "D:\\projects\\VisionFlow\\assets\\images\\16bit.png",
+              "use_invoked_part": true,
+              "demo_base_parameter1": "",
+              "demo_run_parameter1": "",
+              "demo_result1": "",
+              "preview_milliseconds_delay": 1500,
+              "invoke_milliseconds_delay": 500
+            },
+            "pos_x": -875.4599951622213,
+            "pos_y": -2660.5442779807995,
+            "use_invoked_part": true,
+            "preview_milliseconds_delay": 1500,
+            "invoke_milliseconds_delay": 500,
+            "roi": {
+              "type": "FromROI",
+              "name": "使用上游ROI"
+            },
+            "src_file_paths": [
+              "D:\\projects\\VisionFlow\\assets\\images\\16bit.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\Balloon.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\Girl.bmp",
+              "D:\\projects\\VisionFlow\\assets\\images\\Mandrill.bmp",
+              "D:\\projects\\VisionFlow\\assets\\images\\aruco_markers_photo.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\aruco_markers_source.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\asahiyama.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\binarization_sample.bmp",
+              "D:\\projects\\VisionFlow\\assets\\images\\box.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\box_in_scene.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\cake.bmp",
+              "D:\\projects\\VisionFlow\\assets\\images\\cat.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\circle.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\cvmorph.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\fruits.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\goryokaku.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\hand_p.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\lenna.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\lenna511.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\maltese.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\match1.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\match2.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\penguin1.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\penguin1b.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\penguin2.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\pentagon.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\shapes.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\space_shuttle.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\tsukuba_left.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\tsukuba_right.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\very_old_newspaper.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\walkman.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\yalta.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\16bit.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\Balloon.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\Girl.bmp",
+              "D:\\projects\\VisionFlow\\assets\\images\\Mandrill.bmp",
+              "D:\\projects\\VisionFlow\\assets\\images\\aruco_markers_photo.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\aruco_markers_source.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\asahiyama.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\binarization_sample.bmp",
+              "D:\\projects\\VisionFlow\\assets\\images\\box.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\box_in_scene.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\cake.bmp",
+              "D:\\projects\\VisionFlow\\assets\\images\\cat.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\circle.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\cvmorph.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\fruits.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\goryokaku.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\hand_p.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\lenna.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\lenna511.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\maltese.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\match1.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\match2.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\penguin1.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\penguin1b.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\penguin2.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\pentagon.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\shapes.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\space_shuttle.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\tsukuba_left.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\tsukuba_right.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\very_old_newspaper.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\walkman.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\yalta.jpg"
+            ],
+            "src_file_path": "D:\\projects\\VisionFlow\\assets\\images\\16bit.png",
+            "use_all_image": false,
+            "use_auto_switch": true
+          },
+          {
+            "id": "e6277bdc",
+            "type": "BitwiseNot",
+            "name": "按位取反",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "3597f54c",
+                "node_id": "e6277bdc",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "799ca9c5",
+                "node_id": "e6277bdc",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "36c31ec4",
+                "node_id": "e6277bdc",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "5780dab8",
+                "node_id": "e6277bdc",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "use_invoked_part": true,
+              "demo_base_parameter1": "",
+              "demo_run_parameter1": "",
+              "demo_result1": "",
+              "preview_milliseconds_delay": 1500,
+              "invoke_milliseconds_delay": 500
+            },
+            "pos_x": -923.8594095289133,
+            "pos_y": -2502.534425195423,
+            "use_invoked_part": true,
+            "preview_milliseconds_delay": 1500,
+            "invoke_milliseconds_delay": 500,
+            "roi": {
+              "type": "FromROI",
+              "name": "使用上游ROI"
+            }
+          }
+        ],
+        "links": [
+          {
+            "link_id": "dc04e52f",
+            "from_node_id": "f2e7ed78",
+            "from_port_id": "3154d8ef",
+            "to_node_id": "e6277bdc",
+            "to_port_id": "3597f54c",
+            "text": ""
+          }
+        ]
+      }
+    }
+  ]
+}

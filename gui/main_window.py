@@ -1576,6 +1576,8 @@ class MainWindow(QMainWindow):
         page = self._current_diagram_page()
         self._result_panel.clear_history()  # WPF: Messages per-DiagramData
         self._workflow = diagram.workflow if diagram else None
+        self._result_panel.bind_workflow(self._workflow)
+        self._result_panel.sync_history_from_workflow()
         self._wf_runner.bind(self._workflow)
         self._diagram_editor = getattr(page, "editor", None)
         self._node_cnt_lbl.setText(f"节点: {len(self._workflow.get_all_nodes()) if self._workflow else 0}")
@@ -1706,16 +1708,16 @@ class MainWindow(QMainWindow):
         open_node_dialog(node_data, parent=self)
 
     def _on_node_executed(self, node_data, state: str, time_span: str):
-        """Log node execution to history (WPF Messages.Add).
+        """Handle node execution completion.
 
-        In continuous mode, also refresh the image panel when the executed
-        node is the currently selected one, so the user sees real-time results.
+        History sync is handled by ResultPanel's direct subscription to
+        NODE_COMPLETED / NODE_ERROR events (via core.events.event_system),
+        bypassing the editor's node_executed signal chain which can fail
+        due to dual WorkflowEngine instances.
+
+        In continuous mode, refresh the image panel when the executed
+        node is the currently selected one.
         """
-        if isinstance(node_data, VisionNodeData):
-            src_path = ""
-            if hasattr(node_data, 'src_file_path'):
-                src_path = node_data.src_file_path or ""
-            self._result_panel.add_to_history(node_data, state, time_span, src_path)
 
         # Continuous mode: real-time image update for the selected node
         if (getattr(self, '_continuous_mode', False)

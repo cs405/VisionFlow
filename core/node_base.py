@@ -833,6 +833,16 @@ class VisionNodeData(DemoNodeDataBase):
         if self._result_presenter is None:
             self._result_presenter = self.create_result_presenter()
 
+        # WPF OnInvokedPart: write to history FIRST, then publish events.
+        # Callbacks registered via workflow.on_history_changed() (e.g. ResultPanel)
+        # fire synchronously here and use Qt::QueuedConnection to marshal to the
+        # main thread for thread-safe QTableWidget access.
+        import time as _time
+        state = "Success" if result.is_ok else "Error"
+        ts = _time.strftime("%H:%M:%S")
+        if self.diagram_data and hasattr(self.diagram_data, 'on_node_completed'):
+            self.diagram_data.on_node_completed(self, state, ts)
+
         if result.is_ok:
             event_system.publish(EventType.NODE_COMPLETED, sender=self, result=result)
         elif result.is_error:

@@ -22,7 +22,7 @@ from PyQt5.QtGui import QColor, QFont, QPainter, QPixmap
 from core.node_base import VisionNodeData
 from gui.image_viewer import OverlayType
 from core.result_presenter import (ResultItem, RectangleResultItem, LineResultItem,
-                                    ScoreRectangleResultItem, NodeResult,
+                                    ScoreRectangleResultItem, VisionMessage,
                                     ResultItemType)
 from gui.font_icons import FontIcons, ICON_FONT_FAMILY
 
@@ -126,15 +126,22 @@ class ResultPanel(QWidget):
     item_selected = pyqtSignal(str)
     node_jump_requested = pyqtSignal(str)
     image_update_requested = pyqtSignal(object)  # numpy array or QPixmap
+    _history_sync_requested = pyqtSignal()       # cross-thread marshal for history sync
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._image_viewer = None
         self._overlay_map: dict[int, str] = {}  # row → overlay uid
-        self._history_results: list[NodeResult] = []
         self._current_node: VisionNodeData | None = None
         self._icon_delegate: IconTextDelegate | None = None
+        self._workflow = None  # WPF: DiagramData reference for Messages
         self._setup_ui()
+
+        # Cross-thread marshaling: WorkflowEngine.on_history_changed() callback
+        # fires in the worker thread.  _history_sync_requested uses
+        # Qt::QueuedConnection to invoke sync_history_from_workflow() safely
+        # in the main thread where QTableWidget access is legal.
+        self._history_sync_requested.connect(self.sync_history_from_workflow)
 
     def set_image_viewer(self, viewer):
         self._image_viewer = viewer
@@ -321,97 +328,132 @@ class ResultPanel(QWidget):
 
     # ── History ─────────────────────────────────────────────────────────
 
-    def add_to_history(self, node: VisionNodeData, state: str = "Success",
-                       time_span: str = "", src_path: str = ""):
-        """Add a node execution result to the history table (WPF Messages.Add).
+    def bind_workflow(self, workflow):
+        """Bind to a workflow's Messages collection (WPF: DataContext binding).
 
-        Args:
-            node: the executed node
-            state: "Success" / "Error" / "Running"
-            time_span: formatted time string
-            src_path: source file path at time of execution
+        Registers a callback on the workflow via on_history_changed().
+        When the workflow adds/updates messages, the callback emits
+        _history_sync_requested which uses Qt::QueuedConnection to marshal
+        sync_history_from_workflow() to the main thread.
         """
-        import datetime
-        entry = NodeResult(
-            node_id=node.node_id,
-            node_name=node.name,
-            node_type=type(node).__name__,
-            message=node.message or "",
-        )
-        entry.success = (state == "Success")
-        entry.timestamp = datetime.datetime.now().strftime("%H:%M:%S")
-        self._history_results.append(entry)
-        if len(self._history_results) > 200:
-            self._history_results = self._history_results[-200:]
+        self._workflow = workflow
+        if workflow and hasattr(workflow, 'on_history_changed'):
+            workflow.on_history_changed(lambda: self._history_sync_requested.emit())
 
+    def sync_history_from_workflow(self):
+        """Rebuild history table from workflow.messages (WPF: ItemsSource refresh).
+
+        Called when node execution completes or when switching workflows.
+        For video/camera nodes, finds existing row by result_node_data and updates
+        in-place instead of adding a new row.
+
+        Uses get_messages_snapshot() for thread-safe access (workflow executes
+        nodes in ThreadPoolExecutor threads, UI reads from main thread).
+        """
+        if self._workflow is None:
+            return
+        if hasattr(self._workflow, 'get_messages_snapshot'):
+            messages = self._workflow.get_messages_snapshot()
+        else:
+            messages = getattr(self._workflow, 'messages', []) or []
+
+        # Check if the last message already has a matching row (update case)
+        if messages:
+            last_msg = messages[-1]
+            last_node = last_msg.result_node_data
+            if last_node is not None:
+                for row in range(self._history_table.rowCount()):
+                    item = self._history_table.item(row, 0)
+                    if item and item.data(Qt.UserRole) == last_node.node_id:
+                        # Update existing row in-place (WPF: find by ResultNodeData)
+                        self._update_history_row(row, last_msg)
+                        self._history_table.scrollToBottom()
+                        return
+
+        # Full rebuild from workflow messages
+        self._history_table.setRowCount(0)
+        for msg in messages:
+            self._add_history_row(msg)
+        self._history_table.scrollToBottom()
+
+    def _add_history_row(self, msg: VisionMessage):
+        """Add a single VisionMessage row to the history table."""
         row = self._history_table.rowCount()
         self._history_table.insertRow(row)
+        node_id = ""
+        if msg.result_node_data and hasattr(msg.result_node_data, 'node_id'):
+            node_id = msg.result_node_data.node_id
 
         # 执行序号
-        idx_item = QTableWidgetItem(str(len(self._history_results)))
+        idx_item = QTableWidgetItem(str(msg.index))
         idx_item.setForeground(QColor("#666"))
-        idx_item.setData(Qt.UserRole, node.node_id)
+        idx_item.setData(Qt.UserRole, node_id)
         idx_item.setTextAlignment(Qt.AlignCenter)
         self._history_table.setItem(row, 0, idx_item)
 
         # 执行时间
-        time_item = QTableWidgetItem(time_span or entry.timestamp)
+        time_item = QTableWidgetItem(msg.time_span)
         time_item.setForeground(QColor("#999"))
-        time_item.setData(Qt.UserRole, node.node_id)
+        time_item.setData(Qt.UserRole, node_id)
         self._history_table.setItem(row, 1, time_item)
 
         # 模块
-        name_item = QTableWidgetItem(node.name)
+        name_item = QTableWidgetItem(msg.type_name)
         name_item.setForeground(QColor("#dcdcdc"))
-        name_item.setData(Qt.UserRole, node.node_id)
+        name_item.setData(Qt.UserRole, node_id)
         self._history_table.setItem(row, 2, name_item)
 
-        # 结果数据 — icon + text via delegate
-        msg_text = node.message or ("完成" if entry.success else "失败")
+        # 结果数据 — icon + text
+        msg_text = msg.message or ("完成" if msg.state == "Success" else "失败")
         msg_item = QTableWidgetItem(msg_text)
-        msg_item.setData(Qt.UserRole, node.node_id)
-        icon = STATE_ICONS.get(state, FontIcons.Info)
-        color = STATE_COLORS.get(state, theme_manager.color('text_primary').name())
-        self._icon_delegate.set_row_icon(row, icon, color)
+        msg_item.setData(Qt.UserRole, node_id)
+        icon = STATE_ICONS.get(msg.state, FontIcons.Info)
+        color = STATE_COLORS.get(msg.state, theme_manager.color('text_primary').name())
+        if self._icon_delegate:
+            self._icon_delegate.set_row_icon(row, icon, color)
         self._history_table.setItem(row, 3, msg_item)
 
-        # Also store result image for selection linkage
-        self._history_results[-1]._result_image_source = getattr(
-            node, '_result_image_source', None)
-        self._history_results[-1]._src_path = src_path
-
-        self._history_table.scrollToBottom()
-
-    def update_history_state(self, node_id: str, state: str, message: str = ""):
-        """Update the last history entry for a given node (for real-time updates)."""
-        for row in range(self._history_table.rowCount() - 1, -1, -1):
-            item = self._history_table.item(row, 0)
-            if item and item.data(Qt.UserRole) == node_id:
-                icon = STATE_ICONS.get(state, FontIcons.Info)
-                color = STATE_COLORS.get(state, theme_manager.color('text_primary').name())
-                self._icon_delegate.set_row_icon(row, icon, color)
-                if message:
-                    msg_item = self._history_table.item(row, 3)
-                    if msg_item:
-                        msg_item.setText(message)
-                break
+    def _update_history_row(self, row: int, msg: VisionMessage):
+        """Update an existing history row in-place (for video/camera continuous nodes)."""
+        # Update time
+        time_item = self._history_table.item(row, 1)
+        if time_item:
+            time_item.setText(msg.time_span)
+        # Update message text
+        msg_item = self._history_table.item(row, 3)
+        msg_text = msg.message or ("完成" if msg.state == "Success" else "失败")
+        if msg_item:
+            msg_item.setText(msg_text)
+        # Update icon
+        icon = STATE_ICONS.get(msg.state, FontIcons.Info)
+        color = STATE_COLORS.get(msg.state, theme_manager.color('text_primary').name())
+        if self._icon_delegate:
+            self._icon_delegate.set_row_icon(row, icon, color)
 
     def _on_history_cell_clicked(self, row: int, col: int):
-        """Handle history row click — update main image + jump to node."""
-        item = self._history_table.item(row, 0)
-        if item is None:
+        """Handle history row click — update main image + jump to node.
+
+        WPF: SelectedMessageChangedCommand → SetResultNodeData(message)
+          → ResultImageSource = message.ResultImageSource  // 更新主图像
+          → ResultNodeData = message.ResultNodeData         // 更新属性面板
+        """
+        if self._workflow is None:
             return
-        node_id = item.data(Qt.UserRole)
+        if hasattr(self._workflow, 'get_messages_snapshot'):
+            messages = self._workflow.get_messages_snapshot()
+        else:
+            messages = getattr(self._workflow, 'messages', []) or []
+        if not (0 <= row < len(messages)):
+            return
+        msg = messages[row]
 
-        # Switch to image tab if there's a result image stored
-        if 0 <= row < len(self._history_results):
-            entry = self._history_results[row]
-            result_image = getattr(entry, '_result_image_source', None)
-            if result_image is not None:
-                self.image_update_requested.emit(result_image)
+        # Update main image (WPF: ResultImageSource = message.ResultImageSource)
+        if msg.result_image_source is not None:
+            self.image_update_requested.emit(msg.result_image_source)
 
-        if node_id:
-            self.node_jump_requested.emit(node_id)
+        # Jump to node + update property panel (WPF: ResultNodeData = message.ResultNodeData)
+        if msg.result_node_data and hasattr(msg.result_node_data, 'node_id'):
+            self.node_jump_requested.emit(msg.result_node_data.node_id)
 
     # ── Interaction (6.4 ZoomToRect) ───────────────────────────────────
 
@@ -516,14 +558,11 @@ class ResultPanel(QWidget):
         self._current_table.setRowCount(0)
         self._history_table.setRowCount(0)
         self._overlay_map.clear()
-        self._history_results.clear()
+        self._workflow = None
         self._current_node = None
 
     def clear_history(self):
-        """Clear only the history table (WPF: Messages.Clear on diagram switch).
-
-        WPF: Messages is an ObservableCollection<IVisionMessage> on DiagramData.
-        Each diagram has its own Messages — switching diagrams clears the table.
-        """
+        """Clear only the history table (WPF: clear Messages on new run or diagram switch)."""
         self._history_table.setRowCount(0)
-        self._history_results.clear()
+        if self._workflow and hasattr(self._workflow, 'clear_messages'):
+            self._workflow.clear_messages()

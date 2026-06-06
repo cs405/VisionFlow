@@ -20,6 +20,7 @@ from core.node_base import (
 )
 from core.data_packet import FlowableResult
 from core.events import EventType, event_system
+from core.result_presenter import VisionMessage
 
 
 class WorkflowState(Enum):
@@ -59,6 +60,7 @@ class WorkflowEngine:
     """
 
     def __init__(self, name: str = "新建流程"):
+        import threading
         self.name = name
         self.state: WorkflowState = WorkflowState.IDLE
         self._nodes: dict[str, NodeBase] = {}
@@ -69,6 +71,11 @@ class WorkflowEngine:
         self.result_image_source: Any = None
         self.flowable_mode: DiagramFlowableMode = DiagramFlowableMode.NODE
         self.message: str = ""
+        # WPF: ObservableCollection<IVisionMessage> Messages on DiagramData
+        self.messages: list[VisionMessage] = []
+        self.current_message: VisionMessage | None = None
+        self._messages_lock = threading.Lock()  # protect messages from ThreadPoolExecutor
+        self._history_callbacks: list[Callable] = []  # WPF: PropertyChanged → UI binding
 
     # -- Node management --
 
@@ -100,6 +107,100 @@ class WorkflowEngine:
 
     def get_all_nodes(self) -> list[NodeBase]:
         return list(self._nodes.values())
+
+    # ── History Messages (WPF: VisionDiagramDataBase.OnInvokedPart + Messages) ─
+
+    def on_history_changed(self, callback: Callable):
+        """Register a callback invoked when Messages changes (WPF: binding equivalent).
+
+        The callback receives no arguments — callers should read get_messages_snapshot().
+        Called from any thread; callers should marshal to their target thread as needed.
+        """
+        self._history_callbacks.append(callback)
+
+    def _notify_history_callbacks(self):
+        """Call all registered history change callbacks."""
+        for cb in self._history_callbacks:
+            try:
+                cb()
+            except Exception:
+                pass
+
+    def on_node_completed(self, node: VisionNodeData, state: str, time_span: str):
+        """WPF OnInvokedPart(IPartData) equivalent — add/update history message.
+
+        Decoupled from UI: WorkflowEngine owns the Messages collection,
+        ResultPanel reads from it. Each workflow has its own Messages,
+        so switching tabs isolates history.
+
+        Thread-safe: called from ThreadPoolExecutor worker threads.
+        """
+        import time
+        if not getattr(node, 'use_invoked_part', True):
+            return
+
+        src_path = ""
+        if hasattr(node, 'src_file_path'):
+            src_path = node.src_file_path or ""
+
+        result_image = getattr(node, '_result_image_source', None)
+
+        with self._messages_lock:
+            # WPF: find existing by ResultNodeData match → update (for video/camera nodes)
+            for msg in self.messages:
+                if msg.result_node_data is node:
+                    msg.time_span = time_span
+                    msg.message = node.message or msg.message
+                    msg.state = state
+                    if result_image is not None:
+                        msg.result_image_source = result_image
+                    msg.src_file_path = src_path
+                    self._log_current_message_locked()
+                    self._notify_history_callbacks()
+                    return
+
+            # New entry
+            msg = VisionMessage(
+                index=len(self.messages) + 1,
+                time_span=time_span,
+                type_name=node.name,
+                message=node.message or "",
+                state=state,
+                result_image_source=result_image,
+                src_file_path=src_path,
+                result_node_data=node,
+            )
+            self.messages.append(msg)
+            self._log_current_message_locked()
+            self._notify_history_callbacks()
+
+    def _log_current_message_locked(self):
+        """WPF LogCurrentMessage() — caller must hold _messages_lock."""
+        if not self.messages:
+            self.current_message = None
+            return
+        last = self.messages[-1]
+        self.current_message = VisionMessage(
+            index=0,
+            time_span=last.time_span,
+            type_name="",
+            message=self.message or last.message,
+            state=last.state,
+            result_image_source=last.result_image_source,
+            src_file_path=last.src_file_path,
+            result_node_data=last.result_node_data,
+        )
+
+    def get_messages_snapshot(self) -> list[VisionMessage]:
+        """Return a thread-safe copy of messages for UI display."""
+        with self._messages_lock:
+            return list(self.messages)
+
+    def clear_messages(self):
+        """Clear history messages (WPF: Messages.Clear() on new run)."""
+        with self._messages_lock:
+            self.messages.clear()
+            self.current_message = None
 
     def get_start_nodes(self) -> list[NodeBase]:
         """Get root nodes (no upstream connections)."""
