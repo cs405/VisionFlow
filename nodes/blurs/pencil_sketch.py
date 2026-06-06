@@ -17,7 +17,7 @@ class PencilSketch(OpenCVNodeDataBase):
         self.name = "铅笔素描"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         gray, color = cv2.pencilSketch(mat, sigma_s=self.sigma_s, sigma_r=self.sigma_r,
                                          shade_factor=self.shade_factor)
@@ -37,7 +37,7 @@ class Stylization(OpenCVNodeDataBase):
         self.name = "风格化"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         return self.ok(cv2.stylization(mat, sigma_s=self.sigma_s, sigma_r=self.sigma_r))
 

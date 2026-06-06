@@ -42,7 +42,7 @@ class OnnxClassification(_OnnxBase):
         self.name = "ONNX分类"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         net = self._get_net()
         if net is None: return self.error(mat, "模型未加载")
@@ -73,7 +73,7 @@ class OnnxObjectDetection(_OnnxBase):
         self.name = "ONNX目标检测"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         net = self._get_net()
         if net is None: return self.error(mat, "模型未加载")
@@ -108,7 +108,7 @@ class OnnxSemanticSegmentation(_OnnxBase):
         self.name = "ONNX语义分割"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         net = self._get_net()
         if net is None: return self.error(mat, "模型未加载")
@@ -134,7 +134,7 @@ class OnnxInference(_OnnxBase):
         self.name = "ONNX推理"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         net = self._get_net()
         if net is None: return self.error(mat, "模型未加载")

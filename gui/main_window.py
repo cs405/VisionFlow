@@ -1067,6 +1067,9 @@ class MainWindow(QMainWindow):
         event_system.subscribe(EventType.WORKFLOW_STOPPED, self._on_wf_stopped)
         event_system.subscribe(EventType.PROJECT_LOADED, self._on_proj_load)
         event_system.subscribe(EventType.PROJECT_SAVED, self._on_proj_save)
+        # File iteration events (WPF "运行全部" / "显示全部")
+        event_system.subscribe(EventType.FILE_ITERATION_NEXT, self._on_file_iteration_next)
+        event_system.subscribe(EventType.FILE_ITERATION_COMPLETED, self._on_file_iteration_completed)
 
     def closeEvent(self, event):
         self._sync_workflow_to_project()
@@ -1730,6 +1733,47 @@ class MainWindow(QMainWindow):
         """Runs on worker thread — emit signal to update UI on main thread."""
         self._wf_ui_update.emit("stopped", {})
 
+    def _on_file_iteration_next(self, sender, **kwargs):
+        """Handle FILE_ITERATION_NEXT — update image display to show current file
+        during "运行全部" loop.
+
+        WPF: VisionDiagramDataBase.Start() sets ResultImageSource = item.ToImageSource()
+             before each file's workflow execution.
+        Decoupled: UI subscribes to event, updates image viewer from main thread.
+        """
+        file_path = kwargs.get("file_path", "")
+        index = kwargs.get("index", 0)
+        total = kwargs.get("total", 0)
+        if not file_path:
+            return
+
+        # WPF: ResultImageSource = item.ToImageSource()
+        # Update image display on main thread
+        import cv2
+        try:
+            img = cv2.imread(file_path, cv2.IMREAD_COLOR)
+            if img is not None:
+                # Use invokeMethod-style to ensure UI update on main thread
+                h, w = img.shape[:2]
+                self._img_panel.set_image(img)
+                self._img_panel.set_image_info(file_path, w, h)
+                self._center_tabs.setCurrentIndex(0)  # switch to image tab
+                self._side_status_strip.set_status(
+                    f"显示全部: {os.path.basename(file_path)} [{index+1}/{total}]", "#2196f3"
+                )
+        except Exception:
+            pass
+
+    def _on_file_iteration_completed(self, sender, **kwargs):
+        """Handle FILE_ITERATION_COMPLETED — reset display state after "运行全部" loop.
+
+        WPF: RunModeResult = result (bool?), LogCurrentMessage()
+        """
+        total = kwargs.get("total", 0)
+        self._side_status_strip.set_status(f"显示全部完成: {total} 个文件", "#4caf50")
+        # Finalize node states (same as _finalize_execution_state for single run)
+        self._finalize_execution_state()
+
     def _on_wf_ui_update(self, event: str, data: dict):
         """Slot called on MAIN THREAD via queued signal.  Safe to touch widgets."""
         if event == "start":
@@ -1880,6 +1924,11 @@ class MainWindow(QMainWindow):
     def _start_execution(self, continuous: bool = False):
         """Common execution entry point — sync, guard, delegate to WorkflowRunner.
 
+        WPF alignment:
+          - Single run → VisionDiagramDataBase.Start() (single image)
+          - "运行全部" → VisionDiagramDataBase.Start() + UseAllImage loop
+          - Continuous → loop with interval
+
         Node states are set directly from the main thread here — NOT via
         cross-thread events, which are unreliable with threading.Thread.
         """
@@ -1891,8 +1940,6 @@ class MainWindow(QMainWindow):
             self._log_panel.warning("流程图无节点，无法开始")
             return
 
-        label = "连续执行" if continuous else "开始执行流程"
-        self._log_panel.info(f"{label}... ({node_count} 个节点)")
         self._continuous_mode = continuous
         self._stop_requested = False
 
@@ -1904,6 +1951,25 @@ class MainWindow(QMainWindow):
         if editor:
             for item in editor.scene.get_all_node_items():
                 item.set_state(NodeState.RUNNING)
+
+        # Detect "运行全部" (WPF: VisionDiagramDataBase.Start() UseAllImage branch)
+        if not continuous:
+            start_node = self._workflow.get_start_node_data()
+            if isinstance(start_node, SrcFilesVisionNodeData) and start_node.use_all_image:
+                file_paths = start_node.src_file_paths
+                if file_paths:
+                    auto_switch = getattr(start_node, 'use_auto_switch', True)
+                    self._log_panel.info(f"运行全部: {len(file_paths)} 个文件 ({node_count} 个节点)")
+                    self._wf_runner.start_run_all(
+                        file_paths=file_paths,
+                        auto_switch=auto_switch,
+                        interval=1.0,  # WPF: Task.Delay(1000)
+                    )
+                    # State finalization is handled by _on_file_iteration_completed
+                    return
+
+        label = "连续执行" if continuous else "开始执行流程"
+        self._log_panel.info(f"{label}... ({node_count} 个节点)")
 
         if continuous:
             self._wf_runner.start_continuous()

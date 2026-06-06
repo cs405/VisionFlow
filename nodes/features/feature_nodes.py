@@ -11,7 +11,7 @@ class _FeatureBase(OpenCVNodeDataBase):
     feature_count = Property(0, name="特征点数量", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         try:
             detector = self._create_detector()
@@ -65,7 +65,7 @@ class FreakFeatureDetector(OpenCVNodeDataBase):
         self.name = "FREAK"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         gray = cv2.cvtColor(mat, cv2.COLOR_BGR2GRAY) if len(mat.shape) == 3 else mat
         fast = cv2.FastFeatureDetector_create()
@@ -111,7 +111,7 @@ class HomographyTransform(OpenCVNodeDataBase):
         self.name = "单应性变换"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         if src is None or src.mat is None:
             return self.ok(mat, "无参考图像")

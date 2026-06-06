@@ -304,6 +304,32 @@ class WorkflowEngine:
             return FlowableResult.error(message="未找到起始节点（需要无输入端口且有输出端口的节点）")
         return self.execute()
 
+    # ═══════════════════════════════════════════════════════════════════════
+    # TODO: run_all_images — WPF VisionDiagramDataBase.Start() "运行全部" port
+    #
+    # WPF 实现要点（VisionDiagramDataBase.Start(), RunDiagramDataPresenter）：
+    #
+    # 1. 找到起始节点，判断是否为 ISrcFilesNodeData
+    # 2. 如果 UseAllImage == true：
+    #    a. 遍历所有 SrcFilePaths
+    #    b. 每次循环：
+    #       - 检查状态（CANCELLING → break）
+    #       - 检查 UseAllImage 是否仍为 true（可中途取消）
+    #       - 更新 ResultImageSource = item.ToImageSource()  # 显示当前图
+    #       - 如果 UseAutoSwitch → 更新 SrcFilePath = item
+    #       - 调用源节点 Start() 触发整个流程
+    #       - 收集结果到 Messages 集合
+    #       - Task.Delay(1000) — 1秒间隔
+    # 3. 如果 UseAllImage == false：单次运行
+    # 4. 外部 RunDiagramDataPresenter.StartAllCommand 手动遍历文件列表
+    #    → StartOne() 临时设置 UseAllImage=false, 运行, 恢复原值
+    #
+    # VisionFlow 实现策略（解耦）：
+    #   - WorkflowEngine 保持单次执行职责不变
+    #   - 文件遍历逻辑放在 WorkflowRunner（对标 RunDiagramDataPresenter）
+    #   - per-file 进度通过事件驱动——UI 订阅 FILE_ITERATION 事件更新图像显示
+    # ═══════════════════════════════════════════════════════════════════════
+
     def execute(self) -> FlowableResult:
         """Execute the entire workflow.
 

@@ -12,7 +12,7 @@ class _OutputBase(OpenCVNodeDataBase):
     __group__ = "结果输出模块"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         msg = self._get_message()
         event_system.publish(self._event_type, sender=self, message=msg)
         return self.ok(mat, msg)
@@ -90,7 +90,7 @@ class ShowFatalOutputNode(_OutputBase):
     def _event_type(self): return EventType.MESSAGE_ERROR
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         msg = self._get_message()
         event_system.publish(EventType.MESSAGE_ERROR, sender=self, message=msg)
         return FlowableResult(mat, msg, FlowableResultState.ERROR)

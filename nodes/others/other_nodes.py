@@ -19,7 +19,7 @@ class HaarCascade(OpenCVNodeDataBase):
         self.name = "Haar级联分类器"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         gray = cv2.cvtColor(mat, cv2.COLOR_BGR2GRAY) if len(mat.shape) == 3 else mat
         if self.cascade_path:
@@ -44,7 +44,7 @@ class LbpCascade(HaarCascade):
         self.name = "LBP级联分类器"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         gray = cv2.cvtColor(mat, cv2.COLOR_BGR2GRAY) if len(mat.shape) == 3 else mat
         cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "lbpcascade_frontalface_improved.xml")
@@ -68,7 +68,7 @@ class Hist(OpenCVNodeDataBase):
         self.name = "直方图"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         gray = cv2.cvtColor(mat, cv2.COLOR_BGR2GRAY) if len(mat.shape) == 3 else mat
         hist = cv2.calcHist([gray], [0], None, [self.hist_size], [0, 256])
@@ -88,7 +88,7 @@ class Hog(OpenCVNodeDataBase):
     def __init__(self): super().__init__(); self.name = "HOG描述子"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         gray = cv2.cvtColor(mat, cv2.COLOR_BGR2GRAY) if len(mat.shape) == 3 else mat
         hog = cv2.HOGDescriptor()
@@ -108,7 +108,7 @@ class SeamlessClone(OpenCVNodeDataBase):
         self.name = "无缝融合"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         if src is None or src.mat is None: return self.ok(mat, "无目标背景")
         h, w = mat.shape[:2]
@@ -127,7 +127,7 @@ class Stitching(OpenCVNodeDataBase):
     def __init__(self): super().__init__(); self.name = "图像拼接"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         if src is None or src.mat is None: return self.ok(mat, "需要两张图像进行拼接")
         try:
@@ -148,7 +148,7 @@ class Subdiv2D(OpenCVNodeDataBase):
     def __init__(self): super().__init__(); self.name = "2D细分"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         h, w = mat.shape[:2]
         subdiv = cv2.Subdiv2D((0, 0, w, h))
@@ -176,7 +176,7 @@ class SVM(OpenCVNodeDataBase):
     def __init__(self): super().__init__(); self.name = "SVM分类器"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         svm = cv2.ml.SVM_create()
         type_map = {"C_SVC": cv2.ml.SVM_C_SVC, "NU_SVC": cv2.ml.SVM_NU_SVC, "ONE_CLASS": cv2.ml.SVM_ONE_CLASS}
@@ -199,7 +199,7 @@ class WarpAffineTransform(OpenCVNodeDataBase):
     def __init__(self): super().__init__(); self.name = "仿射变换"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         h, w = mat.shape[:2]
         center = (w // 2, h // 2)
@@ -227,7 +227,7 @@ class WarpPerspectiveTransform(OpenCVNodeDataBase):
     def __init__(self): super().__init__(); self.name = "透视变换"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         h, w = mat.shape[:2]
         src_pts = np.float32([[0, 0], [w, 0], [0, h], [w, h]])
@@ -248,7 +248,7 @@ class DnnSuperres(OpenCVNodeDataBase):
     def __init__(self): super().__init__(); self.name = "DNN超分辨率"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         try:
             sr = cv2.dnn_superres.DnnSuperResImpl_create()
@@ -272,7 +272,7 @@ class Yolov3(OpenCVNodeDataBase):
     def __init__(self): super().__init__(); self.name = "YOLOv3检测器"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         if not self.config_path or not self.weights_path:
             self._net = cv2.dnn.readNetFromDarknet(

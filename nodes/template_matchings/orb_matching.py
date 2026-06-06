@@ -49,7 +49,7 @@ class OrbFeatureMatchingNode(Base64MatchingNodeData, OpenCVNodeDataBase):
 
     def invoke_core(self, src_image_node_data, from_node_data, diagram) -> FlowableResult:
         # 1. 获取输入图像（上游节点输出）
-        mat = from_node_data.mat if from_node_data else None
+        mat = self.get_input_mat(from_node_data.mat if from_node_data else None)
         if mat is None:
             return self.error(None, "无输入图像，请连接上游节点")
 

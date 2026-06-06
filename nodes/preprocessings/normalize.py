@@ -17,7 +17,7 @@ class Normalize(OpenCVNodeDataBase):
         self.name = "归一化"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None:
             return self.error(None, "无输入图像")
         nmap = {"MinMax": cv2.NORM_MINMAX, "L1": cv2.NORM_L1, "L2": cv2.NORM_L2, "INF": cv2.NORM_INF}

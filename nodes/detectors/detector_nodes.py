@@ -18,7 +18,7 @@ class Canny(OpenCVNodeDataBase):
         self.name = "Canny边缘检测"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         gray = cv2.cvtColor(mat, cv2.COLOR_BGR2GRAY) if len(mat.shape) == 3 else mat
         result = cv2.Canny(gray, self.threshold1, self.threshold2,
@@ -38,7 +38,7 @@ class FindContours(OpenCVNodeDataBase):
         self.name = "查找轮廓"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         gray = cv2.cvtColor(mat, cv2.COLOR_BGR2GRAY) if len(mat.shape) == 3 else mat
         _, binary = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)
@@ -63,7 +63,7 @@ class HoughLines(OpenCVNodeDataBase):
         self.name = "霍夫线检测"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         gray = cv2.cvtColor(mat, cv2.COLOR_BGR2GRAY) if len(mat.shape) == 3 else mat
         edges = cv2.Canny(gray, 50, 200)
@@ -97,7 +97,7 @@ class HoughLinesP(OpenCVNodeDataBase):
         self.name = "霍夫线段检测"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         gray = cv2.cvtColor(mat, cv2.COLOR_BGR2GRAY) if len(mat.shape) == 3 else mat
         edges = cv2.Canny(gray, 50, 200)
@@ -124,7 +124,7 @@ class RenderBlobs(OpenCVNodeDataBase):
         self.name = "Blob渲染"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         gray = cv2.cvtColor(mat, cv2.COLOR_BGR2GRAY) if len(mat.shape) == 3 else mat
         _, binary = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)
@@ -147,7 +147,7 @@ class BlobDetector(OpenCVNodeDataBase):
         self.name = "Blob检测器"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         params = cv2.SimpleBlobDetector_Params()
         detector = cv2.SimpleBlobDetector_create(params)
@@ -169,7 +169,7 @@ class QRCode(OpenCVNodeDataBase):
         self.name = "二维码识别"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         detector = cv2.QRCodeDetector()
         data, points, _ = detector.detectAndDecode(mat)

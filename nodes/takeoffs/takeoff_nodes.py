@@ -20,7 +20,7 @@ class HSVInRange(OpenCVNodeDataBase):
         self.name = "HSV色彩提取"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         hsv = cv2.cvtColor(mat, cv2.COLOR_BGR2HSV)
         lower = np.array([self.h_low, self.s_low, self.v_low], dtype=np.uint8)
@@ -40,7 +40,7 @@ class BitwiseAnd(OpenCVNodeDataBase):
         self.name = "按位与掩膜"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         mask = None
         for n in self.from_node_datas:
@@ -67,7 +67,7 @@ class SeamlessCloneBackground(OpenCVNodeDataBase):
         self.name = "无缝融合/背景替换"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         if src is None or src.mat is None:
             return self.ok(mat, "无背景图像，保持原图")

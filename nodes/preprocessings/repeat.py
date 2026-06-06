@@ -16,7 +16,7 @@ class Repeat(OpenCVNodeDataBase):
         self.name = "像素复制"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         result = np.tile(mat, (self.repeat_y, self.repeat_x) if len(mat.shape) == 2
                           else (self.repeat_y, self.repeat_x, 1))

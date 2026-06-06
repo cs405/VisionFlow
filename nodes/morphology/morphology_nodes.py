@@ -15,7 +15,7 @@ class _MorphBase(OpenCVNodeDataBase):
     _morph_op: int = cv2.MORPH_DILATE
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         shapes = {"RECT": cv2.MORPH_RECT, "ELLIPSE": cv2.MORPH_ELLIPSE, "CROSS": cv2.MORPH_CROSS}
         kernel = cv2.getStructuringElement(shapes.get(self.kernel_shape, cv2.MORPH_RECT),

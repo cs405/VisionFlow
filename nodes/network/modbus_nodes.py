@@ -139,7 +139,7 @@ class ModbusReadNode(_ModbusBase):
         self.name = "Modbus读取(Holding)"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         try:
             if not self._ensure_connected():
                 return self.error(mat, f"Modbus 连接失败: {self.ip}:{self.port}")
@@ -175,7 +175,7 @@ class ModbusCoilReadNode(_ModbusBase):
         self.name = "Modbus读取(Coil)"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         try:
             if not self._ensure_connected():
                 return self.error(mat, f"连接失败: {self.ip}:{self.port}")
@@ -206,7 +206,7 @@ class ModbusDiscreteInputNode(_ModbusBase):
         self.name = "Modbus读取(DiscreteInput)"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         try:
             if not self._ensure_connected():
                 return self.error(mat, f"连接失败: {self.ip}:{self.port}")
@@ -238,7 +238,7 @@ class ModbusInputRegisterNode(_ModbusBase):
         self.name = "Modbus读取(InputRegister)"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         try:
             if not self._ensure_connected():
                 return self.error(mat, f"连接失败: {self.ip}:{self.port}")
@@ -278,7 +278,7 @@ class ModbusWriteNode(_ModbusBase):
         self.name = "Modbus写入(Holding)"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         try:
             if not self._ensure_connected():
                 return self.error(mat, f"Modbus 连接失败: {self.ip}:{self.port}")
@@ -309,7 +309,7 @@ class ModbusCoilWriteNode(_ModbusBase):
         self.name = "Modbus写入(Coil)"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         try:
             if not self._ensure_connected():
                 return self.error(mat, f"连接失败: {self.ip}:{self.port}")
@@ -347,7 +347,7 @@ class ModbusMultiWriteNode(_ModbusBase):
             return [0]
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         try:
             if not self._ensure_connected():
                 return self.error(mat, f"连接失败: {self.ip}:{self.port}")

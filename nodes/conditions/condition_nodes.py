@@ -17,7 +17,7 @@ class OpenCVConditionNode(ConditionNodeData, OpenCVNodeDataBase):
         self.name = "条件分支"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         return self.ok(mat)
 
     def _update_result_image_source(self):
@@ -37,7 +37,7 @@ class PixelThresholdConditionNode(OpenCVNodeDataBase):
         self._match_count = 0
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         gray = cv2.cvtColor(mat, cv2.COLOR_BGR2GRAY) if len(mat.shape) == 3 else mat
         if self.compare == ">":

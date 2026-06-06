@@ -16,7 +16,7 @@ class DetailEnhance(OpenCVNodeDataBase):
         self.name = "细节增强"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         return self.ok(cv2.detailEnhance(mat, sigma_s=self.sigma_s, sigma_r=self.sigma_r))
 
@@ -35,7 +35,7 @@ class EdgePreservingFilter(OpenCVNodeDataBase):
         self.name = "边缘保留滤波"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         flags = {"RECURSIVE": cv2.RECURS_FILTER, "NORMCONV": cv2.NORMCONV_FILTER}
         return self.ok(cv2.edgePreservingFilter(mat, flags=flags.get(self.filter_type, cv2.RECURS_FILTER),

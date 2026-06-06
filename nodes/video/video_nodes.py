@@ -19,7 +19,7 @@ class MOG(OpenCVNodeDataBase):
         self._mog = None
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         if self._mog is None:
             self._mog = cv2.createBackgroundSubtractorMOG2(self.history, self.var_threshold, self.detect_shadows)
@@ -51,7 +51,7 @@ class VideoWriter(OpenCVNodeDataBase):
         self._writer: cv2.VideoWriter | None = None
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         if self._writer is None:
             if len(self.fourcc_code) != 4:

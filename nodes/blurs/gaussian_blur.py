@@ -17,7 +17,7 @@ class GaussianBlur(OpenCVNodeDataBase):
         self.name = "高斯模糊"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         k = self.ksize if self.ksize % 2 == 1 else self.ksize + 1
         result = cv2.GaussianBlur(mat, (k, k), self.sigma_x, self.sigma_y)
@@ -36,7 +36,7 @@ class Blur(OpenCVNodeDataBase):
         self.name = "均值模糊"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         k = self.ksize if self.ksize % 2 == 1 else self.ksize + 1
         return self.ok(cv2.blur(mat, (k, k)))

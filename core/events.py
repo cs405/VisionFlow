@@ -48,6 +48,10 @@ class EventType(Enum):
     PROJECT_SAVED = auto()
     PROJECT_CHANGED = auto()
 
+    # File iteration events (WPF "运行全部" / "显示全部")
+    FILE_ITERATION_NEXT = auto()       # emitted before each file in run-all loop
+    FILE_ITERATION_COMPLETED = auto()  # emitted when entire run-all loop finishes
+
 
 class EventSystem:
     """Global event bus. Supports subscribe/publish with optional sender filtering."""

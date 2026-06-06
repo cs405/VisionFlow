@@ -18,7 +18,7 @@ class TemplateBase64MatchingNode(Base64MatchingNodeData, OpenCVNodeDataBase):
         self.name = "模板匹配"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         template = self.get_template_image()
         if template is None: return self.error(mat, "未设置模板图片")
@@ -58,7 +58,7 @@ class BestMatchBase64TemplateMatchingNode(Base64MatchingNodeData, OpenCVNodeData
         self.name = "最佳匹配"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         template = self.get_template_image()
         if template is None: return self.error(mat, "未设置模板图片")
@@ -95,7 +95,7 @@ class SiftBase64FeatureMatchingNode(Base64MatchingNodeData, OpenCVNodeDataBase):
         self.name = "SIFT特征匹配"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         template = self.get_template_image()
         if template is None: return self.error(mat, "未设置模板图片")
@@ -131,7 +131,7 @@ class SurfBase64FeatureMatchingNode(SiftBase64FeatureMatchingNode):
         self.name = "SURF特征匹配"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         template = self.get_template_image()
         if template is None: return self.error(mat, "未设置模板图片")
@@ -172,7 +172,7 @@ class HSVInRangeRenderBlobMatchingNode(OpenCVNodeDataBase):
         self.name = "HSV Blob匹配"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         hsv = cv2.cvtColor(mat, cv2.COLOR_BGR2HSV)
         lower = np.array([self.h_low, self.s_low, self.v_low], dtype=np.uint8)

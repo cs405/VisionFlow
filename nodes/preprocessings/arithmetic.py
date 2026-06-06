@@ -16,7 +16,7 @@ class AddSubtract(OpenCVNodeDataBase):
         self.name = "图像加减"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         if self.operation == "Add": result = cv2.add(mat, self.scalar)
         else: result = cv2.subtract(mat, self.scalar)
@@ -36,7 +36,7 @@ class MultiplyDivide(OpenCVNodeDataBase):
         self.name = "图像乘除"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         if self.operation == "Multiply": result = cv2.multiply(mat, self.scalar)
         else: result = cv2.divide(mat, self.scalar)
@@ -55,7 +55,7 @@ class Pow(OpenCVNodeDataBase):
         self.name = "幂运算"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = from_node.mat if from_node else None
+        mat = self.get_input_mat(from_node.mat if from_node else None)
         if mat is None: return self.error(None, "无输入图像")
         result = cv2.pow(mat, self.power)
         return self.ok(result)
