@@ -997,7 +997,41 @@ class ROINodeData(VisionNodeData):
         return None
 
     def invoke(self, previors: LinkData | None, diagram: "WorkflowEngine") -> FlowableResult:
-        result = super().invoke(previors, diagram)
+        # Wire upstream ROI for FromROI mode (WPF: source_node = upstream)
+        from_data = self._find_from_node(diagram, previors)
+        if isinstance(from_data, ROINodeData) and from_data is not self:
+            self.from_roi.source_node = from_data
+
+        # Check if upstream has an active ROI rect
+        roi_rect = None
+        if isinstance(from_data, ROINodeData):
+            roi_rect = from_data.get_active_roi_rect()
+
+        if roi_rect is not None and from_data is not None and from_data.mat is not None:
+            x, y, w, h = int(roi_rect[0]), int(roi_rect[1]), int(roi_rect[2]), int(roi_rect[3])
+            full = from_data.mat
+            h_img, w_img = full.shape[:2]
+            x, y = max(0, x), max(0, y)
+            w, h = min(w, w_img - x), min(h, h_img - y)
+            if w <= 0 or h <= 0:
+                return super().invoke(previors, diagram)
+
+            # Temporarily set from_data.mat to ROI region so invoke_core
+            # only operates on the ROI, then paste result back
+            saved_mat = from_data._mat
+            from_data._mat = full[y:y+h, x:x+w]
+
+            result = super().invoke(previors, diagram)
+
+            # Paste processed result back into full image
+            if self.mat is not None:
+                full[y:y+h, x:x+w] = self.mat
+            self._mat = full
+            self._update_result_image_source()
+            from_data._mat = saved_mat
+        else:
+            result = super().invoke(previors, diagram)
+
         self.draw_roi.image_source = self._result_image_source
         return result
 
