@@ -445,6 +445,10 @@ class MainWindow(QMainWindow):
         ctx: AppContext DI container. If None, uses get_app_context() fallback.
     """
 
+    # Internal signal for cross-thread workflow-state UI updates.
+    # Qt auto-queues from worker thread → main thread.
+    _wf_ui_update = pyqtSignal(str, dict)
+
     def __init__(self, ctx=None):
         super().__init__()
         if ctx is None:
@@ -461,6 +465,8 @@ class MainWindow(QMainWindow):
         self._right_panel_visible = True
         self._saved_right_width = _ps.get_i("right_width", 420)
         self._saved_right_width = _ps.get_i("right_width", 420)
+
+        self._wf_ui_update.connect(self._on_wf_ui_update)
 
         self._setup_window()
         self._setup_caption_bar()
@@ -1675,42 +1681,68 @@ class MainWindow(QMainWindow):
         self._refresh_command_states(project_service.current_project)
 
     def _on_wf_start(self, sender, **kwargs):
-        self._wf_start_time = __import__('time').time()
-        self._state_lbl.setText(f"{FontIcons.Sync} 运行中")
-        self._state_lbl.setStyleSheet("color: #2196f3; font-weight: bold;")
-        self._msg_lbl.setText("流程运行中...")
-        self._diagram_status_strip.set_status("流程图运行中...", "#2196f3")
-        self._side_status_strip.set_status("结果区正在等待输出...", "#2196f3")
-        self._refresh_command_states(project_service.current_project)
+        """Runs on worker thread — emit signal to update UI on main thread."""
+        self._wf_ui_update.emit("start", {})
 
     def _on_wf_done(self, sender, **kwargs):
-        elapsed = self._format_elapsed()
-        self._state_lbl.setText(f"{FontIcons.Completed} 完成")
-        self._state_lbl.setStyleSheet("color: #4caf50; font-weight: bold;")
-        self._msg_lbl.setText(f"流程执行完成 (用时: {elapsed})")
-        self._diagram_status_strip.set_status(f"流程图执行完成 · 用时: {elapsed}", "#4caf50")
-        self._side_status_strip.set_status("结果区已更新", "#4caf50")
-        self._refresh_command_states(project_service.current_project)
+        """Runs on worker thread — emit signal to update UI on main thread."""
+        self._wf_ui_update.emit("done", {"result": kwargs.get("result")})
 
     def _on_wf_err(self, sender, **kwargs):
-        elapsed = self._format_elapsed()
-        self._state_lbl.setText(f"{FontIcons.Error} 错误")
-        self._state_lbl.setStyleSheet("color: #f44336; font-weight: bold;")
-        result = kwargs.get("result")
-        self._msg_lbl.setText(f"{str(result) if result else '流程错误'} (用时: {elapsed})")
-        self._diagram_status_strip.set_status(f"流程图错误：{self._msg_lbl.text()}", "#f44336")
-        self._side_status_strip.set_status("结果区收到错误消息", "#f44336")
-        self._refresh_command_states(project_service.current_project)
+        """Runs on worker thread — emit signal to update UI on main thread."""
+        self._wf_ui_update.emit("error", {"result": kwargs.get("result")})
 
     def _on_wf_stopped(self, sender, **kwargs):
-        """Handle workflow stopped event (WPF Canceling → Canceled)."""
-        self._state_lbl.setText(f"{FontIcons.Stop} 已停止")
-        self._state_lbl.setStyleSheet("color: #ff9800; font-weight: bold;")
-        self._msg_lbl.setText("流程已被用户停止")
-        self._diagram_status_strip.set_status("流程图已停止", "#ff9800")
-        self._side_status_strip.set_status("结果区已停止等待", "#ff9800")
+        """Runs on worker thread — emit signal to update UI on main thread."""
+        self._wf_ui_update.emit("stopped", {})
+
+    def _on_wf_ui_update(self, event: str, data: dict):
+        """Slot called on MAIN THREAD via queued signal.  Safe to touch widgets."""
+        if event == "start":
+            self._wf_start_time = __import__('time').time()
+            self._state_lbl.setText(f"{FontIcons.Sync} 运行中")
+            self._state_lbl.setStyleSheet("color: #2196f3; font-weight: bold;")
+            self._msg_lbl.setText("流程运行中...")
+            self._diagram_status_strip.set_status("流程图运行中...", "#2196f3")
+            self._side_status_strip.set_status("结果区正在等待输出...", "#2196f3")
+        elif event == "done":
+            elapsed = self._format_elapsed()
+            self._state_lbl.setText(f"{FontIcons.Completed} 完成")
+            self._state_lbl.setStyleSheet("color: #4caf50; font-weight: bold;")
+            self._msg_lbl.setText(f"流程执行完成 (用时: {elapsed})")
+            self._diagram_status_strip.set_status(f"流程图执行完成 · 用时: {elapsed}", "#4caf50")
+            self._side_status_strip.set_status("结果区已更新", "#4caf50")
+            # Auto-select first node to refresh image viewer with result
+            self._refresh_result_viewer()
+        elif event == "error":
+            elapsed = self._format_elapsed()
+            self._state_lbl.setText(f"{FontIcons.Error} 错误")
+            self._state_lbl.setStyleSheet("color: #f44336; font-weight: bold;")
+            msg = getattr(data.get("result"), 'message', '流程错误')
+            self._msg_lbl.setText(f"{msg} (用时: {elapsed})")
+            self._diagram_status_strip.set_status(f"流程图错误：{msg}", "#f44336")
+            self._side_status_strip.set_status("结果区收到错误消息", "#f44336")
+        elif event == "stopped":
+            self._state_lbl.setText(f"{FontIcons.Stop} 已停止")
+            self._state_lbl.setStyleSheet("color: #ff9800; font-weight: bold;")
+            self._msg_lbl.setText("流程已被用户停止")
+            self._diagram_status_strip.set_status("流程图已停止", "#ff9800")
+            self._side_status_strip.set_status("结果区已停止等待", "#ff9800")
         self._refresh_command_states(project_service.current_project)
-        self._side_status_strip.set_status("结果区收到错误消息", "#f44336")
+
+    def _refresh_result_viewer(self):
+        """After execution, show the first available result in the image viewer."""
+        if not self._workflow:
+            return
+        # Try to show the last-executed node's result
+        nodes = self._workflow.get_all_nodes()
+        for node in nodes:
+            if isinstance(node, VisionNodeData) and node.mat is not None:
+                self._select_node(node)
+                return
+        # Fallback: select first node to trigger image panel update
+        if nodes:
+            self._select_node(nodes[0])
 
     def _format_elapsed(self) -> str:
         """Format elapsed workflow time (WPF TimeSpan display)."""
@@ -1800,10 +1832,26 @@ class MainWindow(QMainWindow):
         if not self._workflow:
             return
         self._sync_workflow_to_project()
-        self._log_panel.info("开始执行流程...")
-        # Offload to worker thread; events drive all UI updates on main thread
+        node_count = len(self._workflow.get_all_nodes())
+        if node_count == 0:
+            self._log_panel.warning("流程图无节点，无法开始")
+            return
+        self._log_panel.info(f"开始执行流程... ({node_count} 个节点)")
         import threading
-        t = threading.Thread(target=self._workflow.start, daemon=True)
+        import traceback
+        def _run():
+            try:
+                result = self._workflow.start()
+                if result.is_error:
+                    # Log error via event (fires on worker thread; safe for event_system)
+                    from core.events import EventType, event_system
+                    event_system.publish(EventType.MESSAGE_ERROR, sender=self,
+                                        message=f"流程执行出错: {result.message}")
+            except Exception:
+                from core.events import EventType, event_system
+                event_system.publish(EventType.MESSAGE_ERROR, sender=self,
+                                    message=f"流程异常: {traceback.format_exc()}")
+        t = threading.Thread(target=_run, daemon=True)
         t.start()
 
     def _on_stop_workflow(self):

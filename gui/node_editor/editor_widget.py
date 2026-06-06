@@ -264,6 +264,10 @@ class DiagramEditorWidget(QWidget):
     node_help_requested = pyqtSignal(object)
     node_executed = pyqtSignal(object, str, str)  # node, state("Success"/"Error"), time_span
 
+    # Internal signal for cross-thread node state updates.
+    # Qt auto-queues the call to the receiver's thread (the main thread).
+    _node_state_change = pyqtSignal(str, str)  # node_id, state
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._workflow: WorkflowEngine | None = None
@@ -271,6 +275,7 @@ class DiagramEditorWidget(QWidget):
         self._mini_timer = QTimer(self)
         self._mini_timer.setInterval(100)
         self._mini_timer.timeout.connect(self._update_minimap)
+        self._node_state_change.connect(self._on_node_state_change)
         self._setup_ui()
 
     def _setup_ui(self):
@@ -430,39 +435,28 @@ class DiagramEditorWidget(QWidget):
         return bool(sender) and getattr(sender, 'diagram_data', None) is self._subscribed_workflow
 
     def _on_node_started(self, sender, **kwargs):
-        if not self._belongs_to_bound_workflow(sender):
-            return
-        # Event fires on worker thread; marshal UI update to main thread.
-        from PyQt5.QtCore import QTimer
-        QTimer.singleShot(0, lambda nid=sender.node_id:
-                          self.scene.on_workflow_state_changed(nid, "running"))
+        if self._belongs_to_bound_workflow(sender):
+            # pyqtSignal auto-queues to main thread from worker thread
+            self._node_state_change.emit(sender.node_id, "running")
 
     def _on_node_completed(self, sender, **kwargs):
-        if not self._belongs_to_bound_workflow(sender):
-            return
-        from PyQt5.QtCore import QTimer
-        QTimer.singleShot(0, lambda nid=sender.node_id:
-                          self.scene.on_workflow_state_changed(nid, "completed"))
-        import time
-        self.node_executed.emit(sender, "Success", time.strftime("%H:%M:%S"))
+        if self._belongs_to_bound_workflow(sender):
+            self._node_state_change.emit(sender.node_id, "completed")
+            import time
+            self.node_executed.emit(sender, "Success", time.strftime("%H:%M:%S"))
 
     def _on_node_error(self, sender, **kwargs):
-        if not self._belongs_to_bound_workflow(sender):
-            return
-        from PyQt5.QtCore import QTimer
-        QTimer.singleShot(0, lambda nid=sender.node_id:
-                          self.scene.on_workflow_state_changed(nid, "error"))
-        import time
-        self.node_executed.emit(sender, "Error", time.strftime("%H:%M:%S"))
+        if self._belongs_to_bound_workflow(sender):
+            self._node_state_change.emit(sender.node_id, "error")
+            import time
+            self.node_executed.emit(sender, "Error", time.strftime("%H:%M:%S"))
 
     def _on_workflow_stopped(self, sender, **kwargs):
-        if sender is not self._subscribed_workflow:
-            return
-        from PyQt5.QtCore import QTimer
-        QTimer.singleShot(0, lambda: self._reset_all_node_states())
+        if sender is self._subscribed_workflow:
+            for item in self.scene.get_all_node_items():
+                item.set_state(NodeState.IDLE)
 
-    def _reset_all_node_states(self):
-        """Reset all node items to IDLE (called on main thread)."""
-        for item in self.scene.get_all_node_items():
-            item.set_state(NodeState.IDLE)
+    def _on_node_state_change(self, node_id: str, state: str):
+        """Slot called on main thread via queued signal connection."""
+        self.scene.on_workflow_state_changed(node_id, state)
 
