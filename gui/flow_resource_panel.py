@@ -30,6 +30,60 @@ from PyQt5.QtCore import Qt, pyqtSignal, QThread, QSize, QTimer, QPoint
 from PyQt5.QtGui import QPixmap, QImage, QFont, QColor, QPainter
 
 from gui.font_icons import FontIcons, FontIconButton, FontIconTextBlock
+from gui.theme import theme_manager, connect_theme
+
+# ═══════════════════════════════════════════════════════════════════════════
+# TODO: WPF "图片缩略图显示" 实现细节
+#
+# WPF MainWindow.xaml lines 355-413 — ListBox thumbnail strip:
+#
+#   ListBox Height="90"
+#     ItemsSource="{Binding SrcFilePaths}"         ← 绑定到文件路径列表
+#     SelectedItem="{Binding SrcFilePath}"          ← 双向绑定当前选中
+#     ScrollViewer.HorizontalScrollBarVisibility="Auto"
+#     ScrollViewer.VerticalScrollBarVisibility="Disabled"
+#
+#   1. ItemsPanel → VirtualizingStackPanel Orientation="Horizontal"
+#      - UI 虚拟化：只渲染可见区域的缩略图，支持数千张图片不卡顿
+#      - VisionFlow: 所有 ThumbnailButton 一次性创建（无虚拟化，>100 张时需优化）
+#
+#   2. ScrollViewer Focusable="false"
+#      - 禁止滚动区域获取键盘焦点，防止 Windows 蓝色焦点矩形框
+#      - VisionFlow: QScrollArea.setFocusPolicy(Qt.NoFocus)
+#
+#   3. ScrollViewerBebavior UseHorizontalMouseWheel="True"
+#      - Shift+滚轮 → 水平滚动
+#      - VisionFlow: _scroll_wheel_event 重写 wheelEvent
+#
+#   4. ItemTemplate → Border 75×75 + Image Source Converter
+#      - GetImageSourceFromFilePathConverter: 按需加载，只在缩略图可见时才读取文件
+#      - VisionFlow: ThumbnailLoader 提前加载全部（可改进为可见区域优先）
+#
+#   5. Page navigation: ScrollViewerPageLeftCommand / ScrollViewerPageRightCommand
+#      - 浮动在 ScrollViewer 上方的 FontIconButton
+#      - VisionFlow: _page_left_btn / _page_right_btn overlay
+#
+#   6. SelectionChanged → ImageFileSelectionChangedCommand
+#      - 缩略图点击 → 主图像区更新
+#      - VisionFlow: _on_thumbnail_clicked → file_selected 信号 → main_window
+#
+#   7. MouseDoubleClick → ShowZoomViewImageFileCommand
+#      - 双击 → 全尺寸图像查看器
+#      - VisionFlow: double_clicked_path 信号 → main_window
+#
+#   8. Header TextBlockIndexOfBebavior — "1/10" 索引显示
+#      - 绑定 SrcFilePath + SrcFilePaths，自动显示当前索引
+#      - VisionFlow: _refresh_header() 手动计算 idx/total
+#
+#   9. ToolTip="{Binding}" — 悬浮显示完整文件路径
+#      - VisionFlow: setToolTip(file_path) ✅
+#
+# VisionFlow 适配要点：
+#   - 主题色通过 theme_manager.color() 动态获取，不硬编码
+#   - 缩略图样式用 QSS 属性选择器 [selected="true"] 对标 WPF 选中态
+#   - 增量构建 (_add_thumbnails_incremental) 对标 WPF 数据绑定自动刷新
+#   - 大规模虚拟化暂不实现，但 lazy load（可见优先）可后续优化
+# ═══════════════════════════════════════════════════════════════════════════
 
 # ── Thumbnail constants matching WPF ───────────────────────────────────────
 
@@ -113,10 +167,29 @@ class ThumbnailLoader(QThread):
 # ── Thumbnail widget ──────────────────────────────────────────────────────
 
 class ThumbnailButton(QPushButton):
-    """Clickable 75×75 thumbnail matching WPF Image item template."""
+    """Clickable 75×75 thumbnail matching WPF Image item template.
+
+    WPF: Border Width="75" Height="75" ToolTip="{Binding}"
+         Image Source="{Binding ., Converter={GetImageSourceFromFilePathConverter}}"
+
+    Colors follow theme via connect_theme — WPF {DynamicResource} equivalent.
+    """
 
     clicked_with_path = pyqtSignal(str)
     double_clicked_path = pyqtSignal(str)
+
+    # Theme QSS template — regenerated when theme changes
+    THEME_QSS = """
+        ThumbnailButton {{
+            background: {bg_normal}; border: 2px solid {border_normal}; border-radius: 2px; padding: 2px;
+        }}
+        ThumbnailButton:hover {{
+            border-color: {accent}; background: {bg_hover};
+        }}
+        ThumbnailButton[selected="true"] {{
+            border-color: {accent}; background: {bg_selected};
+        }}
+    """
 
     def __init__(self, file_path: str, parent=None):
         super().__init__(parent)
@@ -127,24 +200,23 @@ class ThumbnailButton(QPushButton):
         self.setFixedSize(THUMB_SIZE + 6, THUMB_SIZE + 6)
         self.setCursor(Qt.PointingHandCursor)
         self.setToolTip(file_path)
-        self.setStyleSheet("""
-            ThumbnailButton {
-                background: #2d2d30;
-                border: 2px solid #3f3f46;
-                border-radius: 2px;
-                padding: 2px;
-            }
-            ThumbnailButton:hover {
-                border-color: #0078d4;
-                background: #3e3e42;
-            }
-            ThumbnailButton[selected="true"] {
-                border-color: #0078d4;
-                background: #094771;
-            }
-        """)
+
+        from gui.theme import theme_manager as _tm
+        self._theme_manager = _tm
+        self._refresh_qss()
+        self._theme_manager.theme_changed.connect(lambda _: self._refresh_qss())
 
         self.clicked.connect(lambda: self.clicked_with_path.emit(self.file_path))
+
+    def _refresh_qss(self):
+        tm = self._theme_manager
+        self.setStyleSheet(self.THEME_QSS.format(
+            bg_normal=tm.color("bg_surface_raised").name(),
+            border_normal=tm.color("border").name(),
+            accent=tm.color("accent").name(),
+            bg_hover=tm.color("bg_surface_hover").name(),
+            bg_selected=tm.color("bg_surface_input").name(),
+        ))
 
     def set_thumbnail(self, pixmap: QPixmap):
         """Set the loaded thumbnail pixmap."""
@@ -163,13 +235,11 @@ class ThumbnailButton(QPushButton):
         if self._pixmap and not self._pixmap.isNull():
             painter = QPainter(self)
             painter.setRenderHint(QPainter.SmoothPixmapTransform)
-            # Center the scaled pixmap in the button
             pw, ph = self._pixmap.width(), self._pixmap.height()
             x = (self.width() - pw) // 2
             y = (self.height() - ph) // 2
             painter.drawPixmap(x, y, self._pixmap)
         else:
-            # Draw placeholder
             painter = QPainter(self)
             painter.setPen(QColor("#555"))
             painter.setFont(QFont("Segoe UI", 9))
@@ -219,46 +289,36 @@ class FlowResourcePanel(QWidget):
         layout.setSpacing(0)
 
         # ── Header bar ──
-        header = QWidget()
-        header.setFixedHeight(34)
-        header.setStyleSheet("background: #2d2d30; border-bottom: 1px solid #3f3f46;")
-        h_layout = QHBoxLayout(header)
+        self._header_bar = QWidget()
+        self._header_bar.setFixedHeight(34)
+        h_layout = QHBoxLayout(self._header_bar)
         h_layout.setContentsMargins(8, 4, 6, 4)
         h_layout.setSpacing(4)
 
         # Title + index
         self._title_label = QLabel("图像源")
-        self._title_label.setStyleSheet("color: #dcdcdc; font-size: 11px; font-weight: bold; background: transparent;")
+        self._title_label.setStyleSheet("font-size: 11px; font-weight: bold; background: transparent;")
         h_layout.addWidget(self._title_label)
 
         self._index_label = QLabel("0/0")
-        self._index_label.setStyleSheet("color: #999; font-size: 11px; background: transparent;")
+        self._index_label.setStyleSheet("font-size: 11px; background: transparent;")
         h_layout.addWidget(self._index_label)
 
         h_layout.addStretch(1)
 
-        # Toggle buttons (matching WPF ToggleButton style)
-        toggle_style = """
-            QPushButton {
-                background: transparent; border: 1px solid #505050; border-radius: 2px;
-                padding: 3px 8px; color: #999; font-size: 11px;
-            }
-            QPushButton:hover { background: #3e3e42; color: #dcdcdc; }
-            QPushButton:checked { background: #094771; color: #dcdcdc; border-color: #0078d4; }
-        """
-
+        # Toggle buttons (WPF: ToggleButton IsChecked bound to UseAllImage / UseAutoSwitch)
         self._run_all_btn = QPushButton("运行全部")
         self._run_all_btn.setCheckable(True)
-        self._run_all_btn.setStyleSheet(toggle_style)
         self._run_all_btn.setFixedHeight(24)
+        self._run_all_btn.setFocusPolicy(Qt.NoFocus)
         self._run_all_btn.toggled.connect(self._on_run_all_toggled)
         h_layout.addWidget(self._run_all_btn)
 
         self._auto_switch_btn = QPushButton("自动切换")
         self._auto_switch_btn.setCheckable(True)
         self._auto_switch_btn.setChecked(True)
-        self._auto_switch_btn.setStyleSheet(toggle_style)
         self._auto_switch_btn.setFixedHeight(24)
+        self._auto_switch_btn.setFocusPolicy(Qt.NoFocus)
         self._auto_switch_btn.toggled.connect(self._on_auto_switch_toggled)
         h_layout.addWidget(self._auto_switch_btn)
 
@@ -271,66 +331,44 @@ class FlowResourcePanel(QWidget):
         h_layout.addWidget(sep)
 
         # FontIcon action buttons (WPF: AddImageData / AddImageDatas / DeleteImageData / ClearImageDatas commands)
-        btn_style = """
-            QPushButton {
-                background: transparent; border: 1px solid transparent; border-radius: 3px;
-                color: #dcdcdc; padding: 2px 6px; font-size: 13px;
-            }
-            QPushButton:hover { background: #3e3e42; border-color: #505050; }
-            QPushButton:disabled { color: #666; background: transparent; }
-        """
-
+        # QSS regenerated in _refresh_header_qss(); initial style set here
         self._add_file_btn = FontIconButton(FontIcons.OpenFile, tooltip="添加文件", font_size=13)
-        self._add_file_btn.setStyleSheet(btn_style)
         self._add_file_btn.clicked.connect(self._add_files)
         h_layout.addWidget(self._add_file_btn)
 
         self._add_folder_btn = FontIconButton(FontIcons.OpenFolderHorizontal, tooltip="添加文件夹", font_size=13)
-        self._add_folder_btn.setStyleSheet(btn_style)
         self._add_folder_btn.clicked.connect(self._add_folder)
         h_layout.addWidget(self._add_folder_btn)
 
         self._del_btn = FontIconButton(FontIcons.Cancel, tooltip="删除", font_size=13)
-        self._del_btn.setStyleSheet(btn_style)
         self._del_btn.clicked.connect(self._delete_current)
         self._del_btn.setEnabled(False)  # WPF: CanExecute → disabled when no files
         h_layout.addWidget(self._del_btn)
 
         self._clear_btn = FontIconButton(FontIcons.Delete, tooltip="清空", font_size=13)
-        self._clear_btn.setStyleSheet(btn_style)
         self._clear_btn.clicked.connect(self._clear_files)
         self._clear_btn.setEnabled(False)  # WPF: CanExecute → disabled when no files
         h_layout.addWidget(self._clear_btn)
 
-        layout.addWidget(header)
+        layout.addWidget(self._header_bar)
 
         # ── Thumbnail strip with overlay page buttons ──
-        strip_container = QFrame()
-        strip_container.setFrameShape(QFrame.NoFrame)
-        strip_container.setStyleSheet("background: #1e1e1e;")
-        strip_layout = QVBoxLayout(strip_container)
+        self._strip_container = QFrame()
+        self._strip_container.setFrameShape(QFrame.NoFrame)
+        strip_layout = QVBoxLayout(self._strip_container)
         strip_layout.setContentsMargins(0, 0, 0, 0)
         strip_layout.setSpacing(0)
 
         # Scroll area holding thumbnails
+        # WPF: ScrollViewer with HorizontalScrollBarVisibility="Auto"
+        # Qt: setWidgetResizable(True) fills viewport height; minimumSize controls width
         self._scroll_area = QScrollArea()
         self._scroll_area.setFixedHeight(THUMB_SIZE + 14)
-        self._scroll_area.setWidgetResizable(False)
+        self._scroll_area.setWidgetResizable(True)
         self._scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self._scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._scroll_area.setFrameShape(QFrame.NoFrame)
-        self._scroll_area.setStyleSheet("""
-            QScrollArea { background: #1e1e1e; border: none; }
-            QScrollBar:horizontal {
-                background: #2d2d30; height: 10px;
-            }
-            QScrollBar::handle:horizontal {
-                background: #505050; border-radius: 3px; min-width: 30px;
-            }
-            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
-                width: 0px;
-            }
-        """)
+        self._scroll_area.setFocusPolicy(Qt.NoFocus)  # WPF: ScrollViewer Focusable="false"
 
         # Allow horizontal scroll with Shift+wheel (WPF: ScrollViewerBebavior UseHorizontalMouseWheel)
         self._scroll_area.wheelEvent = self._scroll_wheel_event
@@ -340,39 +378,28 @@ class FlowResourcePanel(QWidget):
         self._thumb_layout = QHBoxLayout(self._thumb_container)
         self._thumb_layout.setContentsMargins(36, 4, 36, 4)  # space for page buttons
         self._thumb_layout.setSpacing(2)
-        self._thumb_layout.addStretch(1)
+        self._thumb_layout.setAlignment(Qt.AlignLeft)  # WPF: stack from left, no stretch
+        # stretch is NOT added here — stretch inside QScrollArea would compress thumbnails
 
         self._scroll_area.setWidget(self._thumb_container)
         strip_layout.addWidget(self._scroll_area)
 
-        # ── Page navigation overlay buttons ──
-        # Left page button (floating on left edge)
+        # ── Page navigation overlay buttons (WPF: ScrollViewerPageLeft/RightCommand) ──
         self._page_left_btn = QPushButton(FontIcons.PageLeft)
         self._page_left_btn.setFont(QFont("Segoe Fluent Icons", 14))
         self._page_left_btn.setFixedSize(PAGE_BTN_SIZE, PAGE_BTN_SIZE)
         self._page_left_btn.setCursor(Qt.PointingHandCursor)
-        self._page_left_btn.setStyleSheet("""
-            QPushButton {
-                background: rgba(45, 45, 48, 0.85); border: 1px solid #505050;
-                border-radius: 3px; color: #dcdcdc;
-            }
-            QPushButton:hover { background: #3e3e42; border-color: #0078d4; }
-        """)
+        self._page_left_btn.setFocusPolicy(Qt.NoFocus)
         self._page_left_btn.clicked.connect(self._page_left)
 
-        # Right page button (floating on right edge)
         self._page_right_btn = QPushButton(FontIcons.PageRight)
         self._page_right_btn.setFont(QFont("Segoe Fluent Icons", 14))
         self._page_right_btn.setFixedSize(PAGE_BTN_SIZE, PAGE_BTN_SIZE)
         self._page_right_btn.setCursor(Qt.PointingHandCursor)
-        self._page_right_btn.setStyleSheet("""
-            QPushButton {
-                background: rgba(45, 45, 48, 0.85); border: 1px solid #505050;
-                border-radius: 3px; color: #dcdcdc;
-            }
-            QPushButton:hover { background: #3e3e42; border-color: #0078d4; }
-        """)
+        self._page_right_btn.setFocusPolicy(Qt.NoFocus)
         self._page_right_btn.clicked.connect(self._page_right)
+
+        # Theme-aware QSS applied via _refresh_strip_qss()
 
         # Overlay the page buttons on the scroll area
         # Use absolute positioning within strip_container
@@ -387,8 +414,87 @@ class FlowResourcePanel(QWidget):
         )
         self._page_right_btn.show()
 
-        layout.addWidget(strip_container)
+        # Theme-aware styling — WPF {DynamicResource} equivalent
+        connect_theme(self._refresh_all_qss)
+
+        layout.addWidget(self._strip_container)
         self.setFixedHeight(STRIP_HEIGHT + 34)
+
+    def _refresh_all_qss(self):
+        """Update all hardcoded colors to current theme — WPF {DynamicResource} equivalent."""
+        tm = theme_manager
+        bg_raised = tm.color("bg_surface_raised").name()
+        bg_deep = tm.color("bg_surface_deep").name()
+        bg_hover = tm.color("bg_surface_hover").name()
+        border = tm.color("border").name()
+        accent = tm.color("accent").name()
+        text = tm.color("text_primary").name()
+        text_secondary = tm.color("text_secondary").name()
+        text_title = tm.color("text_title").name()
+
+        # ── Header bar ──
+        self._header_bar.setStyleSheet(
+            f"background: {bg_raised}; border-bottom: 1px solid {border};"
+        )
+        self._title_label.setStyleSheet(
+            f"color: {text_title}; font-size: 11px; font-weight: bold; background: transparent;"
+        )
+        self._index_label.setStyleSheet(
+            f"color: {text_secondary}; font-size: 11px; background: transparent;"
+        )
+
+        # ── Toggle buttons (WPF ToggleButton style) ──
+        toggle_qss = f"""
+            QPushButton {{
+                background: transparent; border: 1px solid {border}; border-radius: 2px;
+                padding: 3px 8px; color: {text_secondary}; font-size: 11px;
+            }}
+            QPushButton:hover {{ background: {bg_hover}; color: {text}; }}
+            QPushButton:checked {{ background: {accent}; color: white; border-color: {accent}; }}
+        """
+        self._run_all_btn.setStyleSheet(toggle_qss)
+        self._auto_switch_btn.setStyleSheet(toggle_qss)
+
+        # ── Action buttons (WPF FontIconButton command style) ──
+        action_qss = f"""
+            QPushButton {{
+                background: transparent; border: 1px solid transparent; border-radius: 3px;
+                color: {text}; padding: 2px 6px; font-size: 13px;
+            }}
+            QPushButton:hover {{ background: {bg_hover}; border-color: {border}; }}
+            QPushButton:disabled {{ color: {text_secondary}; background: transparent; }}
+        """
+        for btn in (self._add_file_btn, self._add_folder_btn, self._del_btn, self._clear_btn):
+            if btn is not None:
+                btn.setStyleSheet(action_qss)
+
+        # ── Thumbnail strip container ──
+        self._strip_container.setStyleSheet(f"background: {bg_deep};")
+
+        # ── Scroll area (WPF: ScrollViewer with BorderBrush template) ──
+        self._scroll_area.setStyleSheet(f"""
+            QScrollArea {{ background: {bg_deep}; border: none; }}
+            QScrollBar:horizontal {{
+                background: {bg_raised}; height: 10px;
+            }}
+            QScrollBar::handle:horizontal {{
+                background: {border}; border-radius: 3px; min-width: 30px;
+            }}
+            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
+                width: 0px;
+            }}
+        """)
+
+        # ── Page navigation buttons (WPF FontIconButton overlay) ──
+        page_qss = f"""
+            QPushButton {{
+                background: rgba(45, 45, 48, 0.85); border: 1px solid {border};
+                border-radius: 3px; color: {text};
+            }}
+            QPushButton:hover {{ background: {bg_hover}; border-color: {accent}; }}
+        """
+        self._page_left_btn.setStyleSheet(page_qss)
+        self._page_right_btn.setStyleSheet(page_qss)
 
     # ── Scroll with Shift+wheel (WPF behavior) ──────────────────────────
 
@@ -512,15 +618,20 @@ class FlowResourcePanel(QWidget):
             btn.deleteLater()
         self._thumbnails.clear()
         self._pixmaps.clear()
-        # Keep only the stretch item
-        while self._thumb_layout.count() > 1:
+        # Remove all layout items (no stretch to preserve)
+        while self._thumb_layout.count():
             item = self._thumb_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
         self._selected_path = ""
+        self._update_container_size()
 
     def _build_thumbnails(self):
-        """Create thumbnail buttons for all file paths."""
+        """Create thumbnail buttons for all file paths.
+
+        WPF: ItemsControl generates ItemTemplate for each item in ItemsSource.
+        VisionFlow: manually create ThumbnailButton for each path.
+        """
         node = self._current_node
         if node is None:
             return
@@ -533,7 +644,6 @@ class FlowResourcePanel(QWidget):
             btn.clicked_with_path.connect(self._on_thumbnail_clicked)
             btn.double_clicked_path.connect(self.file_double_clicked.emit)
 
-            # Apply already-loaded pixmap
             if path in self._pixmaps:
                 btn.set_thumbnail(self._pixmaps[path])
 
@@ -541,12 +651,10 @@ class FlowResourcePanel(QWidget):
                 btn.set_selected(True)
                 self._selected_path = path
 
-            # Insert before the stretch
-            self._thumb_layout.insertWidget(self._thumb_layout.count() - 1, btn)
+            self._thumb_layout.addWidget(btn)
             self._thumbnails[path] = btn
 
-        # Re-drop the stretch at end
-        self._thumb_layout.addStretch(1)
+        self._update_container_size()
 
     # ── Interaction ─────────────────────────────────────────────────────
 
@@ -678,6 +786,7 @@ class FlowResourcePanel(QWidget):
             self._thumb_layout.removeWidget(btn)
             btn.deleteLater()
         self._pixmaps.pop(current, None)
+        self._update_container_size()
 
         self._refresh_header()
         self._update_action_buttons()
@@ -729,7 +838,7 @@ class FlowResourcePanel(QWidget):
         """
         for path in new_paths:
             if path in self._thumbnails:
-                continue  # already exists
+                continue
             btn = ThumbnailButton(path)
             btn.clicked_with_path.connect(self._on_thumbnail_clicked)
             btn.double_clicked_path.connect(self.file_double_clicked.emit)
@@ -737,15 +846,10 @@ class FlowResourcePanel(QWidget):
             if path in self._pixmaps:
                 btn.set_thumbnail(self._pixmaps[path])
 
-            # Insert before the stretch
-            stretch_idx = self._thumb_layout.count() - 1
-            self._thumb_layout.insertWidget(max(stretch_idx, 0), btn)
+            self._thumb_layout.addWidget(btn)
             self._thumbnails[path] = btn
 
-        # Ensure stretch is at end
-        if not self._thumb_layout.itemAt(self._thumb_layout.count() - 1) or \
-           self._thumb_layout.itemAt(self._thumb_layout.count() - 1).widget() is not None:
-            self._thumb_layout.addStretch(1)
+        self._update_container_size()
 
         # Start async loading for new paths only
         if new_paths:
@@ -755,6 +859,22 @@ class FlowResourcePanel(QWidget):
             loader.start()
 
     # ── Button state management (WPF CanExecute equivalent) ──────────────
+
+    def _update_container_size(self):
+        """Set container minimum width from thumbnail count + spacing + margins.
+
+        Calculated explicitly to avoid Qt layout sizeHint() timing issues.
+        count * (btn_w + spacing) - spacing + margins.left + margins.right
+        """
+        count = len(self._thumbnails)
+        if count == 0:
+            self._thumb_container.setMinimumSize(0, 0)
+            return
+        btn_w = THUMB_SIZE + 6
+        spacing = self._thumb_layout.spacing()
+        margins = self._thumb_layout.contentsMargins()
+        total_w = count * (btn_w + spacing) - spacing + margins.left() + margins.right()
+        self._thumb_container.setMinimumSize(total_w, 0)
 
     def _update_action_buttons(self):
         """Enable/disable delete & clear buttons based on file list state.
