@@ -26,9 +26,9 @@ from gui.theme import theme_manager, connect_theme
 def _detect_icon_font() -> str:
     """Detect available Segoe icon font family on Windows."""
     candidates = [
-        "Segoe Fluent Icons",
-        "Segoe MDL2 Assets",
-        "Segoe UI Symbol",
+        "Segoe MDL2 Assets",      # WPF original — has ALL icon codepoints
+        "Segoe Fluent Icons",     # Win11 new — many glyphs differ or missing
+        "Segoe UI Symbol",        # last resort fallback
     ]
     for name in candidates:
         font = QFont(name)
@@ -71,8 +71,8 @@ class FontIcons:
     ChevronRight = ""
     ChevronUp = ""
     ChevronDown = ""
-    PageLeft = ""
-    PageRight = ""
+    PageLeft = ""
+    PageRight = ""
 
     # ── Actions ──
     Replay = ""                #  — run / start

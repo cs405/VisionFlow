@@ -427,11 +427,11 @@ class FlowResourcePanel(QWidget):
         strip_layout.addWidget(self._scroll_area)
 
         # ── Page navigation overlay (WPF: ScrollViewerPageLeft/RightCommand) ──
-        # WPF: FontIconButton FontSize="25", Margin="5,0"
-        btn_icon_font = QFont("Segoe Fluent Icons", 16)
+        # WPF: FontIconButton FontSize="25". Qt: icon_font() auto-detects Segoe font.
+        from gui.font_icons import icon_font
 
         self._page_left_btn = QPushButton(FontIcons.PageLeft)
-        self._page_left_btn.setFont(btn_icon_font)
+        self._page_left_btn.setFont(icon_font(16))
         self._page_left_btn.setFixedSize(PAGE_BTN_SIZE, PAGE_BTN_SIZE)
         self._page_left_btn.setCursor(Qt.PointingHandCursor)
         self._page_left_btn.setFocusPolicy(Qt.NoFocus)
@@ -439,23 +439,20 @@ class FlowResourcePanel(QWidget):
         self._page_left_btn.clicked.connect(self._page_left)
 
         self._page_right_btn = QPushButton(FontIcons.PageRight)
-        self._page_right_btn.setFont(btn_icon_font)
+        self._page_right_btn.setFont(icon_font(16))
         self._page_right_btn.setFixedSize(PAGE_BTN_SIZE, PAGE_BTN_SIZE)
         self._page_right_btn.setCursor(Qt.PointingHandCursor)
         self._page_right_btn.setFocusPolicy(Qt.NoFocus)
         self._page_right_btn.setToolTip("下一页")
         self._page_right_btn.clicked.connect(self._page_right)
 
-        # Overlay page buttons at edges (WPF: Margin="5,0" ≈ 2px edge gap)
+        # Overlay page buttons on scroll area (WPF: Margin="5,0" ≈ 2px edge gap)
         self._page_left_btn.setParent(self._scroll_area)
         self._page_left_btn.move(2, (self._scroll_area.height() - PAGE_BTN_SIZE) // 2)
         self._page_left_btn.show()
 
         self._page_right_btn.setParent(self._scroll_area)
-        self._page_right_btn.move(
-            self._scroll_area.width() - PAGE_BTN_SIZE - 2,
-            (self._scroll_area.height() - PAGE_BTN_SIZE) // 2,
-        )
+        QTimer.singleShot(100, self._reposition_page_buttons)  # wait for layout
         self._page_right_btn.show()
 
         # Theme-aware styling — WPF {DynamicResource} equivalent
@@ -554,11 +551,17 @@ class FlowResourcePanel(QWidget):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if hasattr(self, '_page_right_btn'):
-            sw = self._scroll_area.width()
-            sh = self._scroll_area.height()
-            self._page_left_btn.move(2, (sh - PAGE_BTN_SIZE) // 2)
-            self._page_right_btn.move(sw - PAGE_BTN_SIZE - 2, (sh - PAGE_BTN_SIZE) // 2)
+        self._reposition_page_buttons()
+
+    def _reposition_page_buttons(self):
+        """Position page buttons at left/right edges of the panel."""
+        if not hasattr(self, '_page_right_btn') or self._page_right_btn is None:
+            return
+        pw = self.width()                               # full panel width
+        sh = self._scroll_area.height()
+        cy = (sh - PAGE_BTN_SIZE) // 2                  # vertical center
+        self._page_left_btn.move(2, cy)
+        self._page_right_btn.move(pw - PAGE_BTN_SIZE - 2, cy)
 
     # ── Page navigation (WPF: ScrollViewer.PageLeft / PageRight) ────────────
 
