@@ -525,7 +525,7 @@ class PropertyPanel(QWidget):
         if isinstance(self._current_node, ROINodeData) and "roi" not in existing:
             result.append(("roi", Property(
                 None, name="ROI范围", group=PropertyGroupNames.BASE_PARAMETERS,
-                description="设置 ROI 模式与矩形范围", order=1000,
+                description="设置 ROI 模式与矩形范围", order=1001,
             )))
         if isinstance(self._current_node, ConditionNodeData) and "conditions" not in existing:
             result.append(("conditions", Property(
