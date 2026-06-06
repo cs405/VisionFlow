@@ -710,6 +710,7 @@ class VisionNodeData(DemoNodeDataBase):
         super().__init__()
         self._mat: np.ndarray | None = None
         self._original_mat: np.ndarray | None = None
+        self._prepared_input: np.ndarray | None = None
         self._result_presenter: Any = None
 
     # -- Mat (the current image/data) --
@@ -721,6 +722,15 @@ class VisionNodeData(DemoNodeDataBase):
     @mat.setter
     def mat(self, value: np.ndarray | None):
         self._mat = value
+
+    def get_input_mat(self, fallback: np.ndarray | None = None) -> np.ndarray | None:
+        """Get the effective input image for invoke_core processing.
+
+        Returns _prepared_input if set (e.g. by image_source_mode or ROI logic),
+        otherwise returns the fallback (typically from_node.mat).
+        This avoids modifying upstream nodes' _mat which is visible to the UI thread.
+        """
+        return self._prepared_input if self._prepared_input is not None else fallback
 
     # -- Result images --
 
@@ -1087,30 +1097,26 @@ class ROINodeData(VisionNodeData):
             x, y = max(0, x), max(0, y)
             w, h = min(w, w_img - x), min(h, h_img - y)
 
-            # Temporarily set upstream mat to ROI region so invoke_core
-            # only operates on the ROI, then paste result back into full image
-            saved_mat = from_data._mat if from_data else None
-            if from_data is not None:
-                from_data._mat = input_mat[y:y+h, x:x+w]
-
+            # Set prepared input to ROI region — does NOT modify from_data._mat
+            self._prepared_input = input_mat[y:y+h, x:x+w]
             result = super().invoke(previors, diagram)
-
-            if from_data is not None:
-                from_data._mat = saved_mat
+            self._prepared_input = None
 
             # Paste processed result back into full input image
             if self.mat is not None and self.mat.shape[:2] == (h, w):
-                full_result = input_mat.copy()
-                full_result[y:y+h, x:x+w] = self.mat
-                self._mat = full_result
-                self._update_result_image_source()
+                try:
+                    full_result = input_mat.copy()
+                    full_result[y:y+h, x:x+w] = self.mat
+                    self._mat = full_result
+                    self._update_result_image_source()
+                except (ValueError, IndexError):
+                    pass  # channel mismatch (e.g. BGR→gray) — keep raw result
         else:
-            # No ROI — may still need to swap input_mat for image_source_mode
+            # No ROI — may still need to use the selected input_mat
             if from_data is not None and input_mat is not from_data.mat:
-                saved_mat = from_data._mat
-                from_data._mat = input_mat
+                self._prepared_input = input_mat
                 result = super().invoke(previors, diagram)
-                from_data._mat = saved_mat
+                self._prepared_input = None
             else:
                 result = super().invoke(previors, diagram)
 
@@ -1189,7 +1195,7 @@ class OpenCVNodeDataBase(SelectableResultImageNodeData):
     image_source_mode = Property(
         "处理后图片", name="图像源", group=PropertyGroupNames.BASE_PARAMETERS,
         description="选择输入图像来源：处理后图片(上游节点输出) 或 原图(数据源原始图像)",
-        editor="choices", choices=["处理后图片", "原图"], order=1001,
+        editor="choices", choices=["处理后图片", "原图"], order=1000,
     )
 
     def is_valid(self, mat: np.ndarray) -> bool:
