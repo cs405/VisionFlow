@@ -353,6 +353,10 @@ class WorkflowEngine:
                             event_system.publish(EventType.WORKFLOW_ERROR, sender=self, result=r)
                             return r
 
+            if self.state == WorkflowState.STOPPED:
+                event_system.publish(EventType.WORKFLOW_STOPPED, sender=self)
+                return FlowableResult.ok(message="流程已停止")
+
             self.state = WorkflowState.COMPLETED
             event_system.publish(EventType.WORKFLOW_COMPLETED, sender=self, result=last_result)
             return last_result
@@ -362,6 +366,15 @@ class WorkflowEngine:
             result = FlowableResult.error(message=str(e))
             event_system.publish(EventType.WORKFLOW_ERROR, sender=self, result=result)
             return result
+
+    def reset(self):
+        """Reset workflow state to IDLE for re-execution.
+
+        Resets state without clearing nodes/links. Used between continuous
+        execution iterations and by the reset command.
+        """
+        self.state = WorkflowState.IDLE
+        self._invoke_count = 0
 
     def execute_step(self, node_id: str) -> FlowableResult:
         """Execute a single node (for single-step debugging)."""
