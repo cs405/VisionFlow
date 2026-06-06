@@ -456,6 +456,14 @@ class NodeBase(ABC):
         return result
 
     def _serialize_property_value(self, value: Any) -> Any:
+        # Normalize numpy/array-like types to native Python — ensures JSON-safe output
+        import numpy as np
+        if isinstance(value, (np.integer,)):
+            return int(value)
+        if isinstance(value, (np.floating,)):
+            return float(value)
+        if isinstance(value, np.ndarray):
+            return value.tolist()
         if isinstance(value, Enum):
             return {
                 "__enum__": f"{value.__class__.__module__}.{value.__class__.__name__}",
@@ -474,12 +482,20 @@ class NodeBase(ABC):
                 "__type__": value.__class__.__name__,
                 "data": value.to_dict(),
             }
-        return value
+        return str(value)
 
     def _deserialize_property_value(self, value: Any) -> Any:
         if isinstance(value, list):
             return [self._deserialize_property_value(v) for v in value]
         if not isinstance(value, dict):
+            # Convert numeric strings back to numbers (numpy serialization fallback)
+            if isinstance(value, str):
+                try:
+                    if '.' in value or 'e' in value.lower():
+                        return float(value)
+                    return int(value)
+                except (ValueError, OverflowError):
+                    pass
             return value
 
         if "__tuple__" in value:
@@ -504,10 +520,13 @@ class NodeBase(ABC):
         return {k: self._deserialize_property_value(v) for k, v in value.items()}
 
     def _serialize_properties(self) -> dict[str, Any]:
+        """Serialize ALL Property values — readable and writable alike.
+
+        Every Property visible in the control panel is saved so reloading
+        the project restores the exact panel state without per-node code.
+        """
         properties: dict[str, Any] = {}
         for name, desc in self.get_property_descriptors():
-            if desc.readonly:
-                continue
             properties[name] = self._serialize_property_value(getattr(self, name, desc.default))
         return properties
 
