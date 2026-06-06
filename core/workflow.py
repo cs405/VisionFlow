@@ -389,7 +389,11 @@ class WorkflowEngine:
         return self._execute_node(node)
 
     def stop(self):
-        """Stop execution."""
+        """Stop execution (WPF: Diagram.State = Canceling → GotoState).
+
+        Sets workflow to STOPPED state. The execute() loop checks
+        this flag before processing each level and breaks out.
+        """
         self.state = WorkflowState.STOPPED
         event_system.publish(EventType.WORKFLOW_STOPPED, sender=self)
 
