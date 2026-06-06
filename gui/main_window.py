@@ -40,6 +40,7 @@ from gui.flow_resource_panel import FlowResourcePanel
 from gui.node_editor.editor_widget import DiagramEditorWidget
 from gui.start_page import StartPage
 from gui.help_panel import HelpPanel
+from services.workflow_runner import WorkflowRunner
 
 # ── Windows frameless window border resize ──────────────────────────
 WM_NCHITTEST = 0x0084
@@ -461,6 +462,9 @@ class MainWindow(QMainWindow):
         self._diagram_pages: dict[str, QWidget] = {}
         self._diagram_headers: dict[str, _DiagramTabHeader] = {}
         self._project_loaded = False
+        self._continuous_mode = False
+        self._stop_requested = False
+        self._wf_runner = WorkflowRunner()
         self._left_panel_visible = True
         self._right_panel_visible = True
         self._saved_right_width = _ps.get_i("right_width", 420)
@@ -660,6 +664,7 @@ class MainWindow(QMainWindow):
 
         for icon, tip, slot in [
             (FontIcons.Replay,         "开始",         self._on_run_workflow),
+            (FontIcons.Sync,           "连续执行",     self._on_continuous_run),
             (FontIcons.Location,       "停止",         self._on_stop_workflow),
             (FontIcons.Refresh,        "重置",         self._on_reset_workflow_view),
             (FontIcons.EditMirrored,   "编辑面板",     None),
@@ -676,8 +681,9 @@ class MainWindow(QMainWindow):
             self._tool_diagram_cmds.layout().addWidget(btn)
         # Keep button refs for CanExecute-style state management (mirror WPF)
         self._run_btn = self._tool_diagram_cmds.layout().itemAt(0).widget()
-        self._stop_btn = self._tool_diagram_cmds.layout().itemAt(1).widget()
-        self._reset_btn = self._tool_diagram_cmds.layout().itemAt(2).widget()
+        self._continuous_btn = self._tool_diagram_cmds.layout().itemAt(1).widget()
+        self._stop_btn = self._tool_diagram_cmds.layout().itemAt(2).widget()
+        self._reset_btn = self._tool_diagram_cmds.layout().itemAt(3).widget()
         # Start with stop/reset disabled (no running workflow)
         self._stop_btn.setEnabled(False)
         self._reset_btn.setEnabled(False)
@@ -1508,6 +1514,7 @@ class MainWindow(QMainWindow):
                 return
             self._workflow = None
             self._diagram_editor = None
+            self._wf_runner.bind(None)
             self._diagram_status_strip.set_status("流程图就绪", "#4caf50")
             self._refresh_command_states(None)
             return
@@ -1515,6 +1522,7 @@ class MainWindow(QMainWindow):
         diagram = project.selected_diagram
         page = self._current_diagram_page()
         self._workflow = diagram.workflow if diagram else None
+        self._wf_runner.bind(self._workflow)
         self._diagram_editor = getattr(page, "editor", None)
         self._node_cnt_lbl.setText(f"节点: {len(self._workflow.get_all_nodes()) if self._workflow else 0}")
         self._sync_proj_labels(project)
@@ -1552,6 +1560,8 @@ class MainWindow(QMainWindow):
         workflow = self._workflow
         if hasattr(self, '_run_btn'):
             self._run_btn.setEnabled(workflow.can_start() if workflow else False)
+        if hasattr(self, '_continuous_btn'):
+            self._continuous_btn.setEnabled(workflow.can_start() if workflow else False)
         if hasattr(self, '_stop_btn'):
             self._stop_btn.setEnabled(workflow.can_stop() if workflow else False)
         if hasattr(self, '_reset_btn'):
@@ -1635,12 +1645,25 @@ class MainWindow(QMainWindow):
         open_node_dialog(node_data, parent=self)
 
     def _on_node_executed(self, node_data, state: str, time_span: str):
-        """Log node execution to history (WPF Messages.Add)."""
+        """Log node execution to history (WPF Messages.Add).
+
+        In continuous mode, also refresh the image panel when the executed
+        node is the currently selected one, so the user sees real-time results.
+        """
         if isinstance(node_data, VisionNodeData):
             src_path = ""
             if hasattr(node_data, 'src_file_path'):
                 src_path = node_data.src_file_path or ""
             self._result_panel.add_to_history(node_data, state, time_span, src_path)
+
+        # Continuous mode: real-time image update for the selected node
+        if (getattr(self, '_continuous_mode', False)
+                and self._selected_node is node_data
+                and isinstance(node_data, VisionNodeData)):
+            if node_data.mat is not None:
+                self._img_panel.set_image(node_data.mat)
+            elif getattr(node_data, '_result_image_source', None) is not None:
+                self._img_panel.set_image(node_data._result_image_source)
 
     def _on_editor_node_help_requested(self, node_data: NodeBase):
         """Handle right-click → 帮助 — switch to help tab and show node help."""
@@ -1707,14 +1730,26 @@ class MainWindow(QMainWindow):
             self._side_status_strip.set_status("结果区正在等待输出...", "#2196f3")
         elif event == "done":
             elapsed = self._format_elapsed()
-            self._state_lbl.setText(f"{FontIcons.Completed} 完成")
+            label = "连续执行中" if getattr(self, '_continuous_mode', False) else "流程执行完成"
+            self._state_lbl.setText(f"{FontIcons.Completed} {label}")
             self._state_lbl.setStyleSheet("color: #4caf50; font-weight: bold;")
-            self._msg_lbl.setText(f"流程执行完成 (用时: {elapsed})")
-            self._diagram_status_strip.set_status(f"流程图执行完成 · 用时: {elapsed}", "#4caf50")
+            self._msg_lbl.setText(f"{label} (用时: {elapsed})")
+            self._diagram_status_strip.set_status(f"{label} · 用时: {elapsed}", "#4caf50")
             self._side_status_strip.set_status("结果区已更新", "#4caf50")
-            # Auto-select first node to refresh image viewer with result
-            self._refresh_result_viewer()
+            # Refresh all node bars (fallback in case per-node signals were lost)
+            if self._diagram_editor:
+                self._diagram_editor.refresh_all_node_states()
+            # In continuous mode, refresh the user-selected node's image
+            if getattr(self, '_continuous_mode', False) and self._selected_node:
+                self._update_image_context(self._selected_node)
+                if isinstance(self._selected_node, VisionNodeData):
+                    mat = self._selected_node.mat
+                    if mat is not None:
+                        self._img_panel.set_image(mat)
+                    elif getattr(self._selected_node, '_result_image_source', None) is not None:
+                        self._img_panel.set_image(self._selected_node._result_image_source)
         elif event == "error":
+            self._continuous_mode = False
             elapsed = self._format_elapsed()
             self._state_lbl.setText(f"{FontIcons.Error} 错误")
             self._state_lbl.setStyleSheet("color: #f44336; font-weight: bold;")
@@ -1722,27 +1757,17 @@ class MainWindow(QMainWindow):
             self._msg_lbl.setText(f"{msg} (用时: {elapsed})")
             self._diagram_status_strip.set_status(f"流程图错误：{msg}", "#f44336")
             self._side_status_strip.set_status("结果区收到错误消息", "#f44336")
+            # Refresh all node bars (fallback)
+            if self._diagram_editor:
+                self._diagram_editor.refresh_all_node_states()
         elif event == "stopped":
+            self._continuous_mode = False
             self._state_lbl.setText(f"{FontIcons.Stop} 已停止")
             self._state_lbl.setStyleSheet("color: #ff9800; font-weight: bold;")
             self._msg_lbl.setText("流程已被用户停止")
             self._diagram_status_strip.set_status("流程图已停止", "#ff9800")
             self._side_status_strip.set_status("结果区已停止等待", "#ff9800")
         self._refresh_command_states(project_service.current_project)
-
-    def _refresh_result_viewer(self):
-        """After execution, show the first available result in the image viewer."""
-        if not self._workflow:
-            return
-        # Try to show the last-executed node's result
-        nodes = self._workflow.get_all_nodes()
-        for node in nodes:
-            if isinstance(node, VisionNodeData) and node.mat is not None:
-                self._select_node(node)
-                return
-        # Fallback: select first node to trigger image panel update
-        if nodes:
-            self._select_node(nodes[0])
 
     def _format_elapsed(self) -> str:
         """Format elapsed workflow time (WPF TimeSpan display)."""
@@ -1818,16 +1843,28 @@ class MainWindow(QMainWindow):
                 self._sync_proj_labels(project)
 
     def _on_run_workflow(self):
-        """Start workflow execution (mirrors WPF StartCommand).
+        """Single-run: execute workflow once (WPF StartCommand).
 
-        WPF pattern (FlowableDiagramDataBase):
-          StartCommand → await this.Start() → model handles everything.
-          UI updates via bindings + events — no view code-behind for execution.
+        Executes all nodes in topological order on a worker thread.
+        - Each node bar turns green (COMPLETED) or red (ERROR) via events.
+        - Image area stays blank until user clicks a node.
+        """
+        self._start_execution(continuous=False)
 
-        Python: sync workflow → model.start() on worker thread.
-        ALL UI updates (status, buttons, messages) come from event handlers
-        (_on_wf_start, _on_wf_done, _on_wf_err, _on_wf_stopped).
-        The view handler only kicks off execution — no result handling here.
+    def _on_continuous_run(self):
+        """Continuous-run: execute workflow in a loop (WPF RunViewCommand).
+
+        Camera captures new frames each iteration.  Node bars update in
+        real-time.  When user clicks a node, its processed image updates
+        continuously.
+        """
+        self._start_execution(continuous=True)
+
+    def _start_execution(self, continuous: bool = False):
+        """Common execution entry point — sync, guard, delegate to WorkflowRunner.
+
+        All UI updates flow through events (_on_wf_* handlers).
+        The view only kicks off the runner; model + events drive the rest.
         """
         if not self._workflow:
             return
@@ -1836,36 +1873,29 @@ class MainWindow(QMainWindow):
         if node_count == 0:
             self._log_panel.warning("流程图无节点，无法开始")
             return
-        self._log_panel.info(f"开始执行流程... ({node_count} 个节点)")
-        import threading
-        import traceback
-        def _run():
-            try:
-                result = self._workflow.start()
-                if result.is_error:
-                    # Log error via event (fires on worker thread; safe for event_system)
-                    from core.events import EventType, event_system
-                    event_system.publish(EventType.MESSAGE_ERROR, sender=self,
-                                        message=f"流程执行出错: {result.message}")
-            except Exception:
-                from core.events import EventType, event_system
-                event_system.publish(EventType.MESSAGE_ERROR, sender=self,
-                                    message=f"流程异常: {traceback.format_exc()}")
-        t = threading.Thread(target=_run, daemon=True)
-        t.start()
+
+        label = "连续执行" if continuous else "开始执行流程"
+        self._log_panel.info(f"{label}... ({node_count} 个节点)")
+        self._continuous_mode = continuous
+        self._stop_requested = False
+
+        if continuous:
+            self._wf_runner.start_continuous()
+        else:
+            self._wf_runner.start_once()
 
     def _on_stop_workflow(self):
         """Stop workflow execution (mirrors WPF StopCommand).
 
         WPF: Stop() → Canceling → GotoState on all parts → Canceled.
-        Python: model.stop() handles state; view updates button states.
+        Python: delegate to WorkflowRunner + button refresh.
         """
-        if self._workflow:
-            self._workflow.stop()
-            self._log_panel.warning("流程已停止")
-            self._diagram_status_strip.set_status("流程图已停止", "#ff9800")
-            self._side_status_strip.set_status("结果区已停止等待", "#ff9800")
-            self._refresh_command_states(project_service.current_project)
+        self._stop_requested = True
+        self._wf_runner.stop()
+        self._log_panel.warning("流程已停止")
+        self._diagram_status_strip.set_status("流程图已停止", "#ff9800")
+        self._side_status_strip.set_status("结果区已停止等待", "#ff9800")
+        self._refresh_command_states(project_service.current_project)
 
     def _on_reset_workflow_view(self):
         """Reset workflow to ready state (mirrors WPF ResetCommand).

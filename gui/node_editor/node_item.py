@@ -325,7 +325,7 @@ class NodeItem(QGraphicsObject):
     def _resolve_state_color(self) -> QColor:
         """State color for left bar — hardcoded, independent of theme."""
         if self._state == NodeState.RUNNING:
-            return QColor("#3399FF")
+            return QColor("#67C23A")
         if self._state == NodeState.COMPLETED:
             return QColor("#67C23A")
         if self._state == NodeState.ERROR:
@@ -341,7 +341,7 @@ class NodeItem(QGraphicsObject):
         if self._state == NodeState.ERROR:
             return QColor("#DC000C"), 2.0
         if self._state == NodeState.RUNNING:
-            return QColor("#3399FF"), 2.0
+            return QColor("#67C23A"), 2.0
         if self._state == NodeState.COMPLETED:
             return QColor("#67C23A"), 2.0
         if self._state == NodeState.IDLE:

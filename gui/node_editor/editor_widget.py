@@ -275,7 +275,7 @@ class DiagramEditorWidget(QWidget):
         self._mini_timer = QTimer(self)
         self._mini_timer.setInterval(100)
         self._mini_timer.timeout.connect(self._update_minimap)
-        self._node_state_change.connect(self._on_node_state_change)
+        self._node_state_change.connect(self._on_node_state_change, Qt.QueuedConnection)
         self._setup_ui()
 
     def _setup_ui(self):
@@ -479,6 +479,15 @@ class DiagramEditorWidget(QWidget):
     def _on_node_state_change(self, node_id: str, state: str):
         """Slot called on main thread via queued signal connection."""
         self.scene.on_workflow_state_changed(node_id, state)
+
+    def refresh_all_node_states(self):
+        """Sync every node item visual to its model state.
+
+        Called as a fallback from main_window after workflow completes,
+        in case per-node signals were lost.
+        """
+        for item in self.scene.get_all_node_items():
+            item.update_from_node()
 
     # ── Link / Port event handlers (Link mode / Port mode) ──
 
