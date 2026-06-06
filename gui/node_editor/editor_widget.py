@@ -266,8 +266,6 @@ class DiagramEditorWidget(QWidget):
 
     # Internal signal for cross-thread node state updates.
     # Qt auto-queues the call to the receiver's thread (the main thread).
-    _node_state_change = pyqtSignal(str, str)  # node_id, state
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self._workflow: WorkflowEngine | None = None
@@ -275,7 +273,14 @@ class DiagramEditorWidget(QWidget):
         self._mini_timer = QTimer(self)
         self._mini_timer.setInterval(100)
         self._mini_timer.timeout.connect(self._update_minimap)
-        self._node_state_change.connect(self._on_node_state_change, Qt.QueuedConnection)
+        # Thread-safe state queue: event callbacks (on Worker thread) push,
+        # poll timer (main thread) pops and applies.
+        import queue
+        self._state_queue: queue.Queue = queue.Queue()
+        self._state_poll = QTimer(self)
+        self._state_poll.setInterval(30)
+        self._state_poll.timeout.connect(self._drain_state_queue)
+        self._state_poll.start()
         self._setup_ui()
 
     def _setup_ui(self):
@@ -454,31 +459,39 @@ class DiagramEditorWidget(QWidget):
         node = self._subscribed_workflow.get_node_by_id(sender.node_id)
         return node is not None
 
+    def _drain_state_queue(self):
+        """Apply all pending state changes on the main thread."""
+        import queue
+        try:
+            while True:
+                node_id, state = self._state_queue.get_nowait()
+                if node_id == "__all__":
+                    for item in self.scene.get_all_node_items():
+                        item.set_state(NodeState.IDLE)
+                else:
+                    self.scene.on_workflow_state_changed(node_id, state)
+        except queue.Empty:
+            pass
+
     def _on_node_started(self, sender, **kwargs):
         if self._belongs_to_bound_workflow(sender):
-            # pyqtSignal auto-queues to main thread from worker thread
-            self._node_state_change.emit(sender.node_id, "running")
+            self._state_queue.put((sender.node_id, "running"))
 
     def _on_node_completed(self, sender, **kwargs):
         if self._belongs_to_bound_workflow(sender):
-            self._node_state_change.emit(sender.node_id, "completed")
+            self._state_queue.put((sender.node_id, "completed"))
             import time
             self.node_executed.emit(sender, "Success", time.strftime("%H:%M:%S"))
 
     def _on_node_error(self, sender, **kwargs):
         if self._belongs_to_bound_workflow(sender):
-            self._node_state_change.emit(sender.node_id, "error")
+            self._state_queue.put((sender.node_id, "error"))
             import time
             self.node_executed.emit(sender, "Error", time.strftime("%H:%M:%S"))
 
     def _on_workflow_stopped(self, sender, **kwargs):
         if sender is self._subscribed_workflow:
-            for item in self.scene.get_all_node_items():
-                item.set_state(NodeState.IDLE)
-
-    def _on_node_state_change(self, node_id: str, state: str):
-        """Slot called on main thread via queued signal connection."""
-        self.scene.on_workflow_state_changed(node_id, state)
+            self._state_queue.put(("__all__", "idle"))
 
     def refresh_all_node_states(self):
         """Sync every node item visual to its model state.

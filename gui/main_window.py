@@ -30,6 +30,7 @@ from gui.font_icons import FontIcons, FontIconButton, FontIconTextBlock, FontIco
 
 from gui.theme import theme_manager, ThemePickerDialog
 from gui.theme_data import resolve_colors
+from gui.node_editor.node_item import NodeState
 from gui.toolbox_panel import ToolboxPanel
 from gui.property_panel import PropertyPanel
 from gui.result_panel import ResultPanel
@@ -1863,8 +1864,8 @@ class MainWindow(QMainWindow):
     def _start_execution(self, continuous: bool = False):
         """Common execution entry point — sync, guard, delegate to WorkflowRunner.
 
-        All UI updates flow through events (_on_wf_* handlers).
-        The view only kicks off the runner; model + events drive the rest.
+        Node states are set directly from the main thread here — NOT via
+        cross-thread events, which are unreliable with threading.Thread.
         """
         if not self._workflow:
             return
@@ -1879,19 +1880,50 @@ class MainWindow(QMainWindow):
         self._continuous_mode = continuous
         self._stop_requested = False
 
+        # Set all nodes to RUNNING on the main thread (reliable)
+        editor = self._current_diagram_editor()
+        if editor:
+            for item in editor.scene.get_all_node_items():
+                item.set_state(NodeState.RUNNING)
+
         if continuous:
             self._wf_runner.start_continuous()
         else:
             self._wf_runner.start_once()
 
+        # Schedule post-execution state update (runner is on daemon thread)
+        QTimer.singleShot(200, self._finalize_execution_state)
+
+    def _finalize_execution_state(self):
+        """After execution completes, set node states to final values."""
+        editor = self._current_diagram_editor()
+        if editor is None or not self._workflow:
+            return
+        from core.node_base import VisionNodeData
+        for item in editor.scene.get_all_node_items():
+            nd = item.node_data
+            if isinstance(nd, VisionNodeData):
+                msg = nd.message or ""
+                if "错误" in msg or "无法" in msg or hasattr(nd, '_last_error') and nd._last_error:
+                    item.set_state(NodeState.ERROR)
+                else:
+                    item.set_state(NodeState.COMPLETED)
+            else:
+                item.set_state(NodeState.COMPLETED)
+
     def _on_stop_workflow(self):
         """Stop workflow execution (mirrors WPF StopCommand).
 
         WPF: Stop() → Canceling → GotoState on all parts → Canceled.
-        Python: delegate to WorkflowRunner + button refresh.
+        Python: delegate to WorkflowRunner + direct state reset.
         """
         self._stop_requested = True
         self._wf_runner.stop()
+        # Directly reset all node states (reliable, no cross-thread events)
+        editor = self._current_diagram_editor()
+        if editor:
+            for item in editor.scene.get_all_node_items():
+                item.set_state(NodeState.IDLE)
         self._log_panel.warning("流程已停止")
         self._diagram_status_strip.set_status("流程图已停止", "#ff9800")
         self._side_status_strip.set_status("结果区已停止等待", "#ff9800")
