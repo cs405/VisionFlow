@@ -631,6 +631,9 @@ class MainWindow(QMainWindow):
             btn.setStyleSheet(_CMD_BTN)
             if slot:
                 btn.clicked.connect(slot)
+            # Store buttons that need CanExecute-style state management
+            if tip == "删除流程图":
+                self._delete_diagram_btn = btn
             self._tool_project_cmds.layout().addWidget(btn)
         tb.addWidget(self._tool_project_cmds)
         tb.addWidget(_hsep())
@@ -1426,30 +1429,48 @@ class MainWindow(QMainWindow):
             self._log_panel.success(f"模板已保存: {name.strip()} ({node_count} 个节点)")
 
     def _on_delete_diagram(self):
-        """Delete current diagram."""
+        """Delete current diagram (mirrors WPF DeleteDiagramCommand).
+
+        WPF pattern:
+          - Model (VisionProjectItemBase) holds DeleteDiagramCommand
+          - CanExecute: SelectedDiagramData != null && Count > 1
+          - Execute: DiagramDatas.Remove(SelectedDiagramData)
+          - TabControl auto-selects next diagram via binding
+
+        Python: sync → model.delete_selected_diagram() → refresh tabs → log.
+        The view only handles UI concerns; business logic stays in ProjectItem.
+        """
         project = project_service.current_project
         if project is None:
             return
         self._sync_workflow_to_project()
-        if project.delete_diagram():
+        deleted = project.delete_selected_diagram()
+        if deleted is not None:
             self._refresh_diagram_tabs(project)
-            self._log_panel.info("已删除当前流程图")
+            self._log_panel.info(f"已删除流程图: {deleted.name}")
+            self._sync_proj_labels(project)
         else:
             self._log_panel.warning("至少需要保留一个流程图")
-        self._sync_proj_labels(project)
 
     def _on_close_diagram_tab(self, index: int):
+        """Close diagram by tab index (WPF: TabItem close button).
+
+        Same flow as _on_delete_diagram but uses explicit index for
+        the case where the user clicks the tab's close button rather
+        than the toolbar delete button.
+        """
         project = project_service.current_project
         if project is None:
             return
+        if not (0 <= index < len(project.diagrams)):
+            return
         self._sync_workflow_to_project()
-        if 0 <= index < len(project.diagrams):
-            diagram = project.diagrams[index]
-            if project.delete_diagram(diagram):
-                self._refresh_diagram_tabs(project)
-                self._log_panel.info(f"已删除流程图: {diagram.name}")
-            else:
-                self._log_panel.warning("至少需要保留一个流程图")
+        diagram = project.diagrams[index]
+        if not project.delete_diagram(diagram):
+            self._log_panel.warning("至少需要保留一个流程图")
+            return
+        self._refresh_diagram_tabs(project)
+        self._log_panel.info(f"已删除流程图: {diagram.name}")
         self._sync_proj_labels(project)
 
     def _on_diagram_tab_changed(self, index: int):
@@ -1458,6 +1479,7 @@ class MainWindow(QMainWindow):
             self._workflow = None
             self._diagram_editor = None
             self._diagram_status_strip.set_status("流程图就绪", "#4caf50")
+            self._refresh_command_states(None)
             return
         project.selected_diagram_index = index
         diagram = project.selected_diagram
@@ -1482,6 +1504,21 @@ class MainWindow(QMainWindow):
             self._cap_proj_lbl.setText(project_name)
         if hasattr(self, "_cmd_proj_lbl"):
             self._cmd_proj_lbl.setText(diagram_name)
+        self._refresh_command_states(project)
+
+    def _refresh_command_states(self, project: ProjectItem | None):
+        """Update toolbar button enabled states to mirror WPF CanExecute.
+
+        WPF: CommandManager.InvalidateRequerySuggested auto-updates button
+        states based on CanExecute predicates. Python/PyQt5 requires explicit
+        updates at state-change points.
+
+        Currently managed buttons:
+          - 删除流程图: enabled only when SelectedDiagramData != null && Count > 1
+        """
+        if hasattr(self, '_delete_diagram_btn'):
+            enabled = project.can_delete_diagram if project is not None else False
+            self._delete_diagram_btn.setEnabled(enabled)
 
     def _sync_workflow_to_project(self):
         project = project_service.current_project
@@ -1821,6 +1858,11 @@ class MainWindow(QMainWindow):
         return name
 
     def remove_diagram_tab(self, name: str):
+        """Remove a diagram by name (utility for external callers, e.g. CLI).
+
+        Unlike the interactive delete handlers, this does NOT sync the
+        workflow first — callers are responsible for saving first if needed.
+        """
         project = project_service.current_project
         if project is None:
             return
