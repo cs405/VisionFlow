@@ -1377,8 +1377,32 @@ class SrcFilesVisionNodeData(ROINodeData):
     #   AddImageDatasCommand    → AddFiles() → IocMessage.IOFolderDialog.ShowOpenFolderAction()
     #                           → selectedFolderPath.GetAllImages()
     #                           → DirectoryEx.GetAllFiles(IsImage)  ← RECURSIVE scan
-    #   DeleteImageDataCommand  → ShowDeleteDialog → 删除当前文件 → 选中相邻文件
-    #   ClearImageDatasCommand  → ShowDeleteAllDialog → 清空所有文件
+    #   DeleteImageDataCommand  → await IocMessage.Dialog.ShowDeleteDialog()
+    #                           → 记下 index = SrcFilePaths.IndexOf(SrcFilePath)
+    #                           → SrcFilePaths.Remove(SrcFilePath)
+    #                           → SrcFilePath = find ?? FirstOrDefault()  ← 同索引或第一个
+    #   ClearImageDatasCommand  → await IocMessage.Dialog.ShowDeleteAllDialog()
+    #                           → SrcFilePaths.Clear()
+    #                           → CanExecute: SrcFilePaths?.Count > 0        ← 空列表禁用
+    #
+    # WPF "删除" (DeleteImageDataCommand) 核心细节：
+    #   1. IoC 确认对话框: await IocMessage.Dialog.ShowDeleteDialog(callback)
+    #      - 用户确认 → 执行 callback；取消 → 不执行
+    #      - 对话框服务可 mock，Node 不依赖具体 UI 框架
+    #   2. 相邻选择算法:
+    #      int index = SrcFilePaths.IndexOf(SrcFilePath)     // 记住当前位置
+    #      SrcFilePaths.Remove(SrcFilePath)                   // 先删除
+    #      string find = SrcFilePaths.ElementAtOrDefault(index) // 同位置取新文件
+    #      SrcFilePath = find ?? SrcFilePaths.FirstOrDefault()  // 不存在则取第一个
+    #   3. 无显式 CanExecute — 删除始终可用（由对话框内部的检查保护）
+    #
+    # WPF "清空" (ClearImageDatasCommand) 核心细节：
+    #   1. IoC 确认对话框: await IocMessage.Dialog.ShowDeleteAllDialog(callback)
+    #      - "Delete All" 语义不同于单个删除 — 更强烈的确认提示
+    #   2. SrcFilePaths.Clear() — 直接清空，不逐个删除
+    #   3. CanExecute: SrcFilePaths != null && SrcFilePaths.Count > 0
+    #      - 空列表时按钮自动禁用（WPF 通过绑定自动刷新 IsEnabled）
+    #   4. 清空后 SrcFilePath 变为 null — 无选中文件
     #
     # WPF "添加文件夹" 核心实现细节：
     #   1. GetAllImages(this string folderPath) — 扩展方法
@@ -1406,10 +1430,14 @@ class SrcFilesVisionNodeData(ROINodeData):
     #
     # VisionFlow 适配策略：
     #   - 对话框由 FlowResourcePanel 通过 QFileDialog 调用（PyQt5 信号/槽风格）
-    #   - 确认对话框用 QMessageBox.question（对标 WPF ShowDeleteDialog）
-    #   - 增量缩略图构建 (add_thumbnails_for) 避免全量 rebuild
-    #   - 按钮状态管理 (_update_action_buttons) 对标 CanExecute
-    #   - Node 保持纯数据操作，UI 交互逻辑在 Panel（遵循 PyQt5 惯例）
+    #   - 确认对话框用 QMessageBox.question（对标 WPF ShowDeleteDialog / ShowDeleteAllDialog）
+    #   - 删除时增量移除缩略图按钮（_thumbnails.pop + removeWidget），避免全量 rebuild
+    #   - 按钮状态管理 (_update_action_buttons) 对标 CanExecute：
+    #       del_btn.enabled  = has_files AND has_selection
+    #       clear_btn.enabled = has_files
+    #   - Node.delete_current_file() 保持纯数据操作（对标 WPF Remove + IndexOf + ElementAtOrDefault）
+    #   - Node.clear_files() 保持纯数据操作（对标 WPF SrcFilePaths.Clear()）
+    #   - UI 交互逻辑（确认弹框、信号发射）全部在 Panel（遵循 PyQt5 惯例）
     # ═══════════════════════════════════════════════════════════════════════
 
     def load_default(self):
