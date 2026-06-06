@@ -138,6 +138,77 @@ class TableResultItem(ResultItem):
 # ── Result Collection ──────────────────────────────────────────────────────
 
 @dataclass
+# ═══════════════════════════════════════════════════════════════════════════
+# TODO: WPF "历史结果" (History Results) 实现细节
+#
+# WPF VisionDiagramDataBase + IVisionMessage / VisionMessage:
+#
+#   1. Data model — IVisionMessage interface + VisionMessage class:
+#      ┌──────────────────┬─────────────────────────────────────────────────┐
+#      │ Index (int)      │ 执行序号 = Messages.Count + 1                  │
+#      │ TimeSpan         │ 执行耗时                                       │
+#      │ Type (string)    │ 模块名称（来源: INameable.Name 或 ITextable.Text）│
+#      │ Message (string) │ 结果数据文本                                   │
+#      │ State            │ FlowableState (Success / Error)                │
+#      │ ResultImageSource│ 结果图像（ImageSource）→ 点击行时更新主图像      │
+#      │ SrcFilePath       │ 源文件路径                                    │
+#      │ ResultNodeData   │ 结果节点引用（IResultPresenterNodeData）       │
+#      └──────────────────┴─────────────────────────────────────────────────┘
+#
+#   2. Collection — ObservableCollection<IVisionMessage> Messages:
+#      - 存储在 DiagramData 上（非 UI Panel 上）→ 跨 tab 切换保留
+#      - 每次 "运行全部" loop 自动累积
+#
+#   3. OnInvokedPart(IPartData) — 自动添加/更新消息:
+#      node 执行完成 → OnInvokedPart → 检查 UseInvokedPart
+#        → find existing by ResultNodeData match → 更新 TimeSpan/Message/State
+#        → else: new VisionMessage { Index, Type=Name, State, TimeSpan,
+#            SrcFilePath, ResultImageSource, ResultNodeData }
+#        → Messages.Add(message) → LogCurrentMessage()
+#
+#   4. SelectedMessageChangedCommand — 点击行联动图像显示:
+#      SelectionChangedEventArgs → AddedItems.OfType<IVisionMessage>()
+#        → SetResultNodeData(message)
+#        → ResultImageSource = message.ResultImageSource   // 更新主图像
+#        → ResultNodeData = message.ResultNodeData         // 更新属性面板
+#
+#   5. LogCurrentMessage() — 聚合统计:
+#      totalTimeSpan = Messages.Sum(x => x.TimeSpan)
+#      CurrentMessage = new VisionMessage { TimeSpan=total, Message=this.Message }
+#      → 状态栏显示总计用时 + 最后一条消息
+#
+#   6. DataGrid 列: [执行序号|执行时间|模块|结果数据(icon+text)]
+#      - 结果数据列: DataGridTemplateColumn
+#        - FontIconTextBlock (默认 Info, Error=红色 Error, Success=绿色 Completed)
+#        - TextBlock (Text="{Binding Message}", ToolTip="{Binding Message}")
+#      - DataTrigger: State=Error → Foreground=Red, Text=Error icon
+#      - DataTrigger: State=Success → Foreground=Green, Text=Completed icon
+#
+# VisionFlow 适配策略:
+#   - VisionMessage dataclass 存储在 core/result_presenter.py（纯数据，无 Qt 依赖）
+#   - ResultPanel._history_results 保持不变（QTableWidget 绑定到 VisionMessage 列表）
+#   - 通过 event_system NODE_COMPLETED 事件自动调用 add_to_history（WPF OnInvokedPart 等效）
+#   - 点击行 → setResultNodeData 更新主图像（WPF SetResultNodeData 等效）
+#   - State icon delegate 使用 ICON_FONT_FAMILY 而非硬编码字体
+# ═══════════════════════════════════════════════════════════════════════════
+
+@dataclass
+class VisionMessage:
+    """WPF IVisionMessage / VisionMessage 1:1 port.
+
+    Stored on the ResultPanel (or DiagramData) for history table display.
+    """
+    index: int = 0
+    time_span: str = ""             # formatted time string (WPF: TimeSpan)
+    type_name: str = ""             # module name (WPF: Type)
+    message: str = ""               # result text
+    state: str = "Success"          # "Success" / "Error" / "Running"
+    result_image_source: Any = None  # numpy array for image display
+    src_file_path: str = ""         # source file at execution time
+    result_node_data: Any = None    # reference to the VisionNodeData
+
+
+@dataclass
 class NodeResult:
     """Complete set of results from a single node execution.
 

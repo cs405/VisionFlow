@@ -1574,6 +1574,7 @@ class MainWindow(QMainWindow):
         project.selected_diagram_index = index
         diagram = project.selected_diagram
         page = self._current_diagram_page()
+        self._result_panel.clear_history()  # WPF: Messages per-DiagramData
         self._workflow = diagram.workflow if diagram else None
         self._wf_runner.bind(self._workflow)
         self._diagram_editor = getattr(page, "editor", None)

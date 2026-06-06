@@ -24,7 +24,7 @@ from gui.image_viewer import OverlayType
 from core.result_presenter import (ResultItem, RectangleResultItem, LineResultItem,
                                     ScoreRectangleResultItem, NodeResult,
                                     ResultItemType)
-from gui.font_icons import FontIcons
+from gui.font_icons import FontIcons, ICON_FONT_FAMILY
 
 
 # ── Color mapping for item types ───────────────────────────────────────────
@@ -87,9 +87,9 @@ class IconTextDelegate(QStyledItemDelegate):
 
         x = option.rect.left() + 6
 
-        # Draw FontIcon
+        # Draw FontIcon (WPF: FontIconTextBlock with DataTrigger for state)
         if icon:
-            font = QFont("Segoe Fluent Icons", 11)
+            font = QFont(ICON_FONT_FAMILY, 11)
             font.setStyleStrategy(QFont.PreferAntialias)
             painter.setFont(font)
             painter.setPen(QColor(color))
@@ -512,8 +512,18 @@ class ResultPanel(QWidget):
     # ── Clear ──────────────────────────────────────────────────────────
 
     def clear(self):
+        """Clear all tables and state."""
         self._current_table.setRowCount(0)
         self._history_table.setRowCount(0)
         self._overlay_map.clear()
         self._history_results.clear()
         self._current_node = None
+
+    def clear_history(self):
+        """Clear only the history table (WPF: Messages.Clear on diagram switch).
+
+        WPF: Messages is an ObservableCollection<IVisionMessage> on DiagramData.
+        Each diagram has its own Messages — switching diagrams clears the table.
+        """
+        self._history_table.setRowCount(0)
+        self._history_results.clear()
