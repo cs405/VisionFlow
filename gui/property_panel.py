@@ -38,8 +38,10 @@ from core.node_base import (
     DrawROI,
     InputROI,
     FromROI,
+    NoROI,
     ConditionNodeData,
     VisionPropertyCondition,
+    SrcFilesVisionNodeData,
 )
 from gui.color_picker import ColorPickerDialog
 from gui.condition_editor import ConditionEditorDialog
@@ -514,6 +516,10 @@ class PropertyPanel(QWidget):
                     if name not in [r[0] for r in result]:
                         result.append((name, desc))
 
+        # Source nodes (data sources) should not show image_source_mode
+        if isinstance(self._current_node, SrcFilesVisionNodeData):
+            result = [(name, desc) for name, desc in result if name != "image_source_mode"]
+
         # Inject synthetic properties for special node types
         existing = {name for name, _ in result}
         if isinstance(self._current_node, ROINodeData) and "roi" not in existing:
@@ -824,7 +830,7 @@ class PropertyPanel(QWidget):
             )
             if rect is None:
                 return
-            if isinstance(node.roi, DrawROI):
+            if isinstance(node.roi, (DrawROI, NoROI)):
                 node.draw_roi.rect = tuple(rect)
                 node.roi = node.draw_roi
             elif isinstance(node.roi, InputROI):
