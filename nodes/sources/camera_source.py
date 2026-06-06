@@ -26,27 +26,21 @@ class CameraCaptureNodeData(SrcFilesVisionNodeData, OpenCVNodeDataBase):
         SrcFilesVisionNodeData.__init__(self)
         OpenCVNodeDataBase.__init__(self)
         self.name = "摄像头"
-        self._cap: cv2.VideoCapture | None = None
 
     def invoke_core(self, src_image_node_data, from_node_data, diagram) -> FlowableResult:
-        if self._cap is None or not self._cap.isOpened():
-            self._cap = cv2.VideoCapture(self.camera_index)
-            self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.frame_width)
-            self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.frame_height)
-
-        ret, frame = self._cap.read()
-        if not ret:
-            return self.error(None, f"无法从摄像头 {self.camera_index} 读取帧")
-
-        self.pixel_width = frame.shape[1]
-        self.pixel_height = frame.shape[0]
-        return self.ok(frame, "摄像头捕获")
+        cap = cv2.VideoCapture(self.camera_index)
+        try:
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.frame_width)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.frame_height)
+            ret, frame = cap.read()
+            if not ret:
+                return self.error(None, f"无法从摄像头 {self.camera_index} 读取帧")
+            self.pixel_width = frame.shape[1]
+            self.pixel_height = frame.shape[0]
+            return self.ok(frame, "摄像头捕获")
+        finally:
+            cap.release()
 
     def _update_result_image_source(self):
         self._result_image_source = self._mat
 
-    def dispose(self):
-        if self._cap:
-            self._cap.release()
-            self._cap = None
-        super().dispose()
