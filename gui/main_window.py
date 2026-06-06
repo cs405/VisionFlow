@@ -466,6 +466,9 @@ class MainWindow(QMainWindow):
         self._continuous_mode = False
         self._stop_requested = False
         self._wf_runner = WorkflowRunner()
+        self._live_preview_timer = QTimer(self)
+        self._live_preview_timer.setInterval(50)
+        self._live_preview_timer.timeout.connect(self._tick_live_preview)
         self._left_panel_visible = True
         self._right_panel_visible = True
         self._saved_right_width = _ps.get_i("right_width", 420)
@@ -1584,6 +1587,8 @@ class MainWindow(QMainWindow):
                     diagram.workflow = editor._workflow
 
     def _select_node(self, node: NodeBase | None):
+        # Stop live preview when switching nodes or deselecting
+        self._live_preview_timer.stop()
         self._selected_node = node
         self._property_panel.set_node(node)
         self._help_panel.set_node(node)
@@ -1617,8 +1622,12 @@ class MainWindow(QMainWindow):
 
         if node is not None:
             self._side_status_strip.set_status(f"已选择模块：{node.name}", "#0078d4")
+            # Start live preview during continuous execution
+            if self._continuous_mode and isinstance(node, VisionNodeData):
+                self._live_preview_timer.start()
         else:
             self._side_status_strip.set_status("等待选择节点", "#4caf50")
+            self._live_preview_timer.stop()
 
     def _on_node_type_selected(self, type_name: str):
         if not self._workflow:
@@ -1896,6 +1905,8 @@ class MainWindow(QMainWindow):
 
     def _finalize_execution_state(self):
         """After execution completes, set node states to final values."""
+        if not self._continuous_mode:
+            self._live_preview_timer.stop()
         editor = self._current_diagram_editor()
         if editor is None or not self._workflow:
             return
@@ -1911,6 +1922,18 @@ class MainWindow(QMainWindow):
             else:
                 item.set_state(NodeState.COMPLETED)
 
+    def _tick_live_preview(self):
+        """Refresh the image viewer from the selected node during continuous execution."""
+        node = self._selected_node
+        if node is None or not self._continuous_mode:
+            self._live_preview_timer.stop()
+            return
+        if isinstance(node, VisionNodeData):
+            if node.mat is not None:
+                self._img_panel.set_image(node.mat)
+            elif node._result_image_source is not None:
+                self._img_panel.set_image(node._result_image_source)
+
     def _on_stop_workflow(self):
         """Stop workflow execution (mirrors WPF StopCommand).
 
@@ -1918,6 +1941,8 @@ class MainWindow(QMainWindow):
         Python: delegate to WorkflowRunner + direct state reset.
         """
         self._stop_requested = True
+        self._continuous_mode = False
+        self._live_preview_timer.stop()
         self._wf_runner.stop()
         # Directly reset all node states (reliable, no cross-thread events)
         editor = self._current_diagram_editor()
