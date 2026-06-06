@@ -24,6 +24,12 @@ class EventType(Enum):
     NODE_SELECTED = auto()
     NODE_DESELECTED = auto()
 
+    # Port / Link lifecycle (WPF FlowablePortData / FlowableLinkData invoke)
+    PORT_STARTED = auto()
+    PORT_COMPLETED = auto()
+    LINK_STARTED = auto()
+    LINK_COMPLETED = auto()
+
     # Diagram events
     DIAGRAM_CHANGED = auto()
     NODE_ADDED = auto()

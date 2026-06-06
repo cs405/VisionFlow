@@ -199,13 +199,14 @@ class ProjectItem:
 
     # -- Template management (mirrors WPF DiagramTemplates) --
 
-    def save_diagram_as_template(self, diagram: DiagramData = None) -> DiagramData:
-        """Save a diagram as a reusable template."""
+    def save_diagram_as_template(self, diagram: DiagramData = None,
+                                   name: str = None) -> DiagramData:
+        """Save a diagram as a reusable template (WPF SaveAsDiagramTemplateCommand)."""
         src = diagram or self.selected_diagram
         if src is None:
             raise ValueError("No diagram selected")
         template = src.duplicate()
-        template.name = src.name + " (模板)"
+        template.name = name or (src.name + " (模板)")
         self._templates.append(template)
         return template
 
@@ -217,6 +218,20 @@ class ProjectItem:
             self.diagrams.append(clone)
             self._selected_diagram_index = len(self.diagrams) - 1
             return clone
+        return None
+
+    @property
+    def can_delete_diagram(self) -> bool:
+        """Whether the selected diagram can be deleted (mirrors WPF CanExecute)."""
+        return self.selected_diagram is not None and len(self.diagrams) > 1
+
+    def delete_selected_diagram(self) -> DiagramData | None:
+        """Delete the selected diagram and return it."""
+        if not self.can_delete_diagram:
+            return None
+        deleted = self.selected_diagram
+        self.delete_diagram(deleted)
+        return deleted
         return None
 
     @property
@@ -285,6 +300,40 @@ class ProjectService:
         self._recent_projects: list[str] = []
         self._settings = QSettings() if QSettings is not None else None
         self._load_recent_projects()
+        self._templates: list[DiagramData] = []
+
+    # ── Template persistence (WPF: diagramtemplates.json) ──
+
+    @property
+    def _template_file(self) -> str:
+        return os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                            "templates.json")
+
+    def load_templates(self) -> list[DiagramData]:
+        """Load templates from disk."""
+        import traceback
+        templates: list[DiagramData] = []
+        if not os.path.exists(self._template_file):
+            return templates
+        with open(self._template_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        from core.registry import node_registry
+        def factory(type_name: str):
+            return node_registry.create(type_name)
+        for td in data.get("templates", []):
+            try:
+                templates.append(DiagramData.from_dict(td, factory))
+            except Exception:
+                traceback.print_exc()
+        return templates
+
+    def save_templates(self, templates: list[DiagramData]):
+        """Persist templates to disk."""
+        data = {"templates": [t.to_dict() for t in templates]}
+        os.makedirs(os.path.dirname(self._template_file), exist_ok=True)
+        json_str = json.dumps(data, ensure_ascii=False, indent=2, default=str)
+        with open(self._template_file, "w", encoding="utf-8") as f:
+            f.write(json_str)
 
     # -- Recent projects (QSettings persistence, mirrors WPF ProjectServiceBase) --
 

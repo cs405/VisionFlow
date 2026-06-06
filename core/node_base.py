@@ -173,6 +173,21 @@ class Port:
             name=data.get("name", ""),
         )
 
+    def invoke(self, previors: "LinkData | None" = None,
+               diagram: "WorkflowEngine | None" = None) -> "FlowableResult":
+        """Execute port-level logic (WPF FlowablePortData.TryInvokeAsync).
+
+        Default: publishes PORT_STARTED → returns OK → publishes PORT_COMPLETED.
+        Override in subclasses for custom port processing (validation, transform).
+        """
+        from core.data_packet import FlowableResult
+        from core.events import EventType, event_system
+        event_system.publish(EventType.PORT_STARTED, sender=self, diagram=diagram)
+        result = FlowableResult.ok(message="port ok")
+        event_system.publish(EventType.PORT_COMPLETED, sender=self, result=result,
+                             diagram=diagram)
+        return result
+
 
 class LinkData:
     """A connection between two ports.
@@ -212,6 +227,18 @@ class LinkData:
         )
         link.link_id = data.get("link_id", link.link_id)
         return link
+
+    def invoke(self, diagram: "WorkflowEngine | None" = None) -> "FlowableResult":
+        """Execute link-level logic (WPF FlowableLinkData.TryInvokeAsync).
+
+        Default: publishes LINK_STARTED → returns OK → publishes LINK_COMPLETED.
+        Override in subclasses for custom link processing (filter, transform).
+        """
+        from core.events import EventType, event_system
+        event_system.publish(EventType.LINK_STARTED, sender=self)
+        result = FlowableResult.ok(message="link ok")
+        event_system.publish(EventType.LINK_COMPLETED, sender=self, result=result)
+        return result
 
 
 # =============================================================================

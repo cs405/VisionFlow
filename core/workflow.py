@@ -31,6 +31,25 @@ class WorkflowState(Enum):
     COMPLETED = auto()
     ERROR = auto()
 
+    def can_start(self) -> bool:
+        """WPF CanStart: not already running."""
+        return self != WorkflowState.RUNNING
+
+    def can_stop(self) -> bool:
+        """WPF CanStop: currently running."""
+        return self == WorkflowState.RUNNING
+
+    def can_reset(self) -> bool:
+        """WPF CanReset: always available."""
+        return True
+
+
+class DiagramFlowableMode(Enum):
+    """Run mode — controls execution granularity (WPF DiagramFlowableMode)."""
+    NODE = 0   # 按节点运行
+    LINK = 1   # 按节点+连线运行
+    PORT = 2   # 按节点+连线+端口运行
+
 
 class WorkflowEngine:
     """Manages a node graph and executes it.
@@ -48,6 +67,8 @@ class WorkflowEngine:
         self._max_workers: int = 4
         self._invoke_count: int = 0
         self.result_image_source: Any = None
+        self.flowable_mode: DiagramFlowableMode = DiagramFlowableMode.NODE
+        self.message: str = ""
 
     # -- Node management --
 
@@ -247,7 +268,41 @@ class WorkflowEngine:
         self._execution_order = result
         return result
 
-    # -- Execution --
+    # -- Execution (mirrors WPF FlowableDiagramDataBase) --
+
+    def can_start(self) -> bool:
+        """WPF CanStart: state can start AND there are flowable nodes."""
+        return self.state.can_start() and len(self._nodes) > 0
+
+    def can_stop(self) -> bool:
+        """WPF CanStop: state == Running."""
+        return self.state.can_stop()
+
+    def can_reset(self) -> bool:
+        """WPF CanReset: always available."""
+        return self.state.can_reset()
+
+    def get_start_node_data(self) -> NodeBase | None:
+        """Find the start node (no upstream connections, has output ports).
+
+        WPF: GetStartNodeDatas() → TryGetStartNodeData<T>().
+        """
+        starts = [n for n in self._nodes.values()
+                  if len(n.from_node_datas) == 0
+                  and any(p.is_output for p in n.ports)]
+        return starts[0] if starts else None
+
+    def start(self) -> FlowableResult:
+        """Execute workflow (WPF StartCommand).
+
+        WPF: StartCommand → await this.Start() → InvokeState → Wait → node.Start()
+        Python: guards → get_start_node → execute() on caller's thread.
+        """
+        if not self.can_start():
+            return FlowableResult.error(message="流程已在运行中")
+        if self.get_start_node_data() is None:
+            return FlowableResult.error(message="未找到起始节点（需要无输入端口且有输出端口的节点）")
+        return self.execute()
 
     def execute(self) -> FlowableResult:
         """Execute the entire workflow.
@@ -326,25 +381,47 @@ class WorkflowEngine:
         event_system.publish(EventType.WORKFLOW_STOPPED, sender=self)
 
     def _execute_node(self, node: NodeBase) -> FlowableResult:
-        """Execute a single node."""
+        """Execute a single node + surrounding links/ports based on mode.
+
+        WPF recursive chain:  Node → Port → Link → Port → Node
+        Python (topo-sort):  execute node, then invoke links/ports per mode.
+        """
         self._invoke_count += 1
 
-        # Find the incoming link data
+        # ── Link/Port mode: execute incoming links ──
         previors = None
-        for link in self._links:
-            if link.to_node_id == node.node_id:
-                previors = link
-                break
+        if self.flowable_mode in (DiagramFlowableMode.LINK, DiagramFlowableMode.PORT):
+            for link in self._links:
+                if link.to_node_id == node.node_id:
+                    link.invoke(diagram=self)
+                    previors = previors or link
+        else:
+            for link in self._links:
+                if link.to_node_id == node.node_id:
+                    previors = link
+                    break
 
+        # ── Port mode: execute incoming ports ──
+        if self.flowable_mode == DiagramFlowableMode.PORT:
+            for port in node.ports:
+                if port.is_input and port.connected_links:
+                    port.invoke(previors=previors, diagram=self)
+
+        # ── Execute the node itself ──
         if isinstance(node, VisionNodeData):
             result = node.invoke(previors, self)
-            # Sleep for invoke delay
             import time
             time.sleep(node.invoke_milliseconds_delay / 1000.0)
-            return result
+        else:
+            result = FlowableResult.ok()
 
-        # Non-vision node: just pass through
-        return FlowableResult.ok()
+        # ── Port mode: execute outgoing ports ──
+        if self.flowable_mode == DiagramFlowableMode.PORT:
+            for port in node.ports:
+                if port.is_output and port.connected_links:
+                    port.invoke(previors=None, diagram=self)
+
+        return result
 
     def _execute_parallel(self, node_ids: list[str]) -> list[FlowableResult]:
         """Execute a group of nodes in parallel."""
