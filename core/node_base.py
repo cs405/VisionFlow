@@ -514,7 +514,7 @@ class NodeBase(ABC):
         if "__type__" in value:
             type_name = value.get("__type__", "")
             data = value.get("data", {})
-            if type_name in {"ROIBase", "FromROI", "DrawROI", "InputROI"}:
+            if type_name in {"ROIBase", "FromROI", "DrawROI", "InputROI", "NoROI"}:
                 return ROIBase.from_dict(data)
 
         return {k: self._deserialize_property_value(v) for k, v in value.items()}
@@ -709,6 +709,7 @@ class VisionNodeData(DemoNodeDataBase):
     def __init__(self):
         super().__init__()
         self._mat: np.ndarray | None = None
+        self._original_mat: np.ndarray | None = None
         self._result_presenter: Any = None
 
     # -- Mat (the current image/data) --
@@ -750,10 +751,21 @@ class VisionNodeData(DemoNodeDataBase):
         Ported from C# VisionNodeData<T>.Invoke(IFlowableLinkData, IFlowableDiagramData).
         1. Find the source node (ISrcVisionNodeData)
         2. Find the from node (IVisionNodeData)
-        3. Call InvokeAction with the actual processing
+        3. Pass through original image from upstream
+        4. Call InvokeAction with the actual processing
         """
         src_data = self._find_source_node(diagram)
         from_data = self._find_from_node(diagram, previors)
+
+        # Pass through original image from upstream so every node
+        # has access to the unprocessed source image
+        if isinstance(from_data, VisionNodeData):
+            upstream_original = getattr(from_data, '_original_mat', None)
+            if upstream_original is not None:
+                self._original_mat = upstream_original
+            elif from_data.mat is not None:
+                self._original_mat = from_data.mat.copy()
+
         return self._invoke_action(lambda: self.invoke_core(src_data, from_data or src_data, diagram))
 
     def update_invoke_current(self):
@@ -910,7 +922,7 @@ class VisionNodeData(DemoNodeDataBase):
 
 
 # =============================================================================
-# ROINodeData - ROI support (DrawROI / FromROI / InputROI)
+# ROINodeData - ROI support (NoROI / DrawROI / FromROI / InputROI)
 # =============================================================================
 
 class ROIBase:
@@ -927,6 +939,8 @@ class ROIBase:
     @classmethod
     def from_dict(cls, data: dict) -> "ROIBase":
         roi_type = data.get("type", "ROIBase")
+        if roi_type == "NoROI":
+            return NoROI()
         if roi_type == "DrawROI":
             roi = DrawROI()
             roi.rect = tuple(data.get("rect", roi.rect))
@@ -981,19 +995,28 @@ class InputROI(ROIBase):
         return data
 
 
+class NoROI(ROIBase):
+    """No ROI — do not apply any region of interest."""
+
+    def __init__(self):
+        super().__init__("无")
+
+
 class ROINodeData(VisionNodeData):
     """Adds ROI support to vision nodes.
 
     Ported from C# ROINodeData<T>.
-    Supports three ROI modes: FromROI (upstream), DrawROI (interactive), InputROI (manual).
+    Supports four ROI modes: NoROI (none), FromROI (upstream), DrawROI (interactive), InputROI (manual).
+    Default is NoROI to prevent unintended ROI cascading.
     """
 
     def __init__(self):
         super().__init__()
+        self.no_roi = NoROI()
         self.from_roi = FromROI(source_node=self)
         self.draw_roi = DrawROI()
         self.input_roi = InputROI()
-        self._roi: ROIBase = self.from_roi
+        self._roi: ROIBase = self.no_roi
 
     @property
     def roi(self) -> ROIBase:
@@ -1006,10 +1029,12 @@ class ROINodeData(VisionNodeData):
     def get_rois(self) -> list[ROIBase]:
         """Get all available ROI options."""
         self.draw_roi.image_source = self._result_image_source
-        return [self.from_roi, self.draw_roi, self.input_roi]
+        return [self.no_roi, self.from_roi, self.draw_roi, self.input_roi]
 
     def get_active_roi_rect(self) -> tuple | None:
         """Get the currently active ROI rectangle as (x, y, w, h)."""
+        if isinstance(self._roi, NoROI):
+            return None
         if isinstance(self._roi, DrawROI):
             if self._roi.rect:
                 return self._roi.rect
@@ -1022,40 +1047,72 @@ class ROINodeData(VisionNodeData):
         return None
 
     def invoke(self, previors: LinkData | None, diagram: "WorkflowEngine") -> FlowableResult:
-        # Wire upstream ROI for FromROI mode (WPF: source_node = upstream)
         from_data = self._find_from_node(diagram, previors)
+
+        # Wire upstream ROI for FromROI mode (WPF: source_node = upstream)
         if isinstance(from_data, ROINodeData) and from_data is not self:
             self.from_roi.source_node = from_data
 
-        # Check if upstream has an active ROI rect
-        roi_rect = None
-        if isinstance(from_data, ROINodeData):
-            roi_rect = from_data.get_active_roi_rect()
+        # Pass through original image from upstream
+        if isinstance(from_data, VisionNodeData):
+            upstream_original = getattr(from_data, '_original_mat', None)
+            if upstream_original is not None:
+                self._original_mat = upstream_original
+            elif from_data.mat is not None:
+                self._original_mat = from_data.mat.copy()
 
-        if roi_rect is not None and from_data is not None and from_data.mat is not None:
+        # Determine the effective input image based on image_source_mode
+        if from_data is not None and from_data.mat is not None:
+            if hasattr(self, 'image_source_mode') and self.image_source_mode == "原图":
+                input_mat = self._original_mat if self._original_mat is not None else from_data.mat
+            else:
+                input_mat = from_data.mat
+        else:
+            input_mat = None
+
+        # Get this node's own ROI rect (None when NoROI or no ROI configured)
+        roi_rect = self.get_active_roi_rect() if not isinstance(self._roi, NoROI) else None
+
+        if roi_rect is not None and input_mat is not None:
             x, y, w, h = int(roi_rect[0]), int(roi_rect[1]), int(roi_rect[2]), int(roi_rect[3])
-            full = from_data.mat
-            h_img, w_img = full.shape[:2]
+            h_img, w_img = input_mat.shape[:2]
             x, y = max(0, x), max(0, y)
             w, h = min(w, w_img - x), min(h, h_img - y)
             if w <= 0 or h <= 0:
-                return super().invoke(previors, diagram)
+                roi_rect = None  # fall through to no-ROI path
 
-            # Temporarily set from_data.mat to ROI region so invoke_core
-            # only operates on the ROI, then paste result back
-            saved_mat = from_data._mat
-            from_data._mat = full[y:y+h, x:x+w]
+        if roi_rect is not None and input_mat is not None:
+            x, y, w, h = int(roi_rect[0]), int(roi_rect[1]), int(roi_rect[2]), int(roi_rect[3])
+            h_img, w_img = input_mat.shape[:2]
+            x, y = max(0, x), max(0, y)
+            w, h = min(w, w_img - x), min(h, h_img - y)
+
+            # Temporarily set upstream mat to ROI region so invoke_core
+            # only operates on the ROI, then paste result back into full image
+            saved_mat = from_data._mat if from_data else None
+            if from_data is not None:
+                from_data._mat = input_mat[y:y+h, x:x+w]
 
             result = super().invoke(previors, diagram)
 
-            # Paste processed result back into full image
-            if self.mat is not None:
-                full[y:y+h, x:x+w] = self.mat
-            self._mat = full
-            self._update_result_image_source()
-            from_data._mat = saved_mat
+            if from_data is not None:
+                from_data._mat = saved_mat
+
+            # Paste processed result back into full input image
+            if self.mat is not None and self.mat.shape[:2] == (h, w):
+                full_result = input_mat.copy()
+                full_result[y:y+h, x:x+w] = self.mat
+                self._mat = full_result
+                self._update_result_image_source()
         else:
-            result = super().invoke(previors, diagram)
+            # No ROI — may still need to swap input_mat for image_source_mode
+            if from_data is not None and input_mat is not from_data.mat:
+                saved_mat = from_data._mat
+                from_data._mat = input_mat
+                result = super().invoke(previors, diagram)
+                from_data._mat = saved_mat
+            else:
+                result = super().invoke(previors, diagram)
 
         self.draw_roi.image_source = self._result_image_source
         return result
@@ -1070,7 +1127,9 @@ class ROINodeData(VisionNodeData):
         roi_data = data.get("roi")
         if roi_data:
             self._roi = ROIBase.from_dict(roi_data)
-        if isinstance(self._roi, DrawROI):
+        if isinstance(self._roi, NoROI):
+            self._roi = self.no_roi
+        elif isinstance(self._roi, DrawROI):
             self.draw_roi.rect = tuple(self._roi.rect)
             self._roi = self.draw_roi
         elif isinstance(self._roi, InputROI):
@@ -1079,8 +1138,10 @@ class ROINodeData(VisionNodeData):
             self.input_roi.width = int(self._roi.width)
             self.input_roi.height = int(self._roi.height)
             self._roi = self.input_roi
-        else:
+        elif isinstance(self._roi, FromROI):
             self._roi = self.from_roi
+        else:
+            self._roi = self.no_roi
         return self
 
 
@@ -1124,6 +1185,12 @@ class OpenCVNodeDataBase(SelectableResultImageNodeData):
 
     Ported from C# OpenCVNodeDataBase : SelectableResultImageNodeData<Mat>.
     """
+
+    image_source_mode = Property(
+        "处理后图片", name="图像源", group=PropertyGroupNames.BASE_PARAMETERS,
+        description="选择输入图像来源：处理后图片(上游节点输出) 或 原图(数据源原始图像)",
+        editor="choices", choices=["处理后图片", "原图"], order=1001,
+    )
 
     def is_valid(self, mat: np.ndarray) -> bool:
         return mat is not None and mat.size > 0
