@@ -430,23 +430,39 @@ class DiagramEditorWidget(QWidget):
         return bool(sender) and getattr(sender, 'diagram_data', None) is self._subscribed_workflow
 
     def _on_node_started(self, sender, **kwargs):
-        if self._belongs_to_bound_workflow(sender):
-            self.scene.on_workflow_state_changed(sender.node_id, "running")
+        if not self._belongs_to_bound_workflow(sender):
+            return
+        # Event fires on worker thread; marshal UI update to main thread.
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(0, lambda nid=sender.node_id:
+                          self.scene.on_workflow_state_changed(nid, "running"))
 
     def _on_node_completed(self, sender, **kwargs):
-        if self._belongs_to_bound_workflow(sender):
-            self.scene.on_workflow_state_changed(sender.node_id, "completed")
-            import time
-            self.node_executed.emit(sender, "Success", time.strftime("%H:%M:%S"))
+        if not self._belongs_to_bound_workflow(sender):
+            return
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(0, lambda nid=sender.node_id:
+                          self.scene.on_workflow_state_changed(nid, "completed"))
+        import time
+        self.node_executed.emit(sender, "Success", time.strftime("%H:%M:%S"))
 
     def _on_node_error(self, sender, **kwargs):
-        if self._belongs_to_bound_workflow(sender):
-            self.scene.on_workflow_state_changed(sender.node_id, "error")
-            import time
-            self.node_executed.emit(sender, "Error", time.strftime("%H:%M:%S"))
+        if not self._belongs_to_bound_workflow(sender):
+            return
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(0, lambda nid=sender.node_id:
+                          self.scene.on_workflow_state_changed(nid, "error"))
+        import time
+        self.node_executed.emit(sender, "Error", time.strftime("%H:%M:%S"))
 
     def _on_workflow_stopped(self, sender, **kwargs):
-        if sender is self._subscribed_workflow:
-            for item in self.scene.get_all_node_items():
-                item.set_state(NodeState.IDLE)
+        if sender is not self._subscribed_workflow:
+            return
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(0, lambda: self._reset_all_node_states())
+
+    def _reset_all_node_states(self):
+        """Reset all node items to IDLE (called on main thread)."""
+        for item in self.scene.get_all_node_items():
+            item.set_state(NodeState.IDLE)
 

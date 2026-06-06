@@ -130,7 +130,7 @@ class NodeItem(QGraphicsObject):
         self.node_data = node_data
         self._group_name = group_name
         self._hovered = False
-        self._state = NodeState.COMPLETED
+        self._state = NodeState.IDLE
         self._template = self._detect_template()
         self._flag_color = QColor(get_group_color(group_name))
         self._icon_text = _resolve_node_icon(node_data)
@@ -330,6 +330,8 @@ class NodeItem(QGraphicsObject):
             return QColor("#67C23A")
         if self._state == NodeState.ERROR:
             return QColor("#DC000C")
+        if self._state == NodeState.IDLE:
+            return QColor("#5C7A99")       # visible steel-blue, not dim gray
         return QColor("#909399")
 
     def _resolve_border(self) -> tuple[QColor, float]:
@@ -342,6 +344,8 @@ class NodeItem(QGraphicsObject):
             return QColor("#3399FF"), 2.0
         if self._state == NodeState.COMPLETED:
             return QColor("#67C23A"), 2.0
+        if self._state == NodeState.IDLE:
+            return QColor("#8899A6"), 1.5  # visible blue-gray border
         if self._hovered:
             return QColor("#606266"), 1.5
         if self._template == NodeTemplate.SOURCE:
@@ -357,8 +361,9 @@ class NodeItem(QGraphicsObject):
     # ── Left bar ────────────────────────────────────────────────────────────
 
     def _draw_left_bar(self, painter, state_color):
-        """Left 30px colored strip — WPF Running/Success/Error visibility trigger."""
-        bar_visible = self._state in (NodeState.RUNNING, NodeState.COMPLETED, NodeState.ERROR)
+        """Left 30px colored strip — WPF Running/Success/Error/Idle visibility."""
+        bar_visible = self._state in (NodeState.RUNNING, NodeState.COMPLETED,
+                                       NodeState.ERROR, NodeState.IDLE)
         if not bar_visible:
             return
 

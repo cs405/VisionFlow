@@ -1671,6 +1671,8 @@ class MainWindow(QMainWindow):
     def _on_ev_diag_chg(self, sender, **kwargs):
         if self._workflow:
             self._node_cnt_lbl.setText(f"节点: {len(self._workflow.get_all_nodes())}")
+        # Nodes added/removed → CanStart condition may have changed (WPF CanExecute)
+        self._refresh_command_states(project_service.current_project)
 
     def _on_wf_start(self, sender, **kwargs):
         self._wf_start_time = __import__('time').time()
