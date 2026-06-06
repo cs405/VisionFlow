@@ -28,7 +28,7 @@ from core.events import EventType, event_system
 from core.registry import node_registry
 from gui.font_icons import FontIcons, FontIconButton, FontIconTextBlock, FontIconToggleButton
 
-from gui.theme import theme_manager, ThemePickerDialog
+from gui.theme import theme_manager, ThemePickerDialog, connect_theme
 from gui.theme_data import resolve_colors
 from gui.node_editor.node_item import NodeState
 from gui.toolbox_panel import ToolboxPanel
@@ -137,6 +137,9 @@ def _tab_qss():
     c = theme_manager
     return f"""
     QTabWidget::pane {{ border: none; background: {c.color('bg_surface').name()}; }}
+    QTabWidget:focus {{ outline: 0; }}
+    QTabWidget::pane:focus {{ outline: 0; border: none; }}
+    QTabBar:focus {{ outline: 0; }}
     QTabBar::tab {{
         background: {c.color('bg_surface_raised').name()};
         color: {c.color('text_title').name()};
@@ -146,6 +149,7 @@ def _tab_qss():
         font-size: 11px;
     }}
     QTabBar::tab:selected {{ background: {c.color('bg_surface').name()}; border-bottom: 2px solid {c.color('accent').name()}; }}
+    QTabBar::tab:focus {{ outline: 0; }}
     QTabBar::tab:hover {{ background: {c.color('bg_surface_hover').name()}; }}
     QTabBar::close-button {{
         subcontrol-position: right;
@@ -174,25 +178,51 @@ def find_child_by_tip(parent, tip):
 
 
 class _InlineStatusStrip(QWidget):
+    """WPF-aligned status strip — colors follow theme via connect_theme().
+
+    WPF equivalent: StatusBar with DynamicResource BrushKeys.BorderBrush / Foreground.
+    """
+
     def __init__(self, accent: str = "#4caf50", parent=None):
         super().__init__(parent)
+        self.setFocusPolicy(Qt.NoFocus)  # 阻止 Windows 原生蓝色焦点框
         self._accent = accent
+        self._current_icon_color = accent
         layout = QHBoxLayout(self)
         layout.setContentsMargins(10, 4, 10, 4)
         layout.setSpacing(8)
-        self.setStyleSheet("background: #1f1f1f; border-top: 1px solid #3f3f46;")
 
         self._icon = QLabel("●")
-        self._icon.setStyleSheet(f"color: {accent}; font-weight: bold;")
         layout.addWidget(self._icon)
 
         self._label = QLabel("就绪")
-        self._label.setStyleSheet("color: #d0d0d0; font-size: 11px;")
+        self._label.setFont(QFont("Microsoft YaHei", 11))
         layout.addWidget(self._label, 1)
+
+        # Follow theme — WPF {DynamicResource} equivalent
+        connect_theme(self._refresh_qss)
+
+    def _refresh_qss(self):
+        tm = theme_manager
+        bg = tm.color("bg_surface_deep").name()
+        border = tm.color("border").name()
+        text = tm.color("text_primary").name()
+        self.setStyleSheet(
+            f"background: {bg}; border-top: 1px solid {border}; outline: none;"
+        )
+        self._label.setStyleSheet(
+            f"color: {text}; font-size: 11px; background: transparent;"
+        )
+        self._icon.setStyleSheet(
+            f"color: {self._current_icon_color}; font-weight: bold; background: transparent;"
+        )
 
     def set_status(self, text: str, color: str | None = None):
         self._label.setText(text)
-        self._icon.setStyleSheet(f"color: {color or self._accent}; font-weight: bold;")
+        self._current_icon_color = color or self._accent
+        self._icon.setStyleSheet(
+            f"color: {self._current_icon_color}; font-weight: bold; background: transparent;"
+        )
 
 
 class _DiagramTabHeader(QWidget):
@@ -1032,13 +1062,10 @@ class MainWindow(QMainWindow):
 
     def _setup_status_bar(self):
         status = self.statusBar()
-        status.setStyleSheet(
-            "QStatusBar { background: #007acc; color: white; padding: 2px 8px; font-size: 11px; }"
-            "QStatusBar::item { border: none; }"
-        )
+        status.setSizeGripEnabled(False)
 
         self._state_lbl = QLabel(f"{FontIcons.Completed} 空闲")
-        self._state_lbl.setStyleSheet("color: #4caf50; font-weight: bold;")
+        self._state_lbl.setStyleSheet("color: #4caf50; font-weight: bold; background: transparent;")
         status.addWidget(self._state_lbl)
         status.addWidget(_hsep())
 
@@ -1050,6 +1077,25 @@ class MainWindow(QMainWindow):
         status.addPermanentWidget(self._node_cnt_lbl)
         self._time_lbl = QLabel("")
         status.addPermanentWidget(self._time_lbl)
+
+        # Follow theme accent — WPF StatusBar with DynamicResource
+        self._refresh_status_bar_qss()
+        connect_theme(lambda: self._refresh_status_bar_qss())
+
+    def _refresh_status_bar_qss(self):
+        """Update QStatusBar style to match current theme.
+
+        WPF: StatusBar uses window chrome background, not accent.
+        """
+        tm = theme_manager
+        bg = tm.color("bg_surface_raised").name()
+        text = tm.color("text_primary").name()
+        border = tm.color("border").name()
+        self.statusBar().setStyleSheet(
+            f"QStatusBar {{ background: {bg}; color: {text}; border-top: 1px solid {border};"
+            f" padding: 2px 8px; font-size: 11px; outline: 0; }}"
+            f"QStatusBar::item {{ border: none; }}"
+        )
 
     def _wire_signals(self):
         self._toolbox.node_type_selected.connect(self._on_node_type_selected)

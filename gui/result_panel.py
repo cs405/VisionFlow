@@ -243,7 +243,11 @@ class ResultPanel(QWidget):
         """)
         self._tabs.setStyleSheet(f"""
             QTabWidget::pane {{ border: none; background: {tm.color('bg_surface').name()}; }}
+            QTabWidget:focus {{ outline: 0; }}
+            QTabWidget::pane:focus {{ outline: 0; border: none; }}
+            QTabBar:focus {{ outline: 0; }}
             QTabBar::tab {{ padding: 6px 12px; font-size: 11px; }}
+            QTabBar::tab:focus {{ outline: 0; }}
         """)
         if hasattr(self, '_history_table'):
             self._history_table.setStyleSheet(f"""
