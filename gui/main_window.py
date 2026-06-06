@@ -1567,7 +1567,8 @@ class MainWindow(QMainWindow):
         if hasattr(self, '_continuous_btn'):
             self._continuous_btn.setEnabled(workflow.can_start() if workflow else False)
         if hasattr(self, '_stop_btn'):
-            self._stop_btn.setEnabled(workflow.can_stop() if workflow else False)
+            self._stop_btn.setEnabled(
+                (workflow.can_stop() if workflow else False) or self._continuous_mode)
         if hasattr(self, '_reset_btn'):
             self._reset_btn.setEnabled(workflow.can_reset() if workflow else False)
         if hasattr(self, '_delete_diagram_btn'):
@@ -1738,6 +1739,7 @@ class MainWindow(QMainWindow):
             self._msg_lbl.setText("流程运行中...")
             self._diagram_status_strip.set_status("流程图运行中...", "#2196f3")
             self._side_status_strip.set_status("结果区正在等待输出...", "#2196f3")
+            self._refresh_command_states(project_service.current_project)
         elif event == "done":
             elapsed = self._format_elapsed()
             label = "连续执行中" if getattr(self, '_continuous_mode', False) else "流程执行完成"
@@ -1749,6 +1751,9 @@ class MainWindow(QMainWindow):
             # Refresh all node bars (fallback in case per-node signals were lost)
             if self._diagram_editor:
                 self._diagram_editor.refresh_all_node_states()
+            # Keep stop button enabled during continuous execution
+            if getattr(self, '_continuous_mode', False):
+                self._refresh_command_states(project_service.current_project)
             # In continuous mode, refresh the user-selected node's image
             if getattr(self, '_continuous_mode', False) and self._selected_node:
                 self._update_image_context(self._selected_node)
@@ -1760,6 +1765,8 @@ class MainWindow(QMainWindow):
                         self._img_panel.set_image(self._selected_node._result_image_source)
         elif event == "error":
             self._continuous_mode = False
+            self._live_preview_timer.stop()
+            self._refresh_command_states(project_service.current_project)
             elapsed = self._format_elapsed()
             self._state_lbl.setText(f"{FontIcons.Error} 错误")
             self._state_lbl.setStyleSheet("color: #f44336; font-weight: bold;")
@@ -1888,6 +1895,9 @@ class MainWindow(QMainWindow):
         self._log_panel.info(f"{label}... ({node_count} 个节点)")
         self._continuous_mode = continuous
         self._stop_requested = False
+
+        # Refresh button states so stop is enabled during continuous mode
+        self._refresh_command_states(project_service.current_project)
 
         # Set all nodes to RUNNING on the main thread (reliable)
         editor = self._current_diagram_editor()
