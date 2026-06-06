@@ -1287,12 +1287,42 @@ class SrcFilesVisionNodeData(ROINodeData):
         return True
 
     def is_valid_file_list(self) -> tuple[bool, str]:
-        """Check if the file list is valid. Returns (is_valid, message)."""
+        """Check if the file list is valid. Returns (is_valid, message).
+
+        WPF: SrcFilesVisionNodeData.IsValid(out string message)
+        """
         if not self.src_file_paths:
             return False, "请选择数据源中的图片"
         if self.src_file_path is None:
             self.src_file_path = self.src_file_paths[0]
         return self.src_file_path is not None, ""
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # TODO: WPF "添加文件/文件夹/删除/清空" commands port
+    #
+    # WPF 在 SrcFilesVisionNodeData.cs 实现（MVVM Command 模式）：
+    #
+    #   AddImageDataCommand     → AddFile()  → IocMessage.IOFileDialog.ShowOpenImageFiles()
+    #   AddImageDatasCommand    → AddFiles() → IocMessage.IOFolderDialog.ShowOpenFolderAction()
+    #   DeleteImageDataCommand  → ShowDeleteDialog → 删除当前文件 → 选中相邻文件
+    #   ClearImageDatasCommand  → ShowDeleteAllDialog → 清空所有文件
+    #
+    # WPF 关键设计点：
+    #   1. IoC 对话框服务 — 解耦 UI 框架，可 mock/替换
+    #   2. 确认对话框 — 删除/清空前弹框确认（防御性设计）
+    #   3. CanExecute 守卫 — Clear 需要 list.Count > 0 才可用
+    #   4. protected virtual AddFile/AddFiles — 子类可重写扩展（如视频源）
+    #   5. 首次添加文件 → 自动选中第一个（SrcFilePath = FirstOrDefault()）
+    #   6. 删除后 → 选中同索引位置的文件，若超出则选第一个
+    #   7. 数据绑定自动刷新 UI — 添加后缩略图自动增量出现
+    #
+    # VisionFlow 适配策略：
+    #   - 对话框由 FlowResourcePanel 通过 QFileDialog 调用（PyQt5 信号/槽风格）
+    #   - 确认对话框用 QMessageBox.question（对标 WPF ShowDeleteDialog）
+    #   - 增量缩略图构建 (add_thumbnails_for) 避免全量 rebuild
+    #   - 按钮状态管理 (_update_action_buttons) 对标 CanExecute
+    #   - Node 保持纯数据操作，UI 交互逻辑在 Panel（遵循 PyQt5 惯例）
+    # ═══════════════════════════════════════════════════════════════════════
 
     def load_default(self):
         super().load_default()

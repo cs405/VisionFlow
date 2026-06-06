@@ -25,7 +25,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QScrollArea,
                               QPushButton, QLabel, QCheckBox, QFrame,
-                              QFileDialog, QSizePolicy, QGridLayout, QScrollBar)
+                              QFileDialog, QMessageBox, QSizePolicy, QGridLayout, QScrollBar)
 from PyQt5.QtCore import Qt, pyqtSignal, QThread, QSize, QTimer, QPoint
 from PyQt5.QtGui import QPixmap, QImage, QFont, QColor, QPainter
 
@@ -270,34 +270,37 @@ class FlowResourcePanel(QWidget):
         sep.setFixedHeight(20)
         h_layout.addWidget(sep)
 
-        # FontIcon action buttons
+        # FontIcon action buttons (WPF: AddImageData / AddImageDatas / DeleteImageData / ClearImageDatas commands)
         btn_style = """
             QPushButton {
                 background: transparent; border: 1px solid transparent; border-radius: 3px;
                 color: #dcdcdc; padding: 2px 6px; font-size: 13px;
             }
             QPushButton:hover { background: #3e3e42; border-color: #505050; }
+            QPushButton:disabled { color: #666; background: transparent; }
         """
 
-        add_file_btn = FontIconButton(FontIcons.OpenFile, tooltip="添加文件", font_size=13)
-        add_file_btn.setStyleSheet(btn_style)
-        add_file_btn.clicked.connect(self._add_files)
-        h_layout.addWidget(add_file_btn)
+        self._add_file_btn = FontIconButton(FontIcons.OpenFile, tooltip="添加文件", font_size=13)
+        self._add_file_btn.setStyleSheet(btn_style)
+        self._add_file_btn.clicked.connect(self._add_files)
+        h_layout.addWidget(self._add_file_btn)
 
-        add_folder_btn = FontIconButton(FontIcons.OpenFolderHorizontal, tooltip="添加文件夹", font_size=13)
-        add_folder_btn.setStyleSheet(btn_style)
-        add_folder_btn.clicked.connect(self._add_folder)
-        h_layout.addWidget(add_folder_btn)
+        self._add_folder_btn = FontIconButton(FontIcons.OpenFolderHorizontal, tooltip="添加文件夹", font_size=13)
+        self._add_folder_btn.setStyleSheet(btn_style)
+        self._add_folder_btn.clicked.connect(self._add_folder)
+        h_layout.addWidget(self._add_folder_btn)
 
-        del_btn = FontIconButton(FontIcons.Cancel, tooltip="删除", font_size=13)
-        del_btn.setStyleSheet(btn_style)
-        del_btn.clicked.connect(self._delete_current)
-        h_layout.addWidget(del_btn)
+        self._del_btn = FontIconButton(FontIcons.Cancel, tooltip="删除", font_size=13)
+        self._del_btn.setStyleSheet(btn_style)
+        self._del_btn.clicked.connect(self._delete_current)
+        self._del_btn.setEnabled(False)  # WPF: CanExecute → disabled when no files
+        h_layout.addWidget(self._del_btn)
 
-        clear_btn = FontIconButton(FontIcons.Delete, tooltip="清空", font_size=13)
-        clear_btn.setStyleSheet(btn_style)
-        clear_btn.clicked.connect(self._clear_files)
-        h_layout.addWidget(clear_btn)
+        self._clear_btn = FontIconButton(FontIcons.Delete, tooltip="清空", font_size=13)
+        self._clear_btn.setStyleSheet(btn_style)
+        self._clear_btn.clicked.connect(self._clear_files)
+        self._clear_btn.setEnabled(False)  # WPF: CanExecute → disabled when no files
+        h_layout.addWidget(self._clear_btn)
 
         layout.addWidget(header)
 
@@ -455,7 +458,11 @@ class FlowResourcePanel(QWidget):
             btn.set_thumbnail(pixmap)
 
     def _refresh_header(self):
-        """Update header title, index, and toggle state."""
+        """Update header title, index, toggle state, and action button states.
+
+        WPF: bindings auto-refresh all UI elements.
+        VisionFlow: explicit refresh call.
+        """
         node = self._current_node
         if node is None:
             self._title_label.setText("图像源")
@@ -466,6 +473,7 @@ class FlowResourcePanel(QWidget):
             self._auto_switch_btn.blockSignals(True)
             self._auto_switch_btn.setChecked(False)
             self._auto_switch_btn.blockSignals(False)
+            self._update_action_buttons()
             return
 
         is_video = "video" in type(node).__name__.lower()
@@ -495,6 +503,8 @@ class FlowResourcePanel(QWidget):
         self._auto_switch_btn.blockSignals(True)
         self._auto_switch_btn.setChecked(getattr(node, 'use_auto_switch', True))
         self._auto_switch_btn.blockSignals(False)
+
+        self._update_action_buttons()
 
     def _clear_thumbnails(self):
         """Remove all thumbnail buttons and cached pixmaps."""
@@ -561,39 +571,191 @@ class FlowResourcePanel(QWidget):
         if self._current_node:
             self._current_node.use_auto_switch = checked
 
-    # ── File operations ─────────────────────────────────────────────────
+    # ── File operations (WPF-aligned) ────────────────────────────────────
+
+    # Image file filter — WPF: ShowOpenImageFiles() internal filter
+    IMAGE_FILTER = "图像文件 (*.png *.jpg *.jpeg *.bmp *.tiff *.tif *.webp);;所有文件 (*.*)"
+    IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".webp")
 
     def _add_files(self):
+        """WPF AddImageDataCommand → AddFile() → IOFileDialog.ShowOpenImageFiles().
+
+        Decoupled: QFileDialog is used here (GUI layer), but node.add_files()
+        remains pure data operation. The node doesn't know about Qt.
+        """
         paths, _ = QFileDialog.getOpenFileNames(
-            self, "选择图像文件", "",
-            "图像文件 (*.png *.jpg *.jpeg *.bmp *.tiff *.tif *.webp);;所有文件 (*.*)"
+            self, "选择图像文件", "", self.IMAGE_FILTER
         )
-        if paths and self._current_node:
-            self._current_node.add_files(list(paths))
-            self.set_node(self._current_node)
-            self._build_thumbnails()
-            self.files_changed.emit()
+        if not paths or not self._current_node:
+            return
+        had_existing = bool(self._current_node.src_file_paths)
+        self._current_node.add_files(list(paths))
+
+        # WPF: add files → binding auto-refreshes ListBox
+        # VisionFlow: incremental thumbnail build + header refresh
+        self._add_thumbnails_incremental(list(paths))
+        self._refresh_header()
+        self._update_action_buttons()
+
+        # WPF: auto-select first file if none was selected
+        if not had_existing:
+            first = self._current_node.src_file_path
+            self._selected_path = first
+            self.file_selected.emit(first)
+
+        self.files_changed.emit()
 
     def _add_folder(self):
+        """WPF AddImageDatasCommand → AddFiles() → IOFolderDialog.ShowOpenFolderAction().
+
+        Gets all images from a folder, adds them incrementally.
+        """
         folder = QFileDialog.getExistingDirectory(self, "选择图像文件夹")
-        if folder and self._current_node:
-            self._current_node.add_files_from_folder(folder)
-            self.set_node(self._current_node)
-            self._build_thumbnails()
-            self.files_changed.emit()
+        if not folder or not self._current_node:
+            return
+        had_existing = bool(self._current_node.src_file_paths)
+
+        import os
+        new_paths = []
+        for f in sorted(os.listdir(folder)):
+            if f.lower().endswith(self.IMAGE_EXTENSIONS):
+                new_paths.append(os.path.join(folder, f))
+
+        if not new_paths:
+            return
+        self._current_node.add_files(new_paths)
+
+        self._add_thumbnails_incremental(new_paths)
+        self._refresh_header()
+        self._update_action_buttons()
+
+        if not had_existing and self._current_node.src_file_path:
+            self._selected_path = self._current_node.src_file_path
+            self.file_selected.emit(self._current_node.src_file_path)
+
+        self.files_changed.emit()
 
     def _delete_current(self):
-        if self._current_node:
-            self._current_node.delete_current_file()
-            self.set_node(self._current_node)
-            self._build_thumbnails()
-            self.files_changed.emit()
+        """WPF DeleteImageDataCommand → ShowDeleteDialog → Remove + select adjacent.
+
+        Shows confirmation dialog before removing the current file.
+        WPF: int index = SrcFilePaths.IndexOf(SrcFilePath)
+             SrcFilePaths.Remove(SrcFilePath)
+             SrcFilePath = find ?? SrcFilePaths.FirstOrDefault()
+        """
+        if not self._current_node:
+            return
+        current = self._current_node.src_file_path
+        if not current:
+            return
+
+        # WPF: IocMessage.Dialog.ShowDeleteDialog() — confirmation
+        reply = QMessageBox.question(
+            self, "确认删除",
+            f"确定要删除当前图像吗？\n{os.path.basename(current)}",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        self._current_node.delete_current_file()
+
+        # Remove thumbnail button (incremental delete, no full rebuild)
+        btn = self._thumbnails.pop(current, None)
+        if btn:
+            self._thumb_layout.removeWidget(btn)
+            btn.deleteLater()
+        self._pixmaps.pop(current, None)
+
+        self._refresh_header()
+        self._update_action_buttons()
+        self.files_changed.emit()
+
+        # Emit selection for the newly selected adjacent file
+        new_current = self._current_node.src_file_path
+        if new_current:
+            self._selected_path = new_current
+            self.file_selected.emit(new_current)
 
     def _clear_files(self):
-        if self._current_node:
-            self._current_node.clear_files()
-            self.set_node(self._current_node)
-            self.files_changed.emit()
+        """WPF ClearImageDatasCommand → ShowDeleteAllDialog → SrcFilePaths.Clear().
+
+        Shows confirmation before clearing all files.
+        WPF CanExecute: requires SrcFilePaths.Count > 0.
+        """
+        if not self._current_node:
+            return
+        count = len(self._current_node.src_file_paths)
+        if count == 0:
+            return
+
+        # WPF: IocMessage.Dialog.ShowDeleteAllDialog() — confirmation
+        reply = QMessageBox.question(
+            self, "确认清空",
+            f"确定要清空所有图像文件吗？\n当前共有 {count} 个文件",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        self._current_node.clear_files()
+
+        # Clear all thumbnails
+        self._clear_thumbnails()
+        self._refresh_header()
+        self._update_action_buttons()
+        self._selected_path = ""
+        self.files_changed.emit()
+
+    # ── Incremental thumbnail builder (WPF binding auto-update equivalent) ─
+
+    def _add_thumbnails_incremental(self, new_paths: list[str]):
+        """Add new thumbnail buttons without rebuilding existing ones.
+
+        WPF: data binding auto-refreshes the ItemsControl when SrcFilePaths changes.
+        VisionFlow: must explicitly create buttons for new files only.
+        """
+        for path in new_paths:
+            if path in self._thumbnails:
+                continue  # already exists
+            btn = ThumbnailButton(path)
+            btn.clicked_with_path.connect(self._on_thumbnail_clicked)
+            btn.double_clicked_path.connect(self.file_double_clicked.emit)
+
+            if path in self._pixmaps:
+                btn.set_thumbnail(self._pixmaps[path])
+
+            # Insert before the stretch
+            stretch_idx = self._thumb_layout.count() - 1
+            self._thumb_layout.insertWidget(max(stretch_idx, 0), btn)
+            self._thumbnails[path] = btn
+
+        # Ensure stretch is at end
+        if not self._thumb_layout.itemAt(self._thumb_layout.count() - 1) or \
+           self._thumb_layout.itemAt(self._thumb_layout.count() - 1).widget() is not None:
+            self._thumb_layout.addStretch(1)
+
+        # Start async loading for new paths only
+        if new_paths:
+            loader = ThumbnailLoader(self)
+            loader.set_paths(new_paths)
+            loader.thumbnail_ready.connect(self._on_thumbnail_ready)
+            loader.start()
+
+    # ── Button state management (WPF CanExecute equivalent) ──────────────
+
+    def _update_action_buttons(self):
+        """Enable/disable delete & clear buttons based on file list state.
+
+        WPF:
+          ClearImageDatasCommand.CanExecute → this.SrcFilePaths?.Count > 0
+          DeleteImageDataCommand — always available if node is set
+        """
+        node = self._current_node
+        has_files = node is not None and len(getattr(node, 'src_file_paths', []) or []) > 0
+        has_selection = bool(getattr(node, 'src_file_path', '') if node else '')
+        self._del_btn.setEnabled(has_files and has_selection)
+        self._clear_btn.setEnabled(has_files)
 
     # ── Public API ──────────────────────────────────────────────────────
 
