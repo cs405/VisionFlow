@@ -155,14 +155,16 @@ class WorkflowRunner:
             if not start_node.use_all_image:
                 break
 
-            # WPF: ResultImageSource = item.ToImageSource()
-            # Update source node's current file
+            # WPF: ResultImageSource = item.ToImageSource()  — ALWAYS
+            # WPF: if (UseAutoSwitch) SrcFilePath = item  — only when ON
             if auto_switch:
                 start_node.src_file_path = file_path
 
             # Notify UI that we're starting a file iteration
+            # Pass auto_switch so UI can decide whether to refresh the thumbnail panel
             event_system.publish(EventType.FILE_ITERATION_NEXT, sender=self,
-                                 file_path=file_path, index=i, total=total)
+                                 file_path=file_path, index=i, total=total,
+                                 auto_switch=auto_switch)
 
             # Run the workflow for this file
             try:

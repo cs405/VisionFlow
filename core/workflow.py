@@ -315,8 +315,8 @@ class WorkflowEngine:
     #    b. 每次循环：
     #       - 检查状态（CANCELLING → break）
     #       - 检查 UseAllImage 是否仍为 true（可中途取消）
-    #       - 更新 ResultImageSource = item.ToImageSource()  # 显示当前图
-    #       - 如果 UseAutoSwitch → 更新 SrcFilePath = item
+    #       - 更新 ResultImageSource = item.ToImageSource()  # 显示当前图（始终）
+    #       - 如果 UseAutoSwitch → 更新 SrcFilePath = item    # 缩略图跟随
     #       - 调用源节点 Start() 触发整个流程
     #       - 收集结果到 Messages 集合
     #       - Task.Delay(1000) — 1秒间隔
@@ -324,10 +324,21 @@ class WorkflowEngine:
     # 4. 外部 RunDiagramDataPresenter.StartAllCommand 手动遍历文件列表
     #    → StartOne() 临时设置 UseAllImage=false, 运行, 恢复原值
     #
-    # VisionFlow 实现策略（解耦）：
-    #   - WorkflowEngine 保持单次执行职责不变
-    #   - 文件遍历逻辑放在 WorkflowRunner（对标 RunDiagramDataPresenter）
-    #   - per-file 进度通过事件驱动——UI 订阅 FILE_ITERATION 事件更新图像显示
+    # ═══════════════════════════════════════════════════════════════════════
+    # TODO: "自动切换" (UseAutoSwitch) 实现要点
+    #
+    # WPF 实现（VisionDiagramDataBase.Start() line 167）：
+    #
+    #   this.ResultImageSource = item.ToImageSource();   // ALWAYS 更新显示
+    #   if (visionImageSource.UseAutoSwitch)              // 仅 auto_switch=ON 时
+    #       this.SrcImageNodeData.SrcFilePath = item;     // 才更新当前文件指针
+    #
+    # 解耦策略：
+    #   - ResultImageSource 更新 → FILE_ITERATION_NEXT 事件 → UI 始终更新图像
+    #   - SrcFilePath 更新    → WorkflowRunner._run_all() 检查 auto_switch
+    #   - 缩略图面板刷新      → MainWindow 收到事件后检查 auto_switch 状态
+    #                         调用 FlowResourcePanel.refresh_selection()（轻量刷新）
+    #   - WPF 绑定自动生效     → VisionFlow 需显式调用 refresh_selection()
     # ═══════════════════════════════════════════════════════════════════════
 
     def execute(self) -> FlowableResult:

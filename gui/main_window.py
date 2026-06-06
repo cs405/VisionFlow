@@ -1737,32 +1737,39 @@ class MainWindow(QMainWindow):
         """Handle FILE_ITERATION_NEXT — update image display to show current file
         during "运行全部" loop.
 
-        WPF: VisionDiagramDataBase.Start() sets ResultImageSource = item.ToImageSource()
-             before each file's workflow execution.
-        Decoupled: UI subscribes to event, updates image viewer from main thread.
+        WPF: VisionDiagramDataBase.Start():
+          1. ResultImageSource = item.ToImageSource()    // ALWAYS — update image viewer
+          2. if (UseAutoSwitch) SrcFilePath = item       // only if ON — update thumbnail
+
+        Decoupled: UI subscribes to event, updates image viewer + optionally
+        refreshes FlowResourcePanel when auto_switch is ON.
         """
         file_path = kwargs.get("file_path", "")
         index = kwargs.get("index", 0)
         total = kwargs.get("total", 0)
+        auto_switch = kwargs.get("auto_switch", True)
         if not file_path:
             return
 
-        # WPF: ResultImageSource = item.ToImageSource()
-        # Update image display on main thread
+        # WPF: ResultImageSource = item.ToImageSource() — ALWAYS update display
         import cv2
         try:
             img = cv2.imread(file_path, cv2.IMREAD_COLOR)
             if img is not None:
-                # Use invokeMethod-style to ensure UI update on main thread
                 h, w = img.shape[:2]
                 self._img_panel.set_image(img)
                 self._img_panel.set_image_info(file_path, w, h)
                 self._center_tabs.setCurrentIndex(0)  # switch to image tab
+                label = "自动切换" if auto_switch else "显示全部"
                 self._side_status_strip.set_status(
-                    f"显示全部: {os.path.basename(file_path)} [{index+1}/{total}]", "#2196f3"
+                    f"{label}: {os.path.basename(file_path)} [{index+1}/{total}]", "#2196f3"
                 )
         except Exception:
             pass
+
+        # WPF: if (UseAutoSwitch) SrcFilePath = item — refresh thumbnail panel
+        if auto_switch and self._resource_panel.isVisible():
+            self._resource_panel.refresh_selection()
 
     def _on_file_iteration_completed(self, sender, **kwargs):
         """Handle FILE_ITERATION_COMPLETED — reset display state after "运行全部" loop.

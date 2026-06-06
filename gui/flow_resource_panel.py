@@ -613,3 +613,23 @@ class FlowResourcePanel(QWidget):
             self._loader.set_paths(paths)
             self._loader.thumbnail_ready.connect(self._on_thumbnail_ready)
             self._loader.start()
+
+    def refresh_selection(self):
+        """Lightweight refresh — update header index + thumbnail highlight only.
+
+        WPF "自动切换" equivalent: during "运行全部", when UseAutoSwitch=ON,
+        the SrcFilePath binding causes the thumbnail ListBox to update its
+        selected item automatically. In VisionFlow, we call this explicitly
+        from the FILE_ITERATION_NEXT event handler when auto_switch is ON.
+        """
+        node = self._current_node
+        if node is None:
+            return
+
+        current = getattr(node, 'src_file_path', '')
+        # Update header index/filename
+        self._refresh_header()
+
+        # Update thumbnail selection highlight (WPF: SelectedItem="{Binding SrcFilePath}")
+        for path, btn in self._thumbnails.items():
+            btn.set_selected(path == current)
