@@ -519,6 +519,8 @@ class NodeBase(ABC):
         self._text = data.get("text", "")
         self.width = data.get("width", 120.0)
         self.height = data.get("height", 35.0)
+        self._pos_x = data.get("pos_x", 0.0)
+        self._pos_y = data.get("pos_y", 0.0)
 
         invoke_mode_name = data.get("invoke_mode", "SEQUENTIAL")
         try:
@@ -558,6 +560,8 @@ class NodeBase(ABC):
             "ports": [p.to_dict() for p in self.ports],
             "invoke_mode": self.invoke_mode.name,
             "properties": self._serialize_properties(),
+            "pos_x": getattr(self, '_pos_x', 0.0),
+            "pos_y": getattr(self, '_pos_y', 0.0),
         }
 
     @classmethod
@@ -572,6 +576,8 @@ class NodeBase(ABC):
         node.width = data.get("width", 120.0)
         node.height = data.get("height", 35.0)
         node.invoke_mode = FlowableInvokeMode[data.get("invoke_mode", "SEQUENTIAL")]
+        node._pos_x = data.get("pos_x", 0.0)
+        node._pos_y = data.get("pos_y", 0.0)
         return node
 
     def dispose(self):
