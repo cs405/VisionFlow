@@ -29,7 +29,7 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QScrollArea,
 from PyQt5.QtCore import Qt, pyqtSignal, QThread, QSize, QTimer, QPoint
 from PyQt5.QtGui import QPixmap, QImage, QFont, QColor, QPainter
 
-from gui.font_icons import FontIcons, FontIconButton, FontIconTextBlock
+from gui.font_icons import FontIcons, FontIconButton, FontIconTextBlock, ICON_FONT_FAMILY
 from gui.theme import theme_manager, connect_theme
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -132,7 +132,7 @@ from gui.theme import theme_manager, connect_theme
 THUMB_SIZE = 75         # WPF: Width="75" Height="75"
 THUMB_MARGIN = 2
 STRIP_HEIGHT = 106      # 90 for list + top/bottom padding
-PAGE_BTN_SIZE = 34      # WPF: FontSize="25" — large icon button, 34×34
+PAGE_BTN_SIZE = 40      # WPF: FontSize="25" — large enough for MDL2 icons
 
 
 # ── Async thumbnail loader ────────────────────────────────────────────────
@@ -427,11 +427,8 @@ class FlowResourcePanel(QWidget):
         strip_layout.addWidget(self._scroll_area)
 
         # ── Page navigation overlay (WPF: ScrollViewerPageLeft/RightCommand) ──
-        # WPF: FontIconButton FontSize="25". Qt: icon_font() auto-detects Segoe font.
-        from gui.font_icons import icon_font
-
+        # Font rendered via QSS font-family (setStyleSheet overrides setFont)
         self._page_left_btn = QPushButton(FontIcons.PageLeft)
-        self._page_left_btn.setFont(icon_font(16))
         self._page_left_btn.setFixedSize(PAGE_BTN_SIZE, PAGE_BTN_SIZE)
         self._page_left_btn.setCursor(Qt.PointingHandCursor)
         self._page_left_btn.setFocusPolicy(Qt.NoFocus)
@@ -439,7 +436,6 @@ class FlowResourcePanel(QWidget):
         self._page_left_btn.clicked.connect(self._page_left)
 
         self._page_right_btn = QPushButton(FontIcons.PageRight)
-        self._page_right_btn.setFont(icon_font(16))
         self._page_right_btn.setFixedSize(PAGE_BTN_SIZE, PAGE_BTN_SIZE)
         self._page_right_btn.setCursor(Qt.PointingHandCursor)
         self._page_right_btn.setFocusPolicy(Qt.NoFocus)
@@ -526,11 +522,13 @@ class FlowResourcePanel(QWidget):
             }}
         """)
 
-        # ── Page + step navigation buttons (WPF FontIconButton overlay) ──
+        # ── Page navigation buttons (WPF FontIconButton overlay) ──
+        # Must declare font-family in QSS — setStyleSheet() overrides setFont()
         page_qss = f"""
             QPushButton {{
                 background: rgba(45, 45, 48, 0.85); border: 1px solid {border};
                 border-radius: 3px; color: {text};
+                font-family: "{ICON_FONT_FAMILY}"; font-size: 18px;
             }}
             QPushButton:hover {{ background: {bg_hover}; border-color: {accent}; }}
         """
