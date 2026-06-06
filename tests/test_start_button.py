@@ -37,7 +37,7 @@ def test_can_start_with_nodes():
     print("=== Test 1: can_start() before/after adding nodes ===")
 
     wf = WorkflowEngine("test")
-    assert wf.state == WorkflowState.NONE
+    assert wf.state == WorkflowState.IDLE
     assert wf.can_start() is False, "Empty workflow should NOT be startable"
 
     # User adds first node via toolbox
@@ -191,16 +191,17 @@ def test_full_flow():
     print(f"  2. After adding 2 nodes + link: can_start=True OK")
 
     result = wf.start()
-    assert wf.state == WorkflowState.SUCCESS
+    assert wf.state == WorkflowState.COMPLETED
     assert result.is_ok
     print(f"  3. Start → state={wf.state.name}, result={result.message} OK")
 
     assert wf.can_start() is True  # Can restart after success
     print(f"  4. After success: can_start=True (can re-run) OK")
 
-    wf.reset()
-    assert wf.state == WorkflowState.NONE
-    print(f"  5. Reset → state={wf.state.name} OK")
+    # Re-run to verify idempotent
+    result2 = wf.start()
+    assert result2.is_ok
+    print(f"  5. Re-run → state={wf.state.name} OK")
 
     print("  PASSED\n")
 

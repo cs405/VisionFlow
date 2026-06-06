@@ -754,6 +754,32 @@ class DiagramScene(QGraphicsScene):
                (edge.to_socket and edge.to_socket.port.node_id == node_id):
                 edge.set_state(es)
 
+    def on_link_state_changed(self, link_id: str, state: str):
+        """Update an individual link's edge visual state (WPF Link DataTrigger)."""
+        edge = self._edge_items.get(link_id)
+        if edge is None:
+            return
+        state_map = {
+            "running": EdgeState.RUNNING,
+            "completed": EdgeState.SUCCESS,
+            "error": EdgeState.ERROR,
+        }
+        es = state_map.get(state, EdgeState.NORMAL)
+        edge.set_state(es)
+
+    def on_port_state_changed(self, node_id: str, port_id: str, state: str):
+        """Update a socket's visual state (WPF Port DataTrigger)."""
+        node_item = self._node_items.get(node_id)
+        if node_item is None:
+            return
+        for sock in node_item.sockets:
+            if sock.port.port_id == port_id:
+                if state == "running":
+                    sock.set_highlight(True)
+                else:
+                    sock.set_highlight(False)
+                break
+
     # ═══════════════════════════════════════════════════════════════════════════
     # Context menu
     # ═══════════════════════════════════════════════════════════════════════════

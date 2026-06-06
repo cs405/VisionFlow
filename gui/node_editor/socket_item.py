@@ -101,6 +101,11 @@ class SocketItem(QGraphicsObject):
         self.setToolTip(f"{self.port.dock.name} — {dt.label}")
         self.update()
 
+    def set_highlight(self, on: bool):
+        """Highlight socket during Port-mode execution (WPF Port DataTrigger)."""
+        self._hovered = on
+        self._update_style()
+
     def boundingRect(self) -> QRectF:
         pad = PORT_HOVER_RADIUS + 2
         return self._rect.adjusted(-pad, -pad, pad, pad)

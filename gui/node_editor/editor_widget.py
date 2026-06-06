@@ -424,15 +424,35 @@ class DiagramEditorWidget(QWidget):
         event_system.subscribe(EventType.NODE_COMPLETED, self._on_node_completed)
         event_system.subscribe(EventType.NODE_ERROR, self._on_node_error)
         event_system.subscribe(EventType.WORKFLOW_STOPPED, self._on_workflow_stopped)
+        event_system.subscribe(EventType.LINK_STARTED, self._on_link_started)
+        event_system.subscribe(EventType.LINK_COMPLETED, self._on_link_completed)
+        event_system.subscribe(EventType.PORT_STARTED, self._on_port_started)
+        event_system.subscribe(EventType.PORT_COMPLETED, self._on_port_completed)
 
     def _unsubscribe_workflow_events(self):
         event_system.unsubscribe(EventType.NODE_STARTED, self._on_node_started)
         event_system.unsubscribe(EventType.NODE_COMPLETED, self._on_node_completed)
         event_system.unsubscribe(EventType.NODE_ERROR, self._on_node_error)
         event_system.unsubscribe(EventType.WORKFLOW_STOPPED, self._on_workflow_stopped)
+        event_system.unsubscribe(EventType.LINK_STARTED, self._on_link_started)
+        event_system.unsubscribe(EventType.LINK_COMPLETED, self._on_link_completed)
+        event_system.unsubscribe(EventType.PORT_STARTED, self._on_port_started)
+        event_system.unsubscribe(EventType.PORT_COMPLETED, self._on_port_completed)
 
     def _belongs_to_bound_workflow(self, sender) -> bool:
         return bool(sender) and getattr(sender, 'diagram_data', None) is self._subscribed_workflow
+
+    def _link_belongs(self, sender) -> bool:
+        """Check if a link belongs to the bound workflow."""
+        return (self._subscribed_workflow is not None
+                and sender in self._subscribed_workflow._links)
+
+    def _port_belongs(self, sender) -> bool:
+        """Check if a port belongs to the bound workflow (via its node)."""
+        if self._subscribed_workflow is None:
+            return False
+        node = self._subscribed_workflow.get_node_by_id(sender.node_id)
+        return node is not None
 
     def _on_node_started(self, sender, **kwargs):
         if self._belongs_to_bound_workflow(sender):
@@ -459,4 +479,22 @@ class DiagramEditorWidget(QWidget):
     def _on_node_state_change(self, node_id: str, state: str):
         """Slot called on main thread via queued signal connection."""
         self.scene.on_workflow_state_changed(node_id, state)
+
+    # ── Link / Port event handlers (Link mode / Port mode) ──
+
+    def _on_link_started(self, sender, **kwargs):
+        if self._link_belongs(sender):
+            self.scene.on_link_state_changed(sender.link_id, "running")
+
+    def _on_link_completed(self, sender, **kwargs):
+        if self._link_belongs(sender):
+            self.scene.on_link_state_changed(sender.link_id, "completed")
+
+    def _on_port_started(self, sender, **kwargs):
+        if self._port_belongs(sender):
+            self.scene.on_port_state_changed(sender.node_id, sender.port_id, "running")
+
+    def _on_port_completed(self, sender, **kwargs):
+        if self._port_belongs(sender):
+            self.scene.on_port_state_changed(sender.node_id, sender.port_id, "completed")
 

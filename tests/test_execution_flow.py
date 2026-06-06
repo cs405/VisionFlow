@@ -59,7 +59,7 @@ def test_execute_runs_nodes():
     assert cam.invoked is True, "FAIL: node.invoke() was NEVER called!"
     assert cam.invoke_count == 1, f"FAIL: invoke called {cam.invoke_count} times, expected 1"
     assert result.is_ok, f"FAIL: start() returned error: {result.message}"
-    assert wf.state == WorkflowState.SUCCESS, f"FAIL: workflow state is {wf.state.name}"
+    assert wf.state == WorkflowState.COMPLETED, f"FAIL: workflow state is {wf.state.name}"
 
     print("  PASSED\n")
 
