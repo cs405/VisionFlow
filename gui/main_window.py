@@ -663,7 +663,7 @@ class MainWindow(QMainWindow):
         self._tool_diagram_cmds.layout().setSpacing(2)
 
         for icon, tip, slot in [
-            (FontIcons.Replay,         "开始",         self._on_run_workflow),
+            (FontIcons.Replay,         "单次执行",         self._on_run_workflow),
             (FontIcons.Sync,           "连续执行",     self._on_continuous_run),
             (FontIcons.Location,       "停止",         self._on_stop_workflow),
             (FontIcons.Refresh,        "重置",         self._on_reset_workflow_view),
