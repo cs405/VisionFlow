@@ -22,7 +22,7 @@ from PyQt5.QtCore import Qt, QTimer, QSettings, pyqtSignal, QEvent
 from PyQt5.QtGui import QIcon, QPixmap, QCursor, QFont
 
 from core.node_base import NodeBase, VisionNodeData, SrcFilesVisionNodeData, ROINodeData
-from core.workflow import WorkflowEngine
+from core.workflow import WorkflowEngine, WorkflowState
 from core.project import project_service, DiagramData, ProjectItem
 from core.events import EventType, event_system
 from core.registry import node_registry
@@ -109,7 +109,11 @@ def _hsep():
 
 
 def _cmd_btn_qss():
-    """Toolbar command button QSS — dynamic from theme."""
+    """Toolbar command button QSS — dynamic from theme.
+
+    WPF: Command states update automatically via CanExecute → button visuals.
+    Python: explicit setEnabled() calls + :disabled QSS for visual feedback.
+    """
     return f"""
     QPushButton {{
         background: transparent;
@@ -119,7 +123,11 @@ def _cmd_btn_qss():
         color: {theme_manager.color('text_primary').name()};
     }}
     QPushButton:hover {{ background: {theme_manager.color('bg_surface_hover').name()}; }}
-    QPushButton:pressed {{ background: {theme_manager.color('accent').name()}; }}
+    QPushButton:pressed {{ background: {theme_manager.color('accent').name()}; color: white; }}
+    QPushButton:disabled {{
+        color: {theme_manager.color('text_secondary').name()};
+        background: transparent;
+    }}
 """
 
 def _tab_qss():
@@ -660,9 +668,13 @@ class MainWindow(QMainWindow):
             if slot:
                 btn.clicked.connect(slot)
             self._tool_diagram_cmds.layout().addWidget(btn)
-        # Keep _run_btn/_stop_btn refs for workflow state handlers
+        # Keep button refs for CanExecute-style state management (mirror WPF)
         self._run_btn = self._tool_diagram_cmds.layout().itemAt(0).widget()
         self._stop_btn = self._tool_diagram_cmds.layout().itemAt(1).widget()
+        self._reset_btn = self._tool_diagram_cmds.layout().itemAt(2).widget()
+        # Start with stop/reset disabled (no running workflow)
+        self._stop_btn.setEnabled(False)
+        self._reset_btn.setEnabled(False)
 
         tb.addWidget(self._tool_diagram_cmds)
         tb.addWidget(_hsep())
@@ -1036,6 +1048,7 @@ class MainWindow(QMainWindow):
         event_system.subscribe(EventType.WORKFLOW_STARTED, self._on_wf_start)
         event_system.subscribe(EventType.WORKFLOW_COMPLETED, self._on_wf_done)
         event_system.subscribe(EventType.WORKFLOW_ERROR, self._on_wf_err)
+        event_system.subscribe(EventType.WORKFLOW_STOPPED, self._on_wf_stopped)
         event_system.subscribe(EventType.PROJECT_LOADED, self._on_proj_load)
         event_system.subscribe(EventType.PROJECT_SAVED, self._on_proj_save)
 
@@ -1211,8 +1224,14 @@ class MainWindow(QMainWindow):
         self._show_editor()
         self._sync_proj_labels(project)
         self._select_node(None)
+        # Deferred refresh: Qt may fire currentChanged(-1) after unblocking
+        # signals in _refresh_diagram_tabs.  Re-apply correct states once the
+        # event loop settles to override any late-firing invalid-index signal.
+        QTimer.singleShot(0, lambda: self._refresh_command_states(
+            project_service.current_project))
 
     def _refresh_diagram_tabs(self, project: ProjectItem):
+        self._rebuilding_tabs = True
         self._diagram_pages.clear()
         self._diagram_headers.clear()
         self._diagram_tab_widget.blockSignals(True)
@@ -1227,6 +1246,7 @@ class MainWindow(QMainWindow):
             self._diagram_tab_widget.setCurrentIndex(target_index)
         self._diagram_tab_widget.blockSignals(False)
         self._on_diagram_tab_changed(target_index)
+        self._rebuilding_tabs = False
 
     def _install_diagram_tab_header(self, index: int, diagram: DiagramData):
         header = _DiagramTabHeader(diagram.name, self._diagram_tab_widget.tabBar())
@@ -1476,6 +1496,10 @@ class MainWindow(QMainWindow):
     def _on_diagram_tab_changed(self, index: int):
         project = project_service.current_project
         if project is None or not (0 <= index < len(project.diagrams)):
+            # During tab rebuild, ignore invalid-index signals to avoid
+            # disabling buttons between clear() and setCurrentIndex().
+            if getattr(self, '_rebuilding_tabs', False):
+                return
             self._workflow = None
             self._diagram_editor = None
             self._diagram_status_strip.set_status("流程图就绪", "#4caf50")
@@ -1513,12 +1537,22 @@ class MainWindow(QMainWindow):
         states based on CanExecute predicates. Python/PyQt5 requires explicit
         updates at state-change points.
 
-        Currently managed buttons:
-          - 删除流程图: enabled only when SelectedDiagramData != null && Count > 1
+        Managed buttons (mirror WPF FlowableDiagramDataBase commands):
+          - 开始: enabled when CanStart (state != Running && != Canceling && has nodes)
+          - 停止: enabled when CanStop  (state == Running)
+          - 重置: enabled when CanReset (always)
+          - 删除流程图: enabled when SelectedDiagramData != null && Count > 1
         """
+        workflow = self._workflow
+        if hasattr(self, '_run_btn'):
+            self._run_btn.setEnabled(workflow.can_start() if workflow else False)
+        if hasattr(self, '_stop_btn'):
+            self._stop_btn.setEnabled(workflow.can_stop() if workflow else False)
+        if hasattr(self, '_reset_btn'):
+            self._reset_btn.setEnabled(workflow.can_reset() if workflow else False)
         if hasattr(self, '_delete_diagram_btn'):
-            enabled = project.can_delete_diagram if project is not None else False
-            self._delete_diagram_btn.setEnabled(enabled)
+            self._delete_diagram_btn.setEnabled(
+                project.can_delete_diagram if project is not None else False)
 
     def _sync_workflow_to_project(self):
         project = project_service.current_project
@@ -1643,18 +1677,18 @@ class MainWindow(QMainWindow):
         self._state_lbl.setText(f"{FontIcons.Sync} 运行中")
         self._state_lbl.setStyleSheet("color: #2196f3; font-weight: bold;")
         self._msg_lbl.setText("流程运行中...")
-        self._run_btn.setEnabled(False)
         self._diagram_status_strip.set_status("流程图运行中...", "#2196f3")
         self._side_status_strip.set_status("结果区正在等待输出...", "#2196f3")
+        self._refresh_command_states(project_service.current_project)
 
     def _on_wf_done(self, sender, **kwargs):
         elapsed = self._format_elapsed()
         self._state_lbl.setText(f"{FontIcons.Completed} 完成")
         self._state_lbl.setStyleSheet("color: #4caf50; font-weight: bold;")
         self._msg_lbl.setText(f"流程执行完成 (用时: {elapsed})")
-        self._run_btn.setEnabled(True)
         self._diagram_status_strip.set_status(f"流程图执行完成 · 用时: {elapsed}", "#4caf50")
         self._side_status_strip.set_status("结果区已更新", "#4caf50")
+        self._refresh_command_states(project_service.current_project)
 
     def _on_wf_err(self, sender, **kwargs):
         elapsed = self._format_elapsed()
@@ -1662,8 +1696,18 @@ class MainWindow(QMainWindow):
         self._state_lbl.setStyleSheet("color: #f44336; font-weight: bold;")
         result = kwargs.get("result")
         self._msg_lbl.setText(f"{str(result) if result else '流程错误'} (用时: {elapsed})")
-        self._run_btn.setEnabled(True)
         self._diagram_status_strip.set_status(f"流程图错误：{self._msg_lbl.text()}", "#f44336")
+        self._side_status_strip.set_status("结果区收到错误消息", "#f44336")
+        self._refresh_command_states(project_service.current_project)
+
+    def _on_wf_stopped(self, sender, **kwargs):
+        """Handle workflow stopped event (WPF Canceling → Canceled)."""
+        self._state_lbl.setText(f"{FontIcons.Stop} 已停止")
+        self._state_lbl.setStyleSheet("color: #ff9800; font-weight: bold;")
+        self._msg_lbl.setText("流程已被用户停止")
+        self._diagram_status_strip.set_status("流程图已停止", "#ff9800")
+        self._side_status_strip.set_status("结果区已停止等待", "#ff9800")
+        self._refresh_command_states(project_service.current_project)
         self._side_status_strip.set_status("结果区收到错误消息", "#f44336")
 
     def _format_elapsed(self) -> str:
@@ -1740,22 +1784,52 @@ class MainWindow(QMainWindow):
                 self._sync_proj_labels(project)
 
     def _on_run_workflow(self):
+        """Start workflow execution (mirrors WPF StartCommand).
+
+        WPF pattern (FlowableDiagramDataBase):
+          StartCommand → await this.Start() → model handles everything.
+          UI updates via bindings + events — no view code-behind for execution.
+
+        Python: sync workflow → model.start() on worker thread.
+        ALL UI updates (status, buttons, messages) come from event handlers
+        (_on_wf_start, _on_wf_done, _on_wf_err, _on_wf_stopped).
+        The view handler only kicks off execution — no result handling here.
+        """
         if not self._workflow:
             return
         self._sync_workflow_to_project()
         self._log_panel.info("开始执行流程...")
-        result = self._workflow.execute()
-        if result.is_ok:
-            self._log_panel.success(f"流程完成: {result.message}")
-        elif result.is_error:
-            self._log_panel.error(f"流程错误: {result.message}")
+        # Offload to worker thread; events drive all UI updates on main thread
+        import threading
+        t = threading.Thread(target=self._workflow.start, daemon=True)
+        t.start()
 
     def _on_stop_workflow(self):
+        """Stop workflow execution (mirrors WPF StopCommand).
+
+        WPF: Stop() → Canceling → GotoState on all parts → Canceled.
+        Python: model.stop() handles state; view updates button states.
+        """
         if self._workflow:
             self._workflow.stop()
             self._log_panel.warning("流程已停止")
             self._diagram_status_strip.set_status("流程图已停止", "#ff9800")
             self._side_status_strip.set_status("结果区已停止等待", "#ff9800")
+            self._refresh_command_states(project_service.current_project)
+
+    def _on_reset_workflow_view(self):
+        """Reset workflow to ready state (mirrors WPF ResetCommand).
+
+        WPF: Reset() → GotoState(x => FlowableState.Ready) on all parts.
+        Python: model.reset() resets states; also reload scene from workflow.
+        """
+        if self._workflow:
+            self._workflow.reset()
+        editor = self._current_diagram_editor()
+        if editor is not None and self._workflow is not None:
+            editor.bind_workflow(self._workflow)
+        self._log_panel.info("已重置当前流程图")
+        self._refresh_command_states(project_service.current_project)
 
     def _on_cycle_run_mode(self):
         """Cycle through run modes: Node → Link → Port → Node."""
