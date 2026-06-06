@@ -1344,7 +1344,13 @@ class SrcFilesVisionNodeData(ROINodeData):
                 self.src_file_path = ""
 
     def move_next(self) -> bool:
-        """Switch to the next file in the list. Returns True if cycled."""
+        """Switch to the next file in the list. Returns True if cycled.
+
+        WPF: ISrcFilesNodeData.MoveNext() extension method.
+          → index = SrcFilePaths.IndexOf(SrcFilePath)
+          → index = index < Count - 1 ? index + 1 : 0
+          → SrcFilePath = SrcFilePaths[index]
+        """
         if not self.src_file_paths:
             return False
         if self.src_file_path not in self.src_file_paths:
@@ -1355,6 +1361,25 @@ class SrcFilesVisionNodeData(ROINodeData):
         if next_idx == 0 and not self.use_all_image:
             return False
         self.src_file_path = self.src_file_paths[next_idx]
+        return True
+
+    def move_prev(self) -> bool:
+        """Switch to the previous file in the list. Returns True if wrapped.
+
+        Mirrors move_next() but in reverse — for "上一张" single-step navigation.
+        """
+        if not self.src_file_paths:
+            return False
+        if self.src_file_path not in self.src_file_paths:
+            self.src_file_path = self.src_file_paths[-1]
+            return True
+        idx = self.src_file_paths.index(self.src_file_path)
+        prev_idx = idx - 1
+        if prev_idx < 0:
+            if not self.use_all_image:
+                return False
+            prev_idx = len(self.src_file_paths) - 1
+        self.src_file_path = self.src_file_paths[prev_idx]
         return True
 
     def is_valid_file_list(self) -> tuple[bool, str]:

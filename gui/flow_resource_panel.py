@@ -84,13 +84,55 @@ from gui.theme import theme_manager, connect_theme
 #   - 增量构建 (_add_thumbnails_incremental) 对标 WPF 数据绑定自动刷新
 #   - 大规模虚拟化暂不实现，但 lazy load（可见优先）可后续优化
 # ═══════════════════════════════════════════════════════════════════════════
+#
+# TODO: WPF "上一页/下一页" (PageLeft/PageRight) 导航按钮实现
+#
+# WPF MainWindow.xaml lines 379-390, 491-502:
+#
+#   <FontIconButton Margin="5,0"
+#       HorizontalAlignment="Left"
+#       Command="{ScrollViewerPageLeftCommand}"
+#       CommandParameter="{Binding ElementName=sv}"
+#       Content="{x:Static FontIcons.PageLeft}"
+#       FontSize="25" />
+#   <FontIconButton Margin="5,0"
+#       HorizontalAlignment="Right"
+#       Command="{ScrollViewerPageRightCommand}"
+#       CommandParameter="{Binding ElementName=sv}"
+#       Content="{x:Static FontIcons.PageRight}"
+#       FontSize="25" />
+#
+# WPF 关键设计点：
+#   1. FontIconButton — 字体图标按钮，用 Content 显示图标字符
+#   2. FontSize="25" — 大号图标，醒目可点击
+#   3. FontIcons.PageLeft  =     FontIcons.PageRight = 
+#   4. ScrollViewerPageLeftCommand  → scrollViewer.PageLeft()
+#      ScrollViewerPageRightCommand → scrollViewer.PageRight()
+#      (继承自 ScrollViewerScrollToHomeCommand / ScrollViewerScrollToEndCommand)
+#   5. CommandParameter 绑定到 ScrollViewer 元素名 "sv"
+#   6. Margin="5,0" + HorizontalAlignment — 距边框 5px
+#   7. 放在 ListBox ControlTemplate 的 Grid 中，浮在 ScrollViewer 上方
+#
+# WPF "上一张/下一张" 单步导航（非页面滚动）：
+#   - ISrcFilesNodeData.MoveNext() 扩展方法
+#     → int index = SrcFilePaths.IndexOf(SrcFilePath)
+#     → index = index < Count - 1 ? index + 1 : 0
+#     → SrcFilePath = SrcFilePaths[index]
+#   - 当 use_all_image=false 时，move_next 到末尾返回 false（不循环）
+#
+# VisionFlow 适配策略：
+#   - PageLeft/PageRight overlay 按钮已实现 (_page_left_btn / _page_right_btn)
+#   - 字体大小从 14pt 提升到 18pt 对标 WPF FontSize="25" 视觉比例
+#   - 新增单步导航: _step_left() / _step_right() → node.move_next() / move_prev()
+#   - 工具提示 "上一页"/"下一页" 和 "上一张"/"下一张"
+# ═══════════════════════════════════════════════════════════════════════════
 
 # ── Thumbnail constants matching WPF ───────────────────────────────────────
 
 THUMB_SIZE = 75         # WPF: Width="75" Height="75"
 THUMB_MARGIN = 2
 STRIP_HEIGHT = 106      # 90 for list + top/bottom padding
-PAGE_BTN_SIZE = 30       # WPF: FontSize="25" with margin
+PAGE_BTN_SIZE = 34      # WPF: FontSize="25" — large icon button, 34×34
 
 
 # ── Async thumbnail loader ────────────────────────────────────────────────
@@ -384,32 +426,34 @@ class FlowResourcePanel(QWidget):
         self._scroll_area.setWidget(self._thumb_container)
         strip_layout.addWidget(self._scroll_area)
 
-        # ── Page navigation overlay buttons (WPF: ScrollViewerPageLeft/RightCommand) ──
+        # ── Page navigation overlay (WPF: ScrollViewerPageLeft/RightCommand) ──
+        # WPF: FontIconButton FontSize="25", Margin="5,0"
+        btn_icon_font = QFont("Segoe Fluent Icons", 16)
+
         self._page_left_btn = QPushButton(FontIcons.PageLeft)
-        self._page_left_btn.setFont(QFont("Segoe Fluent Icons", 14))
+        self._page_left_btn.setFont(btn_icon_font)
         self._page_left_btn.setFixedSize(PAGE_BTN_SIZE, PAGE_BTN_SIZE)
         self._page_left_btn.setCursor(Qt.PointingHandCursor)
         self._page_left_btn.setFocusPolicy(Qt.NoFocus)
+        self._page_left_btn.setToolTip("上一页")
         self._page_left_btn.clicked.connect(self._page_left)
 
         self._page_right_btn = QPushButton(FontIcons.PageRight)
-        self._page_right_btn.setFont(QFont("Segoe Fluent Icons", 14))
+        self._page_right_btn.setFont(btn_icon_font)
         self._page_right_btn.setFixedSize(PAGE_BTN_SIZE, PAGE_BTN_SIZE)
         self._page_right_btn.setCursor(Qt.PointingHandCursor)
         self._page_right_btn.setFocusPolicy(Qt.NoFocus)
+        self._page_right_btn.setToolTip("下一页")
         self._page_right_btn.clicked.connect(self._page_right)
 
-        # Theme-aware QSS applied via _refresh_strip_qss()
-
-        # Overlay the page buttons on the scroll area
-        # Use absolute positioning within strip_container
+        # Overlay page buttons at edges (WPF: Margin="5,0" ≈ 2px edge gap)
         self._page_left_btn.setParent(self._scroll_area)
-        self._page_left_btn.move(4, (self._scroll_area.height() - PAGE_BTN_SIZE) // 2)
+        self._page_left_btn.move(2, (self._scroll_area.height() - PAGE_BTN_SIZE) // 2)
         self._page_left_btn.show()
 
         self._page_right_btn.setParent(self._scroll_area)
         self._page_right_btn.move(
-            self._scroll_area.width() - PAGE_BTN_SIZE - 4,
+            self._scroll_area.width() - PAGE_BTN_SIZE - 2,
             (self._scroll_area.height() - PAGE_BTN_SIZE) // 2,
         )
         self._page_right_btn.show()
@@ -485,7 +529,7 @@ class FlowResourcePanel(QWidget):
             }}
         """)
 
-        # ── Page navigation buttons (WPF FontIconButton overlay) ──
+        # ── Page + step navigation buttons (WPF FontIconButton overlay) ──
         page_qss = f"""
             QPushButton {{
                 background: rgba(45, 45, 48, 0.85); border: 1px solid {border};
@@ -510,22 +554,24 @@ class FlowResourcePanel(QWidget):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        # Reposition page buttons
         if hasattr(self, '_page_right_btn'):
-            self._page_right_btn.move(
-                self._scroll_area.width() - PAGE_BTN_SIZE - 4,
-                (self._scroll_area.height() - PAGE_BTN_SIZE) // 2,
-            )
+            sw = self._scroll_area.width()
+            sh = self._scroll_area.height()
+            self._page_left_btn.move(2, (sh - PAGE_BTN_SIZE) // 2)
+            self._page_right_btn.move(sw - PAGE_BTN_SIZE - 2, (sh - PAGE_BTN_SIZE) // 2)
 
-    # ── Page navigation ─────────────────────────────────────────────────
+    # ── Page navigation (WPF: ScrollViewer.PageLeft / PageRight) ────────────
 
     def _page_left(self):
+        """Scroll thumbnail strip left by one viewport width."""
         bar = self._scroll_area.horizontalScrollBar()
         bar.setValue(bar.value() - self._scroll_area.viewport().width())
 
     def _page_right(self):
+        """Scroll thumbnail strip right by one viewport width."""
         bar = self._scroll_area.horizontalScrollBar()
         bar.setValue(bar.value() + self._scroll_area.viewport().width())
+
 
     # ── Node binding ────────────────────────────────────────────────────
 
