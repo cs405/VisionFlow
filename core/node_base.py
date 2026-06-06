@@ -1239,15 +1239,86 @@ class SrcFilesVisionNodeData(ROINodeData):
         super().__init__()
         self.use_start = True  # This node can be a flow start node
 
-    def add_files_from_folder(self, folder_path: str, image_extensions: tuple = None):
-        """Add all image files from a folder."""
-        if image_extensions is None:
-            image_extensions = (".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".webp")
+    # WPF-aligned image extensions (Extension.File.cs ImageExtension constant)
+    # jpg jpeg png gif pdf tga tif svg bmp dds eps webp
+    _IMAGE_EXTENSIONS = (
+        ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".tif",
+        ".webp", ".svg", ".tga", ".dds", ".eps", ".pdf",
+    )
+
+    @classmethod
+    def collect_image_files(cls, folder_path: str, recursive: bool = True,
+                            image_extensions: tuple = None) -> list[str]:
+        """Collect all image files from a folder, optionally recursive.
+
+        WPF port: DirectoryEx.GetAllFiles() + IsImage() + GetAllImages().
+
+        WPF key behaviors:
+          1. RECURSIVE into subdirectories (GetAllFiles walks entire tree)
+          2. Skips hidden & system files (FileAttributes.Hidden | FileAttributes.System)
+          3. Returns absolute file paths
+          4. Catches UnauthorizedAccessException for inaccessible subdirs
+          5. Can be overridden by subclasses (WPF: protected virtual)
+
+        Args:
+            folder_path: root folder to scan
+            recursive: whether to scan subdirectories (WPF: always true)
+            image_extensions: override extensions tuple (WPF: ImageExtensions list)
+
+        Returns:
+            Sorted list of absolute file paths matching image extensions.
+        """
         import os
-        for f in sorted(os.listdir(folder_path)):
-            if f.lower().endswith(image_extensions):
-                self.src_file_paths.append(os.path.join(folder_path, f))
-        if self.src_file_paths and not self.src_file_path:
+        if image_extensions is None:
+            image_extensions = cls._IMAGE_EXTENSIONS
+
+        result: list[str] = []
+
+        def _scan(directory: str):
+            try:
+                entries = os.listdir(directory)
+            except (PermissionError, OSError):
+                return  # WPF: UnauthorizedAccessException catch
+
+            for name in sorted(entries):
+                full_path = os.path.join(directory, name)
+                try:
+                    # WPF: skip hidden/system files
+                    # On Windows: FILE_ATTRIBUTE_HIDDEN = 2, FILE_ATTRIBUTE_SYSTEM = 4
+                    import stat
+                    attrs = os.stat(full_path).st_file_attributes if os.name == 'nt' else 0
+                    if attrs & (2 | 4):  # hidden | system
+                        continue
+                except (OSError, AttributeError):
+                    pass  # can't stat → proceed anyway
+
+                if os.path.isdir(full_path):
+                    if recursive:
+                        _scan(full_path)  # WPF: recurse into subdirectories
+                elif name.lower().endswith(image_extensions):
+                    result.append(full_path)
+
+        _scan(folder_path)
+        return result
+
+    def add_files_from_folder(self, folder_path: str, recursive: bool = True,
+                              image_extensions: tuple = None):
+        """Add all image files from a folder (WPF AddFiles / GetAllImages).
+
+        WPF: AddImageDatasCommand → AddFiles() → IOFolderDialog →
+             selectedFolderPath.GetAllImages() → SrcFilePaths.AddRange()
+
+        Key WPF behaviors:
+          - Scans subdirectories by default (recursive=True)
+          - Skips hidden & system files
+          - Only sets SrcFilePath if it was previously empty
+        """
+        new_files = self.collect_image_files(folder_path, recursive, image_extensions)
+        if not new_files:
+            return
+        self.src_file_paths.extend(new_files)
+        # WPF: if (SrcFilePaths.Count == 0) → only set if nothing was selected
+        if not self.src_file_path:
             self.src_file_path = self.src_file_paths[0]
 
     def add_files(self, file_paths: list[str]):
@@ -1304,10 +1375,27 @@ class SrcFilesVisionNodeData(ROINodeData):
     #
     #   AddImageDataCommand     → AddFile()  → IocMessage.IOFileDialog.ShowOpenImageFiles()
     #   AddImageDatasCommand    → AddFiles() → IocMessage.IOFolderDialog.ShowOpenFolderAction()
+    #                           → selectedFolderPath.GetAllImages()
+    #                           → DirectoryEx.GetAllFiles(IsImage)  ← RECURSIVE scan
     #   DeleteImageDataCommand  → ShowDeleteDialog → 删除当前文件 → 选中相邻文件
     #   ClearImageDatasCommand  → ShowDeleteAllDialog → 清空所有文件
     #
-    # WPF 关键设计点：
+    # WPF "添加文件夹" 核心实现细节：
+    #   1. GetAllImages(this string folderPath) — 扩展方法
+    #      → folderPath.ToDirectoryEx().GetAllFiles(x => x.FullName.IsImage())
+    #   2. DirectoryEx.GetAllFiles(Predicate<FileInfo> match) — 递归扫描器
+    #      a. 遍历 dir.GetFileSystemInfos()
+    #      b. 排除隐藏/系统文件 (Hidden | System)
+    #      c. 目录 → 递归 GetAllFiles(match)
+    #      d. 文件 → match(file) → 添加到结果列表
+    #   3. IsImage(this string filePath) — 扩展名判断
+    #      ImageExtensions: jpg jpeg png gif pdf tga tif svg bmp dds eps webp
+    #   4. 错误处理: catch UnauthorizedAccessException → 跳过无权限目录
+    #   5. 调用链: Node → IocMessage → IIOFolderDialogService.ShowOpenFolderAction()
+    #      Callback 模式: 对话框打开 → 选中文件夹 → callback(folderPath)
+    #   6. protected virtual AddFiles() — 子类可重写（如 Video 源调用 GetAllVedios）
+    #
+    # WPF 通用关键设计点：
     #   1. IoC 对话框服务 — 解耦 UI 框架，可 mock/替换
     #   2. 确认对话框 — 删除/清空前弹框确认（防御性设计）
     #   3. CanExecute 守卫 — Clear 需要 list.Count > 0 才可用

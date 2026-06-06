@@ -608,23 +608,35 @@ class FlowResourcePanel(QWidget):
     def _add_folder(self):
         """WPF AddImageDatasCommand → AddFiles() → IOFolderDialog.ShowOpenFolderAction().
 
-        Gets all images from a folder, adds them incrementally.
+        WPF implementation details:
+          - selectedFolderPath.GetAllImages()  →  recursive scan via DirectoryEx.GetAllFiles()
+          - SrcFilePaths.AddRange(images)       →  batch add
+          - Skips hidden & system files         →  !HasFlag(Hidden|System)
+          - Supported extensions: jpg jpeg png gif pdf tga tif svg bmp dds eps webp
+
+        VisionFlow: delegates to node.add_files_from_folder(recursive=True) which
+        mirrors WPF's recursive GetAllFiles + IsImage filtering.
         """
         folder = QFileDialog.getExistingDirectory(self, "选择图像文件夹")
         if not folder or not self._current_node:
             return
+
         had_existing = bool(self._current_node.src_file_paths)
+        old_count = len(self._current_node.src_file_paths)
 
-        import os
-        new_paths = []
-        for f in sorted(os.listdir(folder)):
-            if f.lower().endswith(self.IMAGE_EXTENSIONS):
-                new_paths.append(os.path.join(folder, f))
+        # WPF: selectedFolderPath.GetAllImages() → recursive + hidden-filtered
+        self._current_node.add_files_from_folder(folder, recursive=True)
 
-        if not new_paths:
+        new_count = len(self._current_node.src_file_paths)
+        added = new_count - old_count
+        if added == 0:
             return
-        self._current_node.add_files(new_paths)
 
+        # Determine which paths are new (those just appended)
+        new_paths = self._current_node.src_file_paths[old_count:]
+
+        # WPF: binding auto-refreshes ItemsControl
+        # VisionFlow: incremental thumbnail build for added files only
         self._add_thumbnails_incremental(new_paths)
         self._refresh_header()
         self._update_action_buttons()
