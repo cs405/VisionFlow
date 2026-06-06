@@ -17,7 +17,7 @@ class TemplateManagerDialog(QDialog):
         self._project = project
         self._selected_index: int = -1
         self.setWindowTitle("模板管理")
-        self.setMinimumSize(420, 320)
+        self.setMinimumSize(480, 320)
         self._setup_ui()
         self._refresh()
 
@@ -30,9 +30,9 @@ class TemplateManagerDialog(QDialog):
         header.setStyleSheet("font-size: 13px; font-weight: bold; color: #dcdcdc;")
         layout.addWidget(header)
 
-        desc = QLabel(f"共 {len(self._project.templates)} 个模板")
-        desc.setStyleSheet("color: #999; font-size: 11px;")
-        layout.addWidget(desc)
+        self._desc = QLabel()
+        self._desc.setStyleSheet("color: #999; font-size: 11px;")
+        layout.addWidget(self._desc)
 
         # List
         self._list = QListWidget()
@@ -77,10 +77,17 @@ class TemplateManagerDialog(QDialog):
 
     def _refresh(self):
         self._list.clear()
-        for i, t in enumerate(self._project.templates):
-            item = QListWidgetItem(t.name)
+        templates = self._project.templates
+        total_nodes = 0
+        for i, t in enumerate(templates):
+            node_count = len(t.workflow.get_all_nodes()) if t.workflow else 0
+            link_count = len(t.workflow.get_all_links()) if t.workflow else 0
+            total_nodes += node_count
+            label = f"{t.name}  （节点: {node_count}, 连线: {link_count}）"
+            item = QListWidgetItem(label)
             item.setData(Qt.UserRole, i)
             self._list.addItem(item)
+        self._desc.setText(f"共 {len(templates)} 个模板，合计 {total_nodes} 个节点")
         self._selected_index = -1
         self._add_btn.setEnabled(False)
 

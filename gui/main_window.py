@@ -467,6 +467,7 @@ class MainWindow(QMainWindow):
 
         self._show_start_page()
         self._apply_settings()
+        self._load_templates_on_startup()
 
     def _setup_window(self):
         self.setWindowTitle("VisionFlow — VisionFlow")
@@ -1200,6 +1201,9 @@ class MainWindow(QMainWindow):
     def _bind_project_diagram(self, project: ProjectItem):
         if not project.diagrams:
             project.add_diagram(project.name)
+        # Always sync global templates (loaded after node discovery)
+        if project_service._templates:
+            project._templates = list(project_service._templates)
         self._refresh_diagram_tabs(project)
         self._show_editor()
         self._sync_proj_labels(project)
@@ -1361,15 +1365,38 @@ class MainWindow(QMainWindow):
         from gui.template_dialog import TemplateManagerDialog
         dlg = TemplateManagerDialog(project, self)
         dlg.exec_()
+        self._persist_templates()  # persist any deletions
         if dlg.added_diagram:
             self._refresh_diagram_tabs(project)
             self._log_panel.success(f"从模板创建: {dlg.added_diagram.name}")
+
+    def _load_templates_on_startup(self):
+        """Load global templates on app startup (WPF LoadDiagramTemplates).
+
+        Must run AFTER _discover_nodes() populates node_registry, otherwise
+        node_registry.create() returns None for all types and nodes are lost.
+        """
+        project_service._templates = project_service.load_templates()
+        project = project_service.current_project
+        if project is not None:
+            project._templates = list(project_service._templates)
+
+    def _persist_templates(self):
+        """Persist templates to disk (WPF: save diagramtemplates.json)."""
+        project = project_service.current_project
+        if project is None:
+            return
+        # Sync to global store + persist
+        project_service._templates = list(project._templates)
+        project_service.save_templates(project._templates)
 
     def _on_save_as_template(self):
         """Save current diagram as template (WPF SaveAsDiagramTemplateCommand).
 
         WPF: TextBoxPresenter dialog with Title="保存模板名称", pre-filled with diagram name.
         Python: QInputDialog with same behavior.
+
+        Guard: warns if diagram has no nodes to prevent saving empty templates.
         """
         project = project_service.current_project
         if project is None:
@@ -1377,6 +1404,16 @@ class MainWindow(QMainWindow):
         diagram = project.selected_diagram
         if diagram is None:
             return
+
+        node_count = len(diagram.workflow.get_all_nodes()) if diagram.workflow else 0
+        if node_count == 0:
+            reply = QMessageBox.question(
+                self, "空流程图",
+                "当前流程图没有任何节点，保存为模板后添加时将显示空白画布。\n\n确定要保存空模板吗？",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if reply != QMessageBox.Yes:
+                return
+
         from PyQt5.QtWidgets import QInputDialog
         name, ok = QInputDialog.getText(
             self, "保存模板名称",
@@ -1384,8 +1421,9 @@ class MainWindow(QMainWindow):
             text=diagram.name)
         if ok and name.strip():
             self._sync_workflow_to_project()
-            project.save_diagram_as_template(name=name.strip())
-            self._log_panel.success(f"模板已保存: {name.strip()}")
+            project.save_diagram_as_template(diagram=diagram, name=name.strip())
+            self._persist_templates()
+            self._log_panel.success(f"模板已保存: {name.strip()} ({node_count} 个节点)")
 
     def _on_delete_diagram(self):
         """Delete current diagram."""
