@@ -1,21 +1,4 @@
-"""Node graphics item — WPF StyleNodeDataBase DataTemplate 1:1 port.
-
-Ported from H.VisionMaster.NodeData/Themes/Generic.xaml StyleNodeDataBase template.
-
-WPF structure:
-  Border (state-aware border/background)
-    ├─ DockPanel
-    │   ├─ Grid (left 30px bar area)
-    │   │   ├─ Border Width=30 (colored state strip with index number)
-    │   │   └─ FontIconTextBlock (icon centered)
-    │   └─ TextBlock (node title, center-aligned)
-    └─ State triggers: bar visibility + icon foreground color
-
-Port layout (WPF Layout.DoLayoutPort):
-  Ports are evenly distributed along each edge by their Dock direction.
-  DiagramScene._do_layout_port() is the authoritative layout method.
-  NodeItem._create_sockets() sets initial positions, which are then
-  refined by the scene's DoLayoutPort.
+"""Node graphics item
 """
 
 import math
@@ -35,7 +18,7 @@ from gui.font_icons import FontIcons, icon_font
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Enums matching WPF
+# Enums matching
 # ═══════════════════════════════════════════════════════════════════════════
 
 class NodeState(Enum):
@@ -54,7 +37,7 @@ class NodeTemplate(Enum):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Dimensions — matching WPF StyleNodeDataBase
+# Dimensions
 # ═══════════════════════════════════════════════════════════════════════════
 
 NODE_MIN_WIDTH = 120.0
@@ -115,11 +98,11 @@ _PORT_OFFSET_INIT = {
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# NodeItem — WPF StyleNodeDataBase visual alignment
+# NodeItem
 # ═══════════════════════════════════════════════════════════════════════════
 
 class NodeItem(QGraphicsObject):
-    """Visual node on diagram canvas — 1:1 WPF DataTemplate equivalent."""
+    """Visual node on diagram canvas"""
 
     node_selected = pyqtSignal(object)
     node_moved = pyqtSignal(object)
@@ -283,7 +266,7 @@ class NodeItem(QGraphicsObject):
         return path
 
     # ═════════════════════════════════════════════════════════════════════════
-    # Paint — WPF StyleNodeDataBase visual alignment (3-state design)
+    # Paint
     # ═════════════════════════════════════════════════════════════════════════
 
     def paint(self, painter, option, widget):
@@ -304,7 +287,7 @@ class NodeItem(QGraphicsObject):
         # ── Left bar: colored state strip with index number ──
         self._draw_left_bar(painter, state_color)
 
-        # ── Border (WPF 3-state design: state-aware color & width) ──
+        # ── Border ──
         border_color, border_width = self._resolve_border()
         painter.setPen(QPen(border_color, border_width))
         painter.setBrush(Qt.NoBrush)
@@ -320,7 +303,7 @@ class NodeItem(QGraphicsObject):
         # ── Right content: icon + text on white background ──
         self._draw_right_content(painter)
 
-    # ── Border resolution (WPF 3-state design) ─────────────────────────────
+    # ── Border resolution ─────────────────────────────
 
     def _resolve_state_color(self) -> QColor:
         """State color for left bar — hardcoded, independent of theme."""
@@ -361,7 +344,7 @@ class NodeItem(QGraphicsObject):
     # ── Left bar ────────────────────────────────────────────────────────────
 
     def _draw_left_bar(self, painter, state_color):
-        """Left 30px colored strip — WPF Running/Success/Error/Idle visibility."""
+        """Left 30px colored strip"""
         bar_visible = self._state in (NodeState.RUNNING, NodeState.COMPLETED,
                                        NodeState.ERROR, NodeState.IDLE)
         if not bar_visible:

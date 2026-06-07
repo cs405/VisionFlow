@@ -1,6 +1,4 @@
-"""Result panel — WPF DataGrid + ResultPresenter 1:1 port.
-
-Ported from WPF MainWindow.xaml bottom panel DataGrid + H.VisionMaster.ResultPresenter.
+"""Result panel
 
 Layout:
   - 历史结果 Tab: DataGrid with columns [执行序号|执行时间|模块|结果数据]
@@ -35,7 +33,7 @@ GEOM_COLORS = {
     ResultItemType.LINE: QColor("#ff9800"),
 }
 
-# State → FontIcon mapping (WPF DataGrid icon column)
+# State → FontIcon mapping
 STATE_ICONS = {
     "Success": FontIcons.Completed,
     "Error": FontIcons.Error,
@@ -56,8 +54,6 @@ STATE_COLORS = {
 
 class IconTextDelegate(QStyledItemDelegate):
     """Delegate that draws FontIcon + text in a single table cell.
-
-    Matches WPF DataGridTemplateColumn with FontIconTextBlock + TextBlock.
     """
 
     def __init__(self, parent=None):
@@ -87,7 +83,7 @@ class IconTextDelegate(QStyledItemDelegate):
 
         x = option.rect.left() + 6
 
-        # Draw FontIcon (WPF: FontIconTextBlock with DataTrigger for state)
+        # Draw FontIcon
         if icon:
             font = QFont(ICON_FONT_FAMILY, 11)
             font.setStyleStrategy(QFont.PreferAntialias)
@@ -115,8 +111,7 @@ class IconTextDelegate(QStyledItemDelegate):
 # ═══════════════════════════════════════════════════════════════════════════
 
 class ResultPanel(QWidget):
-    """WPF-aligned result panel: history, current results, and help.
-
+    """
     Signals:
         item_selected(uid) — overlay uid for image viewer linkage
         node_jump_requested(node_id) — jump to node from history
@@ -134,7 +129,7 @@ class ResultPanel(QWidget):
         self._overlay_map: dict[int, str] = {}  # row → overlay uid
         self._current_node: VisionNodeData | None = None
         self._icon_delegate: IconTextDelegate | None = None
-        self._workflow = None  # WPF: DiagramData reference for Messages
+        self._workflow = None  # DiagramData reference for Messages
         self._setup_ui()
 
         # Cross-thread marshaling: WorkflowEngine.on_history_changed() callback
@@ -329,7 +324,7 @@ class ResultPanel(QWidget):
     # ── History ─────────────────────────────────────────────────────────
 
     def bind_workflow(self, workflow):
-        """Bind to a workflow's Messages collection (WPF: DataContext binding).
+        """Bind to a workflow's Messages collection
 
         Registers a callback on the workflow via on_history_changed().
         When the workflow adds/updates messages, the callback emits
@@ -341,7 +336,7 @@ class ResultPanel(QWidget):
             workflow.on_history_changed(lambda: self._history_sync_requested.emit())
 
     def sync_history_from_workflow(self):
-        """Rebuild history table from workflow.messages (WPF: ItemsSource refresh).
+        """Rebuild history table from workflow.messages
 
         Called when node execution completes or when switching workflows.
         For video/camera nodes, finds existing row by result_node_data and updates
@@ -365,7 +360,7 @@ class ResultPanel(QWidget):
                 for row in range(self._history_table.rowCount()):
                     item = self._history_table.item(row, 0)
                     if item and item.data(Qt.UserRole) == last_node.node_id:
-                        # Update existing row in-place (WPF: find by ResultNodeData)
+                        # Update existing row
                         self._update_history_row(row, last_msg)
                         self._history_table.scrollToBottom()
                         return
@@ -433,7 +428,7 @@ class ResultPanel(QWidget):
     def _on_history_cell_clicked(self, row: int, col: int):
         """Handle history row click — update main image + jump to node.
 
-        WPF: SelectedMessageChangedCommand → SetResultNodeData(message)
+        SelectedMessageChangedCommand → SetResultNodeData(message)
           → ResultImageSource = message.ResultImageSource  // 更新主图像
           → ResultNodeData = message.ResultNodeData         // 更新属性面板
         """
@@ -447,11 +442,11 @@ class ResultPanel(QWidget):
             return
         msg = messages[row]
 
-        # Update main image (WPF: ResultImageSource = message.ResultImageSource)
+        # Update main image
         if msg.result_image_source is not None:
             self.image_update_requested.emit(msg.result_image_source)
 
-        # Jump to node + update property panel (WPF: ResultNodeData = message.ResultNodeData)
+        # Jump to node + update property panel
         if msg.result_node_data and hasattr(msg.result_node_data, 'node_id'):
             self.node_jump_requested.emit(msg.result_node_data.node_id)
 
@@ -484,7 +479,7 @@ class ResultPanel(QWidget):
     # ── Help display (6.3) ──────────────────────────────────────────────
 
     def show_help(self, node: VisionNodeData | None):
-        """Show WPF-aligned help for a node with clickable documentation link."""
+        """Show help for a node with clickable documentation link."""
         if node is None:
             self._help_text.setHtml(
                 '<p style="color: #666; font-size: 13px;">'
@@ -562,7 +557,7 @@ class ResultPanel(QWidget):
         self._current_node = None
 
     def clear_history(self):
-        """Clear only the history table (WPF: clear Messages on new run or diagram switch)."""
+        """Clear only the history table (clear Messages on new run or diagram switch)."""
         self._history_table.setRowCount(0)
         if self._workflow and hasattr(self._workflow, 'clear_messages'):
             self._workflow.clear_messages()

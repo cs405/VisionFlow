@@ -6,10 +6,8 @@ Now all modules import from here.
 
 from gui.font_icons import FontIcons
 
-# ── Group colors and icons matching WPF ──────────────────────────────────
 
 GROUP_META = {
-    # WPF H.VisionMaster.NodeGroup — icons match FontIcons.cs exactly
     "图像数据源":   {"color": "#4a9eff", "icon": FontIcons.Camera},           # SrcImageDataGroup
     "系统数据源":   {"color": "#5c6bc0", "icon": FontIcons.Photo2},           # ZooNodeDataGroup
     "图像预处理模块": {"color": "#ff8c00", "icon": FontIcons.Color},           # PreprocessingDataGroup
@@ -50,7 +48,7 @@ GROUP_COLORS = {k: v["color"] for k, v in GROUP_META.items()}
 
 
 def get_group_meta(group_name: str) -> dict:
-    """Get metadata for a group, with fallback (WPF More icon)."""
+    """Get metadata for a group, with fallback."""
     return GROUP_META.get(group_name,
                           {"color": "#607d8b", "icon": FontIcons.More})
 
@@ -62,6 +60,6 @@ def get_group_color(group_name: str) -> str:
 
 
 def get_group_icon(group_name: str) -> str:
-    """Get icon for a group, with fallback (WPF More icon)."""
+    """Get icon for a group, with fallback."""
     meta = GROUP_META.get(group_name, {})
     return meta.get("icon", FontIcons.More)

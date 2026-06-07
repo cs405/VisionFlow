@@ -1,9 +1,9 @@
-"""GridSplitterBox — WPF H.Controls.GridSplitterBox 1:1 port.
+"""GridSplitterBox
 
 Collapsible side-panel container with:
   - Mode="Extend": panel resizes between min/max width (never hidden)
   - Drag handle on the trailing edge for user resize
-  - Pin toggle button at bottom (WPF FontIconToggleButton)
+  - Pin toggle button at bottom
   - Width-threshold signal at 90px (expand view ↔ icon bar)
 
 Wired as the left-panel container in MainWindow, replacing manual QSplitter
@@ -18,7 +18,7 @@ from gui.font_icons import FontIcons, FontIconToggleButton
 
 
 MENU_MAX_WIDTH = 300
-MENU_MIN_WIDTH = 50        # narrow mode compact width (WPF default: 50)
+MENU_MIN_WIDTH = 50        # narrow mode compact width
 WIDTH_THRESHOLD = 90       # switch between wide/narrow at 90px
 DEFAULT_WIDTH = 280
 
@@ -27,14 +27,7 @@ BACKGROUND = "#252526"
 
 
 class GridSplitterBox(QWidget):
-    """Left panel wrapper with WPF Mode=\"Extend\" expand/collapse behaviour.
-
-    WPF equivalent: <h:GridSplitterBox Mode=\"Extend\" IsExpanded=\"False\"
-                       ToggleVerticalAlignment=\"Bottom\">
-
-    The pin toggle button at the bottom matches WPF's FontIconToggleButton
-    with OpenGeometry (Pinned) / CloseGeometry (List) glyphs.
-
+    """
     Signals:
         width_changed(int): emitted when the panel width changes
         threshold_crossed(bool): True when entering wide mode (>90px), False for narrow
@@ -76,7 +69,7 @@ class GridSplitterBox(QWidget):
         self._host_layout.setSpacing(0)
         content_vl.addWidget(self._content_host, 1)
 
-        # Pin toggle button at bottom (WPF FontIconToggleButton)
+        # Pin toggle button at bottom
         # Expanded → Pin icon (pinned), Collapsed → GlobalNavButton (list/menu)
         self._toggle_btn = FontIconToggleButton(
             checked_icon=FontIcons.Pin,
@@ -97,7 +90,7 @@ class GridSplitterBox(QWidget):
 
         main_layout.addWidget(self._content_area, 1)
 
-        # Drag handle on right edge (matching WPF GridSplitter)
+        # Drag handle on right edge
         self._handle = QFrame()
         self._handle.setFrameShape(QFrame.VLine)
         self._handle.setStyleSheet(f"background: {BORDER_BRUSH}; border: none;")
@@ -174,7 +167,6 @@ class GridSplitterBox(QWidget):
     # ── Pin toggle button ────────────────────────────────────────────────────
 
     def _on_toggle_btn(self, checked: bool):
-        """WPF FontIconToggleButton click → toggle expand/collapse."""
         if checked and not self._is_expanded:
             self.expand()
         elif not checked and self._is_expanded:

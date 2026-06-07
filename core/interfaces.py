@@ -4,7 +4,6 @@ Defines abstract base classes for all key domain objects.
 Services depend on these interfaces, not concrete implementations.
 GUI widgets depend on interfaces + services, not on core model classes directly.
 
-Ported from WPF: IVisionNodeData, IVisionDiagramData, ISrcFilesNodeData, etc.
 """
 
 from __future__ import annotations

@@ -1,9 +1,4 @@
-"""Presenter template system — WPF DataTemplate + ContentPresenter 1:1 port.
-
-Ported from WPF pattern:
-  DataTemplate DataType="{x:Type SomeType}" → specific Presenter view
-  ContentPresenter Content="{Binding SomeObject}" → auto-resolves type → shows view
-
+"""Presenter template system
 Provides:
   - PresenterRegistry: type → QWidget factory mapping (like DataTemplate)
   - ContentPresenter: QWidget that auto-resolves content type and embeds Presenter
@@ -20,7 +15,7 @@ from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel
 # ═══════════════════════════════════════════════════════════════════════════
 
 class PresenterRegistry:
-    """Type-based view factory registry (WPF DataTemplate equivalent).
+    """Type-based view factory registry
 
     Maps Python types to QWidget factory functions. When a ContentPresenter
     receives a data object, it looks up its type here and creates the matching view.
@@ -80,7 +75,7 @@ presenter_registry = PresenterRegistry()
 # ═══════════════════════════════════════════════════════════════════════════
 
 class ContentPresenter(QWidget):
-    """WPF ContentPresenter equivalent — auto-resolves content type to view.
+    """ ContentPresenter equivalent — auto-resolves content type to view.
 
     Usage:
         presenter = ContentPresenter(parent)

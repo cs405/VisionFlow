@@ -1,4 +1,4 @@
-"""Node base class hierarchy - ported from H.VisionMaster.NodeData/Base/ (25+ C# files).
+"""Node base class hierarchy
 
 Defines the complete inheritance chain for all vision processing nodes.
 
@@ -17,7 +17,6 @@ Inheritance (top to bottom):
                 -> ConditionNodeData  (conditional branching)
                 -> WaitAllParallelNodeData  (parallel sync barrier)
 
-Python replaces C# generics <T> with duck typing - image type is numpy.ndarray.
 """
 
 from __future__ import annotations
@@ -39,7 +38,7 @@ if TYPE_CHECKING:
 
 
 # =============================================================================
-# Parameter group names - ported from VisionPropertyGroupNames.cs
+# Parameter group names
 # =============================================================================
 
 class PropertyGroupNames:
@@ -52,16 +51,11 @@ class PropertyGroupNames:
 
 
 # =============================================================================
-# Property descriptor - replaces C# [Display], [DefaultValue], [ReadOnly] attributes
+# Property descriptor
 # =============================================================================
 
 class Property:
     """Observable property descriptor with metadata.
-
-    Replaces the C# pattern:
-        [Display(Name="...", GroupName="...")]
-        [DefaultValue(...)]
-        public T PropertyName { get => _field; set { _field=value; RaisePropertyChanged(); } }
 
     Extended metadata for the property panel:
       - editor: str | None  -> hint for custom editor ("color", "roi", "file", "slider", "choices")
@@ -110,7 +104,7 @@ class Property:
 
 
 # =============================================================================
-# Port types - ported from H.Controls.Diagram (PortData, FlowablePortData)
+# Port types
 # =============================================================================
 
 class PortType(Enum):
@@ -129,7 +123,6 @@ class PortDock(Enum):
 class Port:
     """A connection port on a node.
 
-    Ported from C# FlowablePortData / OpenCVFlowablePortData.
     Nodes have 4 ports: Top(input), Bottom(output), Left(input), Right(output).
     """
 
@@ -175,7 +168,7 @@ class Port:
 
     def invoke(self, previors: "LinkData | None" = None,
                diagram: "WorkflowEngine | None" = None) -> "FlowableResult":
-        """Execute port-level logic (WPF FlowablePortData.TryInvokeAsync).
+        """Execute port-level logic
 
         Default: publishes PORT_STARTED → returns OK → publishes PORT_COMPLETED.
         Override in subclasses for custom port processing (validation, transform).
@@ -192,7 +185,6 @@ class Port:
 class LinkData:
     """A connection between two ports.
 
-    Ported from C# FlowableLinkData.
     """
 
     def __init__(self, from_node_id: str = "", from_port_id: str = "",
@@ -229,7 +221,7 @@ class LinkData:
         return link
 
     def invoke(self, diagram: "WorkflowEngine | None" = None) -> "FlowableResult":
-        """Execute link-level logic (WPF FlowableLinkData.TryInvokeAsync).
+        """Execute link-level logic.
 
         Default: publishes LINK_STARTED → returns OK → publishes LINK_COMPLETED.
         Override in subclasses for custom link processing (filter, transform).
@@ -247,9 +239,6 @@ class LinkData:
 
 class NodeBase(ABC):
     """Root base class for all diagram nodes.
-
-    Ported from: StyleNodeDataBase -> ResultImageSourceNodeDataBase -> ...
-    The C# inheritance chain is flattened here for Python.
 
     Provides: ports, styling, diagram data management, serialization.
     """
@@ -612,9 +601,8 @@ class NodeBase(ABC):
 # =============================================================================
 
 class VisionNodeDataBase(NodeBase):
-    """Adds flow-control delay parameters.
-
-    Ported from C# VisionNodeDataBase.cs
+    """
+    Adds flow-control delay parameters.
     """
 
     preview_milliseconds_delay = Property(1500, name="预览延迟", group=PropertyGroupNames.FLOW_PARAMETERS,
@@ -629,8 +617,6 @@ class VisionNodeDataBase(NodeBase):
 
 class ShowPropertyNodeDataBase(VisionNodeDataBase):
     """Provides a property presenter for the property panel.
-
-    Ported from C# ShowPropertyNodeDataBase.cs
     """
 
     def get_property_presenter(self) -> Any:
@@ -645,7 +631,6 @@ class ShowPropertyNodeDataBase(VisionNodeDataBase):
 class HelpNodeDataBase(ShowPropertyNodeDataBase):
     """Provides help presenter with documentation URL.
 
-    Ported from C# HelpNodeDataBase.cs + IHelpPresenter.
     """
 
     def create_help_presenter(self) -> dict:
@@ -654,7 +639,7 @@ class HelpNodeDataBase(ShowPropertyNodeDataBase):
         cls = type(self)
         doc = (cls.__doc__ or "").strip().split("\n")[0] if cls.__doc__ else ""
         return {
-            "url": f"https://github.com/HeBianGu/WPF-VisionMaster/wiki/{cls.__name__}",
+            "url": f"https://github.com/cs405/visionflow/{cls.__name__}",
             "name": self.name,
             "description": doc or f"{self.name} - {cls.__name__}",
             "source": inspect.getfile(cls),
@@ -668,7 +653,6 @@ class HelpNodeDataBase(ShowPropertyNodeDataBase):
 class DemoNodeDataBase(HelpNodeDataBase):
     """Adds demo/example parameters to show the parameter system pattern.
 
-    Ported from C# DemoNodeDataBase.cs
     """
 
     demo_base_parameter1 = Property("", name="示例：基本参数", group=PropertyGroupNames.BASE_PARAMETERS,
@@ -689,9 +673,6 @@ class DemoNodeDataBase(HelpNodeDataBase):
 
 class VisionNodeData(DemoNodeDataBase):
     """Core generic vision processing node.
-
-    Ported from C# VisionNodeData<T> where T : IDisposable.
-    In Python, T is numpy.ndarray (image data).
 
     This is the central class - most vision nodes extend this.
     Key responsibilities:
@@ -758,7 +739,6 @@ class VisionNodeData(DemoNodeDataBase):
     def invoke(self, previors: LinkData | None, diagram: "WorkflowEngine") -> FlowableResult:
         """Entry point called by the workflow engine.
 
-        Ported from C# VisionNodeData<T>.Invoke(IFlowableLinkData, IFlowableDiagramData).
         1. Find the source node (ISrcVisionNodeData)
         2. Find the from node (IVisionNodeData)
         3. Pass through original image from upstream
@@ -781,7 +761,6 @@ class VisionNodeData(DemoNodeDataBase):
     def update_invoke_current(self):
         """Single-step execution from the first from-node.
 
-        Ported from C# VisionNodeData<T>.UpdateInvokeCurrent().
         """
         if self.diagram_data is None:
             return
@@ -808,7 +787,6 @@ class VisionNodeData(DemoNodeDataBase):
     def _invoke_action(self, action: Callable[[], FlowableResult]) -> FlowableResult:
         """Wraps the actual invoke, managing Mat lifecycle.
 
-        Ported from C# VisionNodeData<T>.InvokeAction().
         1. Clear previous result presenter
         2. Execute the action
         3. Dispose old Mat, set new Mat
@@ -833,7 +811,7 @@ class VisionNodeData(DemoNodeDataBase):
         if self._result_presenter is None:
             self._result_presenter = self.create_result_presenter()
 
-        # WPF OnInvokedPart: write to history FIRST, then publish events.
+        # write to history FIRST, then publish events.
         # Callbacks registered via workflow.on_history_changed() (e.g. ResultPanel)
         # fire synchronously here and use Qt::QueuedConnection to marshal to the
         # main thread for thread-safe QTableWidget access.
@@ -880,7 +858,7 @@ class VisionNodeData(DemoNodeDataBase):
         """
         self._result_image_source = self._mat if self._mat is not None else None
 
-    # -- Flow control helpers (ported from C#) --
+    # -- Flow control helpers  --
 
     def ok(self, mat: np.ndarray | None, message: str = "运行成功",
            result_presenter: Any = None) -> FlowableResult:
@@ -947,8 +925,6 @@ class VisionNodeData(DemoNodeDataBase):
 
 class ROIBase:
     """Base class for ROI definitions.
-
-    Ported from C# ROIBase.cs / IROI.cs
     """
     def __init__(self, roi_type: str = ""):
         self.name = roi_type or self.__class__.__name__
@@ -1025,7 +1001,6 @@ class NoROI(ROIBase):
 class ROINodeData(VisionNodeData):
     """Adds ROI support to vision nodes.
 
-    Ported from C# ROINodeData<T>.
     Supports four ROI modes: NoROI (none), FromROI (upstream), DrawROI (interactive), InputROI (manual).
     Default is NoROI to prevent unintended ROI cascading.
     """
@@ -1069,7 +1044,7 @@ class ROINodeData(VisionNodeData):
     def invoke(self, previors: LinkData | None, diagram: "WorkflowEngine") -> FlowableResult:
         from_data = self._find_from_node(diagram, previors)
 
-        # Wire upstream ROI for FromROI mode (WPF: source_node = upstream)
+        # Wire upstream ROI for FromROI mode
         if isinstance(from_data, ROINodeData) and from_data is not self:
             self.from_roi.source_node = from_data
 
@@ -1167,8 +1142,6 @@ class ROINodeData(VisionNodeData):
 
 class SelectableResultImageNodeData(ROINodeData):
     """Allows selecting which upstream result image to process.
-
-    Ported from C# SelectableResultImageNodeData<T>.
     """
 
     def __init__(self):
@@ -1198,8 +1171,6 @@ class SelectableResultImageNodeData(ROINodeData):
 
 class OpenCVNodeDataBase(SelectableResultImageNodeData):
     """Base for OpenCV-based vision nodes. Mat is numpy.ndarray.
-
-    Ported from C# OpenCVNodeDataBase : SelectableResultImageNodeData<Mat>.
     """
 
     image_source_mode = Property(
@@ -1232,8 +1203,6 @@ class OpenCVNodeDataBase(SelectableResultImageNodeData):
 
 class SrcFilesVisionNodeData(ROINodeData):
     """Base for nodes that load images from files.
-
-    Ported from C# SrcFilesVisionNodeData<T>.
     Provides file list management, image properties (width/height/color type).
     """
 
@@ -1249,7 +1218,6 @@ class SrcFilesVisionNodeData(ROINodeData):
         super().__init__()
         self.use_start = True  # This node can be a flow start node
 
-    # WPF-aligned image extensions (Extension.File.cs ImageExtension constant)
     # jpg jpeg png gif pdf tga tif svg bmp dds eps webp
     _IMAGE_EXTENSIONS = (
         ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".tif",
@@ -1261,19 +1229,10 @@ class SrcFilesVisionNodeData(ROINodeData):
                             image_extensions: tuple = None) -> list[str]:
         """Collect all image files from a folder, optionally recursive.
 
-        WPF port: DirectoryEx.GetAllFiles() + IsImage() + GetAllImages().
-
-        WPF key behaviors:
-          1. RECURSIVE into subdirectories (GetAllFiles walks entire tree)
-          2. Skips hidden & system files (FileAttributes.Hidden | FileAttributes.System)
-          3. Returns absolute file paths
-          4. Catches UnauthorizedAccessException for inaccessible subdirs
-          5. Can be overridden by subclasses (WPF: protected virtual)
-
         Args:
             folder_path: root folder to scan
-            recursive: whether to scan subdirectories (WPF: always true)
-            image_extensions: override extensions tuple (WPF: ImageExtensions list)
+            recursive: whether to scan subdirectories
+            image_extensions: override extensions tuple
 
         Returns:
             Sorted list of absolute file paths matching image extensions.
@@ -1288,12 +1247,11 @@ class SrcFilesVisionNodeData(ROINodeData):
             try:
                 entries = os.listdir(directory)
             except (PermissionError, OSError):
-                return  # WPF: UnauthorizedAccessException catch
+                return
 
             for name in sorted(entries):
                 full_path = os.path.join(directory, name)
                 try:
-                    # WPF: skip hidden/system files
                     # On Windows: FILE_ATTRIBUTE_HIDDEN = 2, FILE_ATTRIBUTE_SYSTEM = 4
                     import stat
                     attrs = os.stat(full_path).st_file_attributes if os.name == 'nt' else 0
@@ -1304,7 +1262,7 @@ class SrcFilesVisionNodeData(ROINodeData):
 
                 if os.path.isdir(full_path):
                     if recursive:
-                        _scan(full_path)  # WPF: recurse into subdirectories
+                        _scan(full_path)
                 elif name.lower().endswith(image_extensions):
                     result.append(full_path)
 
@@ -1313,12 +1271,7 @@ class SrcFilesVisionNodeData(ROINodeData):
 
     def add_files_from_folder(self, folder_path: str, recursive: bool = True,
                               image_extensions: tuple = None):
-        """Add all image files from a folder (WPF AddFiles / GetAllImages).
-
-        WPF: AddImageDatasCommand → AddFiles() → IOFolderDialog →
-             selectedFolderPath.GetAllImages() → SrcFilePaths.AddRange()
-
-        Key WPF behaviors:
+        """Add all image files from a folder
           - Scans subdirectories by default (recursive=True)
           - Skips hidden & system files
           - Only sets SrcFilePath if it was previously empty
@@ -1327,7 +1280,6 @@ class SrcFilesVisionNodeData(ROINodeData):
         if not new_files:
             return
         self.src_file_paths.extend(new_files)
-        # WPF: if (SrcFilePaths.Count == 0) → only set if nothing was selected
         if not self.src_file_path:
             self.src_file_path = self.src_file_paths[0]
 
@@ -1355,8 +1307,6 @@ class SrcFilesVisionNodeData(ROINodeData):
 
     def move_next(self) -> bool:
         """Switch to the next file in the list. Returns True if cycled.
-
-        WPF: ISrcFilesNodeData.MoveNext() extension method.
           → index = SrcFilePaths.IndexOf(SrcFilePath)
           → index = index < Count - 1 ? index + 1 : 0
           → SrcFilePath = SrcFilePaths[index]
@@ -1395,7 +1345,6 @@ class SrcFilesVisionNodeData(ROINodeData):
     def is_valid_file_list(self) -> tuple[bool, str]:
         """Check if the file list is valid. Returns (is_valid, message).
 
-        WPF: SrcFilesVisionNodeData.IsValid(out string message)
         """
         if not self.src_file_paths:
             return False, "请选择数据源中的图片"
@@ -1404,7 +1353,7 @@ class SrcFilesVisionNodeData(ROINodeData):
         return self.src_file_path is not None, ""
 
     # ═══════════════════════════════════════════════════════════════════════
-    # TODO: WPF "添加文件/文件夹/删除/清空" commands port
+    # TODO:  "添加文件/文件夹/删除/清空" commands port
     #
     # WPF 在 SrcFilesVisionNodeData.cs 实现（MVVM Command 模式）：
     #
@@ -1506,7 +1455,6 @@ class SrcFilesVisionNodeData(ROINodeData):
 class Base64MatchingNodeData(VisionNodeData):
     """Base for template matching nodes that use Base64-encoded template images.
 
-    Ported from C# Base64MatchingNodeData<T>.
     """
 
     matching_count_result = Property(0, name="匹配数量", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)
@@ -1560,7 +1508,6 @@ class Base64MatchingNodeData(VisionNodeData):
 class ConditionNodeData(VisionNodeData):
     """Node that branches flow based on conditions evaluated on upstream results.
 
-    Ported from C# ConditionNodeData<T>.
     When executed, evaluates conditions and directs flow to the matching output port.
     """
 
@@ -1666,7 +1613,6 @@ class ConditionNodeData(VisionNodeData):
 class VisionPropertyCondition:
     """A single condition rule: property_name operator threshold_value -> output_node.
 
-    Ported from C# VisionPropertyConditionPrensenter.
     """
 
     SUPPORTED_OPERATORS = (">", "<", ">=", "<=", "==", "!=", "contains", "not contains")
@@ -1758,7 +1704,6 @@ class VisionPropertyCondition:
 class WaitAllParallelNodeData(VisionNodeData):
     """Waits for all parallel upstream nodes to complete before proceeding.
 
-    Ported from C# WaitAllParallelNodeData<T>.
     Acts as a synchronization barrier: counts invocations from parallel branches
     and only proceeds when all parallel predecessors have completed.
     """

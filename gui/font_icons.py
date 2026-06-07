@@ -1,8 +1,7 @@
-"""FontIcon system — 1:1 port of WPF FontIcons static class + FontIcon presenter controls.
+"""FontIcon system
 
-WPF uses Segoe Fluent Icons / MDL2 Assets font with Unicode codepoints for all UI icons.
 This module provides:
-  - FontIcons: constant class mapping all WPF icon names to Unicode codepoints
+  - FontIcons: constant class mapping all icon names to Unicode codepoints
   - FontIconButton: QPushButton rendered with icon font
   - FontIconToggleButton: checkable button with checked/unchecked glyphs
   - FontIconTextBlock: QLabel rendered with icon font
@@ -26,7 +25,7 @@ from gui.theme import theme_manager, connect_theme
 def _detect_icon_font() -> str:
     """Detect available Segoe icon font family on Windows."""
     candidates = [
-        "Segoe MDL2 Assets",      # WPF original — has ALL icon codepoints
+        "Segoe MDL2 Assets",
         "Segoe Fluent Icons",     # Win11 new — many glyphs differ or missing
         "Segoe UI Symbol",        # last resort fallback
     ]
@@ -53,16 +52,15 @@ def icon_font(size: int = 12) -> QFont:
     return font
 
 
-# ── WPF FontIcons 1:1 constant mapping ─────────────────────────────────────
+# ── FontIcons ─────────────────────────────────────
 
 class FontIcons:
-    """Static icon constants matching WPF H.Controls.FontIcons class.
+    """Static icon constants
 
-    Each constant maps a WPF icon name to its Unicode codepoint in Segoe Fluent Icons /
+    Each constant maps a icon name to its Unicode codepoint in Segoe Fluent Icons /
     Segoe MDL2 Assets font.  Codepoints are derived from Windows 11 Segoe Fluent Icons
-    character map (verified against typical WPF HeBianGu framework constants).
+    character map
 
-    Naming convention matches WPF exactly: PascalCase icon names.
     """
 
     # ── Navigation ──
@@ -118,7 +116,7 @@ class FontIcons:
     Camera = ""
     OpenAs = ""
 
-    # ── WPF node group icons (exact hex codepoints from WPF FontIcons.cs) ──
+    # ── node group icons  ──
     InPrivate = ""          # 滤波模块 BlurDataGroup
     Annotation = ""         # 图像分割提取 TakeoffDataGroup
     HomeGroup = ""          # 形态学模块 MorphologyDataGroup
@@ -156,7 +154,7 @@ class FontIcons:
 
     # ── Mouse / Guide ──
     Mouse = ""                #  — guide/wizard
-    Smartcard = ""            #  — WPF ShowGuideCommand icon (alias)
+    Smartcard = ""            #  — ShowGuideCommand icon (alias)
 
     # ── Power / System ──
     PowerButton = ""
@@ -205,7 +203,7 @@ class FontIcons:
 # ── FontIcon presenter controls ─────────────────────────────────────────────
 
 class FontIconTextBlock(QLabel):
-    """WPF FontIconTextBlock equivalent — QLabel rendered in icon font."""
+    """QLabel rendered in icon font."""
 
     def __init__(self, text: str = "", font_size: int = 12,
                  color: str = "", parent=None):
@@ -240,10 +238,9 @@ class FontIconTextBlock(QLabel):
 
 
 class FontIconButton(QPushButton):
-    """WPF FontIconButton equivalent — button with icon font glyph.
+    """button with icon font glyph.
 
-    Supports: icon-only mode, icon+text mode, tooltip, and WPF Command style.
-    Corresponds to WPF `<FontIconButton Content="{x:Static FontIcons.xxx}" />`.
+    Supports: icon-only mode, icon+text mode, tooltip, and Command style.
     """
 
     def __init__(self, icon: str = "", text: str = "", tooltip: str = "",
@@ -282,7 +279,6 @@ class FontIconButton(QPushButton):
         self._apply_style()
 
     def _apply_style(self):
-        """WPF FontIconButtonKeys.Default + ButtonKeys.Default styles."""
         text_primary = theme_manager.color('text_primary').name()
         hover_bg = theme_manager.color('bg_surface_hover').name()
         accent = theme_manager.color('accent').name()
@@ -308,16 +304,12 @@ class FontIconButton(QPushButton):
             }}
         """)
 
-    # Support WPF-like style key pattern
     Command = "Command"   # FontIconButtonKeys.Command
     Default = "Default"   # FontIconButtonKeys.Default
 
 
 class FontIconToggleButton(QPushButton):
-    """WPF FontIconToggleButton equivalent — checkable button with dual glyphs.
-
-    Matches WPF `<FontIconToggleButton CheckedGlyph="..." UncheckedGlyph="..." />`.
-
+    """
     Args:
         checked_icon: icon shown when checked
         unchecked_icon: icon shown when unchecked
@@ -362,7 +354,6 @@ class FontIconToggleButton(QPushButton):
         self._apply_style()
 
     def _apply_style(self):
-        """WPF FontIconToggleButtonKeys.Switch style."""
         text_secondary = theme_manager.color('text_secondary').name()
         hover_bg = theme_manager.color('bg_surface_hover').name()
         text_primary = theme_manager.color('text_primary').name()
@@ -386,7 +377,6 @@ class FontIconToggleButton(QPushButton):
             }}
         """)
 
-    # WPF style key constants
     Switch = "Switch"  # FontIconToggleButtonKeys.Switch
     Command = "Command"
 
@@ -394,7 +384,7 @@ class FontIconToggleButton(QPushButton):
 # ── Compound widget: icon + text in horizontal layout ──────────────────────
 
 class FontIconTextBlockWithText(QWidget):
-    """Combined FontIcon + text label, matching WPF patterns like status bar items.
+    """Combined FontIcon + text label
 
     Usage:
         item = FontIconTextBlockWithText(FontIcons.Completed, "执行成功", color="#4caf50")

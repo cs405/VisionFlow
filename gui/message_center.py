@@ -1,11 +1,4 @@
 """Message center - notice / snack / dialog message patterns.
-
-Ported from:
-  - H.Modules.Messages.Notice
-  - H.Modules.Messages.Snack
-  - H.Modules.Messages.Dialog
-  - H.Services.Message
-
 Provides three message display modes:
   - Notice: transient popup in the corner (auto-dismiss)
   - Snack: inline bar at the bottom of a panel

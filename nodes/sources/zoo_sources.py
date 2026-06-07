@@ -1,6 +1,4 @@
 """Zoo image sources - system-provided test image datasets.
-
-Ported from H.NodeDatas.Zoo/NodeDatas/ (10 datasets).
 Each subclass filters to a specific set of test images.
 """
 

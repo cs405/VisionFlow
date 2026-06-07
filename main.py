@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""VisionFlow — Python port of WPF-VisionMaster.
+"""VisionFlow
 
 A visual workflow editor for computer vision, inspired by VisionMaster.
 Uses PyQt5 for the GUI and OpenCV for image processing.
@@ -62,7 +62,7 @@ def _discover_nodes(ctx):
     import inspect
     from core.node_base import NodeBase
 
-    # Standard node packages (matching WPF group structure)
+    # Standard node packages
     packages = [
         ("nodes.sources",          "图像数据源"),
         ("nodes.preprocessings",   "图像预处理模块"),

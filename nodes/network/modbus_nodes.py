@@ -1,6 +1,6 @@
 """Modbus communication nodes - full suite with state management, multiple register types.
 
-Ported from H.VisionMaster.Network (ModbusNodeDataBase, ReadableModbusNodeData,
+Includes connection handling, error tracking, and timestamping of last successful communication.
 WriteableModbusNodeData, IntReadableModbusNodeData, ShortWriteableModbusNodeData).
 """
 
@@ -16,7 +16,7 @@ from core.workflow import WorkflowEngine
 
 
 class ModbusState(Enum):
-    """Modbus connection state - mirrors WPF ModbusState enum."""
+    """Modbus connection state"""
     STOPPED = "Stopped"
     WAITING = "Waiting"
     CONNECTED = "Connected"
@@ -29,7 +29,7 @@ class ModbusState(Enum):
 class _ModbusBase(OpenCVNodeDataBase):
     """Enhanced base for Modbus nodes with connection management.
 
-    Mirrors C# ModbusNodeDataBase: connection lifecycle, state tracking,
+    connection lifecycle, state tracking,
     parameterised IP/port/slave/timeout/polling interval.
     """
     __group__ = "网络通讯模块"
@@ -55,7 +55,7 @@ class _ModbusBase(OpenCVNodeDataBase):
         self._client = None
         self._master = None
 
-    # -- Connection management (mirrors C# ModbusNodeDataBase.Connect) --
+    # -- Connection management --
 
     def _connect(self) -> bool:
         """Establish Modbus TCP connection with retry and timeout."""
@@ -125,7 +125,6 @@ class _ModbusBase(OpenCVNodeDataBase):
 class ModbusReadNode(_ModbusBase):
     """Read holding registers (3x/4x) via Modbus TCP.
 
-    Mirrors C# IntReadableModbusNodeData : ReadableModbusNodeData<int>.
     """
     start_address = Property(0, name="起始地址", group=PropertyGroupNames.RUN_PARAMETERS,
                               description="Modbus 寄存器起始地址")
@@ -266,7 +265,6 @@ class ModbusInputRegisterNode(_ModbusBase):
 class ModbusWriteNode(_ModbusBase):
     """Write to a single holding register via Modbus TCP.
 
-    Mirrors C# ShortWriteableModbusNodeData : WriteableModbusNodeData<ushort>.
     """
     start_address = Property(0, name="寄存器地址", group=PropertyGroupNames.RUN_PARAMETERS,
                               description="写入寄存器的起始地址")

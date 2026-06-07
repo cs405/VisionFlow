@@ -1,7 +1,6 @@
-"""Edge (link) graphics item — WPF Link + ILinkDrawer 1:1 port.
+"""Edge (link) graphics item.
 
 Colors are resolved from theme_manager at paint time — no hardcoded values.
-WPF equivalent: Style DataTriggers bind to {DynamicResource BrushKeys.Xxx}.
 """
 
 import math
@@ -15,7 +14,7 @@ from core.node_base import LinkData, PortDock
 from gui.node_editor.link_drawer import ILinkDrawer, BrokenLinkDrawer
 from gui.theme import theme_manager
 
-# ── Dash patterns (WPF StrokeDashArray — structural, not color) ──
+# ── Dash patterns (StrokeDashArray — structural, not color) ──
 DASH_DYNAMIC = [5, 2]
 DASH_RUNNING = [4, 4]
 DASH_NONFLOW = [5, 5]
@@ -38,9 +37,8 @@ class EdgeState:
 
 
 class EdgeItem(QGraphicsObject):
-    """Link between two SocketItems — WPF Link equivalent.
+    """Link between two SocketItems
 
-    WPF: Stroke="{Binding Stroke}" with DataTrigger fallbacks to BrushKeys.
     Qt:  _active_pen() → theme_manager.color("edge_xxx") at paint time.
     """
 
@@ -182,23 +180,21 @@ class EdgeItem(QGraphicsObject):
         except Exception:
             return self._path
 
-    # ── Pen — resolved from theme at paint time (WPF DynamicResource) ────
+    # ── Pen — resolved from theme at paint time ────
 
     def _active_pen(self) -> QPen:
         """Build QPen — colors resolved from theme_manager at call time.
 
-        WPF: {Binding Stroke} from data, with DataTrigger fallbacks.
         Each call re-resolves colors so theme changes take effect on next paint.
         """
 
-        # WPF: {Binding Stroke} from link data
         base_color = _edge_color("edge")
         if self.link_data is not None and hasattr(self.link_data, 'stroke_color'):
             sc = self.link_data.stroke_color
             if sc:
                 base_color = QColor(sc)
 
-        # State overrides (WPF DataTrigger priority order)
+        # State overrides
         if self._state == EdgeState.RUNNING:
             pen = QPen(_edge_color("edge_running"), 2.0, cap=Qt.RoundCap, join=Qt.RoundJoin)
             pen.setDashPattern(DASH_RUNNING)

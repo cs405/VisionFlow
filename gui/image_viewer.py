@@ -1,4 +1,4 @@
-"""Zoomable image viewer - ported from H.Controls.ZoomBox + ZoomBox.Extension.
+"""Zoomable image viewer
 
 Provides: mouse wheel zoom, middle/right drag pan, fit-to-window, pixel info,
 overlay layers (ROI boxes, detection boxes, text labels), structured overlay model,
@@ -140,11 +140,11 @@ class ImageViewer(QGraphicsView):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setFrameShape(QGraphicsView.NoFrame)
 
-        # Background — WPF Tile25 checkered pattern for transparent areas
+        # Background
         self._refresh_tile_brush()
 
     def _create_tile_brush(self, color1: QColor, color2: QColor, size: int) -> QBrush:
-        """Create a checkerboard tile brush (WPF Tile25 style)."""
+        """Create a checkerboard tile brush"""
         from PyQt5.QtGui import QPixmap
         from PyQt5.QtCore import QSize
         pixmap = QPixmap(size * 2, size * 2)
@@ -915,7 +915,7 @@ class ImageViewerPanel(QWidget):
         self._file_info_strip.setText(text)
 
     def set_image_info(self, file_path: str | None, pixel_w: int = 0, pixel_h: int = 0):
-        """Set bottom info strip with full file metadata (WPF image source info bar).
+        """Set bottom info strip with full file metadata
 
         Format: filename.ext | 1920×1080 | 1.2 MB | 2024-01-15 14:30:00
         """

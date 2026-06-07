@@ -1,7 +1,5 @@
 """Editor widget — QGraphicsView + toolbar + mini-map + keyboard shortcuts.
 
-Ported from H.Controls.Diagram.Presenter (DiagramPresenter, EditorWidget).
-
 Features:
   - Zoom/pan with Ctrl+scroll and middle-mouse drag
   - Undo/Redo (Ctrl+Z / Ctrl+Y) via CommandStack
@@ -172,7 +170,7 @@ class DiagramEditorView(QGraphicsView):
         super().mouseReleaseEvent(event)
 
     def mouseDoubleClickEvent(self, event: QMouseEvent):
-        """Double-click: node → open panel; empty area → fit (WPF Zoombox)."""
+        """Double-click: node → open panel."""
         if event.button() == Qt.LeftButton:
             item = self.itemAt(event.pos())
             if item is not None:
@@ -253,7 +251,7 @@ class DiagramEditorView(QGraphicsView):
 class DiagramEditorWidget(QWidget):
     """Full editor: toolbar + scene/view + minimap.
 
-    Toolbar buttons match WPF Diagram Presenter toolbar:
+    Toolbar buttons:
       ▶ Run  ■ Stop  ⚡RunStep | ↩Undo ↪Redo | 📋Copy 📌Paste | Fit 1:1 | Zoom
     """
 
@@ -350,11 +348,11 @@ class DiagramEditorWidget(QWidget):
         pass
 
     def _on_socket_drag_move(self, socket: SocketItem, scene_pos: QPointF):
-        # Scene handles move via event() override — WPF Diagram.MouseMove pattern
+        # Scene handles move via event() override
         pass
 
     def _on_socket_drag_end(self, socket: SocketItem, scene_pos: QPointF):
-        # Scene handles release via event() override — WPF Diagram.MouseLeftButtonUp pattern
+        # Scene handles release via event() override
         pass
 
     def _on_node_dropped(self, type_name: str, pos: QPointF):

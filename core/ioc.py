@@ -1,4 +1,4 @@
-"""Minimal IoC container - ported from Microsoft.Extensions.DependencyInjection + H.Iocable.
+"""Minimal IoC container
 
 Supports singleton and transient registrations with automatic constructor injection.
 """

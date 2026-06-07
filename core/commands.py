@@ -1,4 +1,4 @@
-"""Undo/redo command system — ported from C# ICommand / RevertibleStack.
+"""Undo/redo command system
 
 Encapsulates diagram mutations as reversible commands.
 Supports: add/remove/move node, add/remove link, batch commands.

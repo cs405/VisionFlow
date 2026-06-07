@@ -1,4 +1,4 @@
-"""Data packet and flow result types - ported from H.Controls.Diagram.Presenter.Flowables.
+"""Data packet and flow result types
 
 Defines the data structures passed between nodes during workflow execution.
 """
@@ -10,7 +10,7 @@ import numpy as np
 
 
 class FlowableResultState(Enum):
-    """Result state for flow control - mirrors C# FlowableResultState."""
+    """Result state for flow control"""
     OK = "OK"
     ERROR = "Error"
     BREAK = "Break"
@@ -26,9 +26,8 @@ class FlowableInvokeMode(Enum):
 
 @dataclass
 class FlowableResult:
-    """Result from a node invocation. Carries data + state + message.
-
-    Ported from C# FlowableResult<T>.
+    """
+    Result from a node invocation. Carries data + state + message.
     """
     value: Any = None
     message: str = ""
@@ -64,9 +63,9 @@ class FlowableResult:
 
 @dataclass
 class DataPacket:
-    """Data flowing between nodes. Contains image data + metadata.
-
-    In C#, nodes pass Mat<T> objects. In Python, we use numpy.ndarray for images
+    """
+    Data flowing between nodes. Contains image data + metadata.
+    In Python, we use numpy.ndarray for images
     and DataPacket for richer data exchange (metadata, multiple outputs, etc.).
     """
     image: np.ndarray | None = None
@@ -89,9 +88,8 @@ class DataPacket:
 
 @dataclass
 class VisionResultImage:
-    """Represents a named result image from a vision node.
-
-    Ported from C# VisionResultImage<T>.
+    """
+    Represents a named result image from a vision node.
     """
     name: str
     image: np.ndarray | None = None

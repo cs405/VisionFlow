@@ -1,17 +1,4 @@
 """Socket (port) graphics item — typed connection points on nodes.
-
-Ported from H.Controls.Diagram (PortData, SocketItem).
-
-WPF alignment: SocketItem only handles mousePressEvent to signal drag start.
-All subsequent drag events (move/release) are handled at DiagramScene level
-via QGraphicsScene.event() override — matching WPF's Diagram.MouseMove +
-Diagram.MouseLeftButtonUp pattern on the parent Diagram, not the Port.
-
-Visual port types:
-  - image (default): white circle — carries numpy image data
-  - control: yellow/diamond — flow control signals
-  - text: cyan/circle — string data
-  - any: gray/dashed — generic passthrough
 """
 
 from enum import Enum
@@ -48,9 +35,8 @@ class PortDataType(Enum):
 class SocketItem(QGraphicsObject):
     """Visual port on a node. Emits signal on press; Scene handles the rest.
 
-    WPF equivalent: Port visual child + PortLinkBehavior.
     Qt note: mousePressEvent only. Move/Release are intercepted by
-    DiagramScene.event() override — WPF Diagram.MouseMove/MouseLeftButtonUp.
+    DiagramScene.event()
     """
 
     # Emitted on mouse press — Scene connects to start_edge_drag
@@ -102,7 +88,7 @@ class SocketItem(QGraphicsObject):
         self.update()
 
     def set_highlight(self, on: bool):
-        """Highlight socket during Port-mode execution (WPF Port DataTrigger)."""
+        """Highlight socket during Port-mode execution"""
         self._hovered = on
         self._update_style()
 
@@ -163,7 +149,7 @@ class SocketItem(QGraphicsObject):
         self._update_style()
         super().hoverLeaveEvent(event)
 
-    # ── Mouse press → signal scene (WPF PortLinkBehavior Init) ─────────────
+    # ── Mouse press → signal scene ─────────────
 
     def mousePressEvent(self, event: QGraphicsSceneMouseEvent):
         """Only output ports start connections. Scene handles move/release."""

@@ -1,13 +1,12 @@
-"""Property panel — WPF TabFormPresenter + Form port.
-
+"""Property panel
 Tabbed property editor: each Property group (运行参数, 结果参数, etc.)
 becomes a separate tab. Custom editors via EditorRegistry.
 
 Decoupled from node rendering — nodes expose properties via Property
-descriptors and get_property_presenter() (WPF IDiagramShowPropertyView).
+descriptors and get_property_presenter()
 
 Features:
-  - Tab-per-group layout (WPF TabFormPresenter)
+  - Tab-per-group layout
   - Editor registry: editor hint -> custom editor widget
   - Extended metadata: choices, range bounds, validator, step/decimals
   - Inline HSV triplet editor for color range properties
@@ -343,7 +342,7 @@ def _create_image_selector_editor(parent, prop_name, prop_desc, current_value):
 # ── Property Panel ────────────────────────────────────────────────────────
 
 class PropertyPanel(QWidget):
-    """WPF TabFormPresenter port: tabbed property editor for NodeBase objects.
+    """TabFormPresenter port: tabbed property editor for NodeBase objects.
 
     Each Property group (运行参数, 结果参数, etc.) becomes a separate tab.
     Custom editors resolved via EditorRegistry.
@@ -417,7 +416,7 @@ class PropertyPanel(QWidget):
         self._refresh_timer.start()
 
     def _do_refresh(self):
-        """Rebuild tabbed property form — WPF TabFormPresenter port."""
+        """Rebuild tabbed property"""
         self._tabs.clear()
         for w in list(self._property_widgets.values()):
             w.deleteLater()
@@ -961,7 +960,7 @@ class PropertyPanel(QWidget):
             self.property_changed.emit(prop_name, old_value, current_value)
 
     def flash_highlight(self):
-        """Briefly flash the first tab to draw attention (WPF ShowViewCommand feedback)."""
+        """Briefly flash the first tab to draw attention"""
         from PyQt5.QtCore import QTimer
         if self._tabs.count() == 0:
             return
@@ -990,11 +989,11 @@ class PropertyPanel(QWidget):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# NodePropertyDialog — WPF IocMessage.ShowDialog + TabFormPresenter
+# NodePropertyDialog
 # ═══════════════════════════════════════════════════════════════════════════
 
 def open_node_dialog(node, parent=None):
-    """Open a tabbed property dialog for a node (WPF ShowTabEditCommand).
+    """Open a tabbed property dialog for a node
 
     Decoupled: the node's get_property_presenter() provides the object
     whose Property descriptors are rendered. Different node types can

@@ -24,7 +24,7 @@ class WorkflowRunner:
         runner = WorkflowRunner()
         runner.bind(workflow)
         runner.start_once()        # single execution
-        runner.start_run_all()     # iterate all source files (WPF "运行全部")
+        runner.start_run_all()     # iterate all source files ("运行全部")
         runner.start_continuous()  # loop until stopped
         runner.stop()              # request stop
     """
@@ -63,20 +63,12 @@ class WorkflowRunner:
         self._thread.start()
 
     def start_run_all(self, file_paths: list[str], auto_switch: bool = True, interval: float = 1.0):
-        """Execute workflow once per file — WPF "运行全部" (VisionDiagramDataBase.Start()).
-
-        Ported from WPF:
-          VisionDiagramDataBase.Start() → UseAllImage loop
-          RunDiagramDataPresenter.StartAllCommand → manual file iteration
-
-        Iterates through all source file paths, running the full workflow for each.
-        Publishes FILE_ITERATION_NEXT event before each iteration so the UI can
-        update the image display with the current file.
+        """Execute workflow once per file — "运行全部" (VisionDiagramDataBase.Start()).
 
         Args:
             file_paths: list of source image file paths to iterate
             auto_switch: whether to update the source node's current file
-            interval: delay (seconds) between iterations, WPF uses 1.0s
+            interval: delay (seconds) between iterations
         """
         if not self._workflow or self.is_running:
             return
@@ -126,17 +118,14 @@ class WorkflowRunner:
                                  message=f"流程异常: {traceback.format_exc()}")
 
     def _run_all(self, file_paths: list[str], auto_switch: bool, interval: float):
-        """WPF "运行全部" loop — iterate through all source files.
+        """"运行全部" loop — iterate through all source files.
 
-        Ported from WPF VisionDiagramDataBase.Start() (UseAllImage branch) +
-        RunDiagramDataPresenter.StartAllCommand.
-
-        Key WPF behaviors preserved:
+        Key behaviors preserved:
           1. Check stop state before each iteration (CANCELLING → break)
           2. Check UseAllImage flag each iteration (can exit early mid-loop)
           3. Update display before each run (ResultImageSource = item.ToImageSource())
           4. If UseAutoSwitch → update SrcFilePath on source node
-          5. Delay between iterations (WPF: Task.Delay(1000))
+          5. Delay between iterations
           6. Collect results per iteration
         """
         from core.node_base import SrcFilesVisionNodeData
@@ -155,8 +144,6 @@ class WorkflowRunner:
             if not start_node.use_all_image:
                 break
 
-            # WPF: ResultImageSource = item.ToImageSource()  — ALWAYS
-            # WPF: if (UseAutoSwitch) SrcFilePath = item  — only when ON
             if auto_switch:
                 start_node.src_file_path = file_path
 
@@ -176,7 +163,7 @@ class WorkflowRunner:
                 event_system.publish(EventType.MESSAGE_ERROR, sender=self,
                                      message=f"文件 [{i+1}/{total}] 执行异常: {traceback.format_exc()}")
 
-            # WPF: await Task.Delay(1000) — 1 second between iterations
+            # await Task.Delay(1000) — 1 second between iterations
             if self._stop_event.wait(interval):
                 break
 

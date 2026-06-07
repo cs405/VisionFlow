@@ -1,4 +1,4 @@
-"""Theme system — WPF H.Themes + ThemeOptions 1:1 port.
+"""Theme system
 
 Data-driven theme engine with:
   - 5 built-in themes (Dark, Light, Default, Technology Blue, Purple)
@@ -7,7 +7,7 @@ Data-driven theme engine with:
   - Backward compatible: colors property, get_stylesheet(), to_palette()
   - Extensible: add themes by adding entries to theme_data.py
 
-WPF alignment:
+alignment:
   - ThemeOptions.Instance.ColorResource ↔ ThemeManager.current_theme_id
   - ThemeOptions.RefreshTheme()       ↔ ThemeManager._apply()
   - ColorKeys + BrushKeys             ↔ COLOR_KEYS + resolve_colors()
@@ -31,7 +31,7 @@ from gui.theme_data import (
 
 # Config path — saved next to the app or in user home
 def _config_path() -> str:
-    """Get theme config file path (WPF AppPaths.UserSetting equivalent)."""
+    """Get theme config file path"""
     candidates = [
         Path(__file__).parent.parent / "theme_config.json",   # project root
         Path.home() / ".visionflow_theme.json",               # user home
@@ -120,7 +120,7 @@ _LEGACY_TO_KEY = {
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _build_palette(colors) -> QPalette:
-    """Build QPalette from resolved colors (WPF to_palette equivalent)."""
+    """Build QPalette from resolved colors """
     p = QPalette()
     p.setColor(QPalette.Window, QColor(colors.surface))
     p.setColor(QPalette.WindowText, QColor(colors.text_primary))
@@ -140,7 +140,7 @@ def _build_palette(colors) -> QPalette:
 
 
 def _build_stylesheet(colors) -> str:
-    """Comprehensive QSS covering all widget classes — WPF merged ResourceDictionary.
+    """Comprehensive QSS covering all widget classes
 
     Applied via QApplication.setStyleSheet() for maximum coverage.
     Uses ID selectors (e.g. QFrame#panel_bg) for panel overrides.
@@ -226,11 +226,11 @@ def _build_stylesheet(colors) -> str:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# ThemeManager — WPF ThemeOptions + ThemeService
+# ThemeManager
 # ═══════════════════════════════════════════════════════════════════════════
 
 class ThemeManager(QObject):
-    """Central theme service — WPF ThemeOptions + ILoadThemeOptionsService.
+    """Central theme service — ThemeOptions + ILoadThemeOptionsService.
 
     Manages the active theme, provides color access, and persists choice.
 
@@ -269,7 +269,7 @@ class ThemeManager(QObject):
     # ── Public API ──────────────────────────────────────────────────────
 
     def color(self, key: str) -> QColor:
-        """Unified color accessor — WPF {DynamicResource BrushKeys.Xxx}.
+        """Unified color accessor — {DynamicResource BrushKeys.Xxx}.
 
         All GUI code should use this instead of hardcoding QColor("#...").
         Returns black if key is unknown (safe fallback).
@@ -280,7 +280,7 @@ class ThemeManager(QObject):
         return QColor(hex_val)
 
     def set_theme(self, theme_id: str):
-        """Switch to a different theme — WPF ThemeOptions.ColorResource setter."""
+        """Switch to a different theme — ThemeOptions.ColorResource setter."""
         if theme_id == self._theme_id:
             return
         if theme_id not in THEMES:
@@ -290,7 +290,7 @@ class ThemeManager(QObject):
         self._save()
 
     def toggle_dark(self):
-        """Toggle between dark/light — WPF ThemeOptions.SwitchDark()."""
+        """Toggle between dark/light — ThemeOptions.SwitchDark()."""
         current = THEMES.get(self._theme_id)
         if current is None:
             self.set_theme("dark")
@@ -325,7 +325,7 @@ class ThemeManager(QObject):
 
     @property
     def available_themes(self) -> list[ThemeDef]:
-        """All registered themes in display order — WPF ThemeOptions.ColorResources."""
+        """All registered themes in display order — ThemeOptions.ColorResources."""
         return sorted(THEMES.values(), key=lambda t: t.order)
 
     def get_stylesheet(self) -> str:
@@ -335,7 +335,7 @@ class ThemeManager(QObject):
     # ── Internal ────────────────────────────────────────────────────────
 
     def _apply(self):
-        """Resolve colors for the current theme and notify — WPF RefreshTheme()."""
+        """Resolve colors for the current theme and notify — RefreshTheme()."""
         tdef = THEMES.get(self._theme_id)
         if tdef is None:
             tdef = THEMES["dark"]
@@ -345,7 +345,7 @@ class ThemeManager(QObject):
         self.theme_changed.emit(self._theme_id)
 
     def _save(self):
-        """Persist theme choice to JSON — WPF ThemeOptions.Save()."""
+        """Persist theme choice to JSON — PF ThemeOptions.Save()."""
         try:
             data = {"theme": self._theme_id}
             with open(_config_path(), "w", encoding="utf-8") as f:
@@ -354,7 +354,7 @@ class ThemeManager(QObject):
             pass   # non-critical — don't crash if config can't be written
 
     def _load(self) -> str | None:
-        """Load persisted theme choice — WPF ThemeOptions.Load()."""
+        """Load persisted theme choice — ThemeOptions.Load()."""
         for path in [
             Path(__file__).parent.parent / "theme_config.json",
             Path.home() / ".visionflow_theme.json",
@@ -370,12 +370,12 @@ class ThemeManager(QObject):
         return None
 
 
-# Global singleton — WPF ThemeOptions.Instance
+# Global singleton — ThemeOptions.Instance
 theme_manager = ThemeManager()
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Theme-aware helper — WPF DynamicResource pattern for QWidget panels
+# Theme-aware helper — DynamicResource pattern for QWidget panels
 # ═══════════════════════════════════════════════════════════════════════════
 
 def connect_theme(refresh_fn):
@@ -384,14 +384,14 @@ def connect_theme(refresh_fn):
     Usage in any panel __init__:
         connect_theme(self._refresh_qss)
 
-    WPF equivalent: {DynamicResource BrushKeys.Xxx} auto-refresh.
+    equivalent: {DynamicResource BrushKeys.Xxx} auto-refresh.
     """
     refresh_fn()
     theme_manager.theme_changed.connect(lambda _: refresh_fn())
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Theme Picker Dialog — WPF ColorThemeViewPresenter
+# Theme Picker Dialog
 # ═══════════════════════════════════════════════════════════════════════════
 
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
@@ -400,11 +400,11 @@ from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
 from PyQt5.QtCore import Qt as QtCore_Qt
 
 class ThemePickerDialog(QDialog):
-    """Color theme picker — WPF ColorThemeViewPresenter 1:1 port.
+    """Color theme picker
 
     Layout: GroupBox groups with WrapPanel-style card grid.
     Each card = 250x150 QFrame rendered in the theme's OWN colors.
-    Click a card → immediate preview (WPF SelectionChanged → RefreshThemeCommand).
+    Click a card → immediate preview (SelectionChanged → RefreshThemeCommand).
     OK = keep, Cancel = revert to original.
     """
 
@@ -431,7 +431,7 @@ class ThemePickerDialog(QDialog):
         container_layout = QVBoxLayout(container)
         container_layout.setSpacing(14)
 
-        # Group themes by GroupName (WPF CollectionViewSource GroupDescriptions)
+        # Group themes by GroupName (CollectionViewSource GroupDescriptions)
         groups: dict[str, list] = {}
         for t in theme_manager.available_themes:
             groups.setdefault(t.group, []).append(t)
@@ -472,18 +472,10 @@ class ThemePickerDialog(QDialog):
         # Highlight the currently active theme card
         self._update_card_highlights()
 
-    # ── Card factory (WPF ItemTemplate 250×150 Border) ──────────────────
+    # ── Card factory (ItemTemplate 250×150 Border) ──────────────────
 
     def _make_card(self, tdef) -> QFrame:
         """Build a 250x150 preview card rendered in the theme's own colors.
-
-        WPF XAML:
-          Border 250x150, Background={DynamicResource ColorKeys.Background}
-            UniformGrid (1 col):
-              TextBlock 【Prompt】 (ForegroundTitle)
-              TextBlock Name    (Foreground)
-              TextBlock Desc    (ForegroundAssist, wrap)
-              UniformGrid (1 row): Button "默认按钮" (CaptionBackground/CaptionForeground)
         """
         from gui.theme_data import resolve_colors
         c = resolve_colors(tdef)  # full resolved color map for this theme
@@ -509,7 +501,7 @@ class ThemePickerDialog(QDialog):
         inner.setContentsMargins(10, 10, 10, 10)
         inner.setSpacing(4)
 
-        # Row 1: 【Prompt】 (WPF ForegroundTitle)
+        # Row 1: 【Prompt】 (ForegroundTitle)
         prompt = tdef.prompt or tdef.name
         p_lbl = QLabel(f"【{prompt}】")
         p_lbl.setAlignment(QtCore_Qt.AlignCenter)
@@ -517,14 +509,14 @@ class ThemePickerDialog(QDialog):
                             f"font-weight: bold; font-size: 12px; border: none; background: transparent;")
         inner.addWidget(p_lbl)
 
-        # Row 2: Name (WPF Foreground)
+        # Row 2: Name (Foreground)
         n_lbl = QLabel(tdef.name)
         n_lbl.setAlignment(QtCore_Qt.AlignCenter)
         n_lbl.setStyleSheet(f"color: {c.get('text_primary', '#ccc')}; font-size: 11px; "
                             f"border: none; background: transparent;")
         inner.addWidget(n_lbl)
 
-        # Row 3: Description (WPF ForegroundAssist, wrap + ellipsis)
+        # Row 3: Description (ForegroundAssist, wrap + ellipsis)
         desc = tdef.description or f"{'深色' if tdef.is_dark else '浅色'}主题"
         d_lbl = QLabel(desc)
         d_lbl.setAlignment(QtCore_Qt.AlignCenter)
@@ -535,7 +527,7 @@ class ThemePickerDialog(QDialog):
 
         inner.addStretch()
 
-        # Row 4: "默认按钮" (WPF CaptionBackground / CaptionForeground)
+        # Row 4: "默认按钮" (CaptionBackground / CaptionForeground)
         btn = QPushButton("默认按钮")
         btn.setEnabled(False)   # display-only, not interactive
         btn.setStyleSheet(f"""
@@ -550,10 +542,10 @@ class ThemePickerDialog(QDialog):
 
         return card
 
-    # ── Selection (WPF SelectionChanged → RefreshThemeCommand) ──────────
+    # ── Selection (SelectionChanged → RefreshThemeCommand) ──────────
 
     def _select(self, theme_id: str):
-        """Immediate apply on click — WPF TwoWay SelectedItem binding."""
+        """Immediate apply on click — TwoWay SelectedItem binding."""
         theme_manager.set_theme(theme_id)
         self._selected_id = theme_id
         self._update_card_highlights()

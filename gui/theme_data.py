@@ -1,14 +1,14 @@
-"""Color theme data — WPF ColorKeys + Theme definitions 1:1 port.
+"""Color theme data
 
 Pure data layer: zero dependencies on Qt or other GUI modules.
 Defines WHAT colors exist and WHAT values each theme sets them to.
 ThemeManager in theme.py loads this data — clean separation of data vs logic.
 
-Architecture (matching WPF):
+Architecture
   ColorKey    — a single named color slot with dark/light defaults
   ThemeDef    — a named theme with a dict of key → hex_value overrides
-  COLOR_KEYS  — registry of all 45 color keys (WPF ColorKeys)
-  THEMES      — registry of all theme definitions (WPF ColorResources)
+  COLOR_KEYS  — registry of all 45 color keys
+  THEMES      — registry of all theme definitions
 """
 
 from __future__ import annotations
@@ -16,12 +16,12 @@ from dataclasses import dataclass, field
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# ColorKey — WPF ComponentResourceKey equivalent
+# ColorKey
 # ═══════════════════════════════════════════════════════════════════════════
 
 @dataclass(frozen=True)
 class ColorKey:
-    """A single named color token with dark/light defaults — WPF ColorKeys entry.
+    """A single named color token with dark/light defaults
 
     Each key has:
       - id: unique identifier, e.g. "accent", "foreground"
@@ -41,20 +41,20 @@ class ColorKey:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# ThemeDef — WPF ColorResource equivalent
+# ThemeDef
 # ═══════════════════════════════════════════════════════════════════════════
 
 @dataclass
 class ThemeDef:
-    """A named color theme — WPF ColorResource.
+    """A named color theme
 
     Each theme:
       - id: unique identifier
-      - name: display name (WPF {Binding Name})
-      - group: category (WPF GroupName)
+      - name: display name
+      - group: category
       - is_dark: True = dark background
-      - prompt: short hint shown in 【】 (WPF {Binding Prompt})
-      - description: longer description (WPF {Binding Description})
+      - prompt: short hint shown in 【】
+      - description: longer description
       - colors: dict of color_key_id → hex_value
       - order: sort order
     """
@@ -69,7 +69,7 @@ class ThemeDef:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# COLOR_KEYS — 45 color tokens matching WPF ColorKeys + VisionMaster additions
+# COLOR_KEYS — 45 color tokens
 # ═══════════════════════════════════════════════════════════════════════════
 
 COLOR_KEYS: dict[str, ColorKey] = {
@@ -243,11 +243,11 @@ _DEFAULTS_LIGHT = {k: v.light_default for k, v in COLOR_KEYS.items()}
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# THEMES — all built-in theme definitions (WPF ColorResources)
+# THEMES — all built-in theme definitions
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _make_dark() -> dict[str, str]:
-    """Dark theme overrides from WPF Dark.xaml."""
+    """Dark theme """
     return {
         "accent":              "#2D80FF",
         "text_primary":        "#FF8F939C",
@@ -304,7 +304,7 @@ def _make_dark() -> dict[str, str]:
 
 
 def _make_light() -> dict[str, str]:
-    """Light theme overrides from WPF Light.xaml."""
+    """Light theme """
     return {
         "accent":              "#FF3399FF",
         "text_primary":        "#606266",
@@ -361,7 +361,7 @@ def _make_light() -> dict[str, str]:
 
 
 def _make_technology_blue_dark() -> dict[str, str]:
-    """Technology Blue Dark theme — WPF TechnologyBlueDark.xaml (外部程序集).
+    """Technology Blue Dark theme
 
     Overrides the dark theme with cyan/blue tech palette:
       - accent → #00D1FF (cyan)
@@ -406,7 +406,7 @@ def _make_technology_blue_dark() -> dict[str, str]:
 
 
 def _make_purple_dark() -> dict[str, str]:
-    """Purple Dark theme — WPF Purple Dark.xaml (外部程序集).
+    """Purple Dark theme
 
     Overrides dark theme with purple palette.
     """
@@ -482,9 +482,6 @@ THEMES: dict[str, ThemeDef] = {
 
 def resolve_colors(theme: ThemeDef) -> dict[str, str]:
     """Resolve a theme to its full color map, filling gaps with defaults.
-
-    WPF equivalent: merging ColorKeys default values then applying theme overrides
-    via ResourceDictionary replacement — DynamicResource picks up overrides.
     """
     defaults = _DEFAULTS_DARK if theme.is_dark else _DEFAULTS_LIGHT
     resolved = dict(defaults)          # Start with all defaults

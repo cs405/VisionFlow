@@ -1,4 +1,4 @@
-"""Main window aligned toward WPF `MainWindow.xaml` region semantics.
+"""Main window
 
 重点对齐：
   - 左：流程资源 / 日志
@@ -56,7 +56,7 @@ HTBOTTOMLEFT = 16
 HTBOTTOMRIGHT = 17
 HTCAPTION = 2
 
-_BORDER = 8  # resize margin in pixels (WPF ResizeBorderThickness)
+_BORDER = 8  # resize margin in pixels
 
 
 class _MSG(ctypes.Structure):
@@ -113,8 +113,7 @@ def _hsep():
 def _cmd_btn_qss():
     """Toolbar command button QSS — dynamic from theme.
 
-    WPF: Command states update automatically via CanExecute → button visuals.
-    Python: explicit setEnabled() calls + :disabled QSS for visual feedback.
+    explicit setEnabled() calls + :disabled QSS for visual feedback.
     """
     return f"""
     QPushButton {{
@@ -178,10 +177,6 @@ def find_child_by_tip(parent, tip):
 
 
 class _InlineStatusStrip(QWidget):
-    """WPF-aligned status strip — colors follow theme via connect_theme().
-
-    WPF equivalent: StatusBar with DynamicResource BrushKeys.BorderBrush / Foreground.
-    """
 
     def __init__(self, accent: str = "#4caf50", parent=None):
         super().__init__(parent)
@@ -199,7 +194,7 @@ class _InlineStatusStrip(QWidget):
         self._label.setFont(QFont("Microsoft YaHei", 11))
         layout.addWidget(self._label, 1)
 
-        # Follow theme — WPF {DynamicResource} equivalent
+        # Follow theme
         connect_theme(self._refresh_qss)
 
     def _refresh_qss(self):
@@ -265,7 +260,7 @@ class _DiagramTabHeader(QWidget):
 
 
 class _SettingsDialog(QDialog):
-    """Settings dialog -- WPF SettingViewPresenter 1:1 port.
+    """Settings dialog
 
     Layout: QTabWidget group tabs + NavigationBox per tab + bottom buttons.
     """
@@ -301,7 +296,7 @@ class _SettingsDialog(QDialog):
         btn_row.addWidget(ok_btn)
         layout.addLayout(btn_row)
 
-    # -- NavigationBox helper (WPF: left nav list + right content stack) --
+    # -- NavigationBox helper --
     def _make_nav_box(self):
         box = QSplitter(Qt.Horizontal)
         nav = QListWidget()
@@ -318,7 +313,7 @@ class _SettingsDialog(QDialog):
         nav.addItem(QListWidgetItem(name))
         stack.addWidget(page)
 
-    # -- Tab 1: 主题 (WPF ThemeOptions) --
+    # -- Tab 1: 主题  --
     def _build_theme_tab(self):
         box, nav, stack = self._make_nav_box()
         page = QScrollArea()
@@ -384,7 +379,7 @@ class _SettingsDialog(QDialog):
     def _on_theme_select(self, theme_id):
         theme_manager.set_theme(theme_id)
 
-    # -- Tab 2: 基本设置 (WPF GroupBase) --
+    # -- Tab 2: 基本设置 --
     def _build_basic_tab(self):
         box, nav, stack = self._make_nav_box()
         page = QScrollArea()
@@ -407,7 +402,7 @@ class _SettingsDialog(QDialog):
         nav.setCurrentRow(0)
         self._group_tabs.addTab(box, "基本设置")
 
-    # -- Tab 3: 显示设置 (WPF GroupStyle) --
+    # -- Tab 3: 显示设置 --
     def _build_display_tab(self):
         box, nav, stack = self._make_nav_box()
         page = QScrollArea()
@@ -426,7 +421,7 @@ class _SettingsDialog(QDialog):
         nav.setCurrentRow(0)
         self._group_tabs.addTab(box, "显示设置")
 
-    # -- Persistence (WPF SettableBase.Load/Save) --
+    # -- Persistence --
     def _config_path(self):
         return os.path.join(os.path.dirname(os.path.dirname(__file__)), "app_config.json")
 
@@ -471,8 +466,7 @@ class _SettingsDialog(QDialog):
 
 
 class MainWindow(QMainWindow):
-    """主窗口：按 WPF `MainWindow.xaml` 的区域语义重构。
-
+    """
     Args:
         ctx: AppContext DI container. If None, uses get_app_context() fallback.
     """
@@ -530,9 +524,7 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1180, 720)
         self.setPalette(theme_manager.colors.to_palette())
         self.setStyleSheet(theme_manager.get_stylesheet())
-        # WPF SelectionChanged → RefreshThemeCommand: apply theme immediately
         theme_manager.theme_changed.connect(lambda _: self._apply_theme())
-        # WPF SystemKeys.FontFamily = Microsoft YaHei
         font = QFont("Microsoft YaHei", 9)
         self.setFont(font)
         icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "icons", "logo.ico")
@@ -559,7 +551,7 @@ class MainWindow(QMainWindow):
         self._init_dwm_shadow()
 
     def changeEvent(self, event):
-        """Toggle Maximize ↔ Restore visibility on window state change (WPF triggers)."""
+        """Toggle Maximize ↔ Restore visibility on window state change"""
         if event.type() == QEvent.WindowStateChange:
             maximized = self.isMaximized()
             if hasattr(self, '_max_btn'):
@@ -569,8 +561,7 @@ class MainWindow(QMainWindow):
         super().changeEvent(event)
 
     def _setup_caption_bar(self):
-        """1:1 port of WPF CaptionTemplate lines 22-203.
-
+        """
         Outer DockPanel (DataContext=Project):
           Separator(H=20, Right) | ActionDockPanel(Right) | UniformGrid(Rows=2)
             Row0: DockPanel:  Menu(Left) | "项目名称:XXX"(Center)
@@ -580,7 +571,7 @@ class MainWindow(QMainWindow):
         bar.setFixedHeight(85)
         bar.setStyleSheet("background: #1e1e1e;")
 
-        # ── WPF outer DockPanel (line 24) ──
+        # ── outer DockPanel (line 24) ──
         outer = QHBoxLayout(bar)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
@@ -588,14 +579,14 @@ class MainWindow(QMainWindow):
         # ══════════ Column 0: Icon + Title (Framework MainWindow.xaml lines 108-133) ══════════
         col0 = QWidget()
         col0_layout = QHBoxLayout(col0)
-        col0_layout.setContentsMargins(10, 20, 0, 20)  # WPF TitleMargin="10 20"
+        col0_layout.setContentsMargins(10, 20, 0, 20)  # TitleMargin="10 20"
         col0_layout.setSpacing(0)
 
         logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "icons", "logo.png")
         if os.path.exists(logo_path):
             logo = QLabel()
             logo.setPixmap(QPixmap(logo_path).scaled(16, 16, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-            logo.setStyleSheet("padding: 0 5px 0 0;")  # WPF Margin="0,0,5,0"
+            logo.setStyleSheet("padding: 0 5px 0 0;")  # Margin="0,0,5,0"
             col0_layout.addWidget(logo)
 
         title_lbl = QLabel("VisionFlow")
@@ -628,7 +619,7 @@ class MainWindow(QMainWindow):
             "QMenu::separator { height: 1px; background: #505050; margin: 4px 10px; }"
         )
         self._build_menus(menu_bar)
-        r0.addWidget(menu_bar)  # NO stretch → left-aligned (WPF HorizontalAlignment="Left")
+        r0.addWidget(menu_bar)  # NO stretch → left-aligned (HorizontalAlignment="Left")
 
         # "项目名称：XXX" — Margin="10,0", HorizontalAlignment="Center" (lines 137-144)
         r0.addStretch(1)
@@ -643,7 +634,7 @@ class MainWindow(QMainWindow):
         row1 = QWidget()
         row1.setStyleSheet("background:#2d2d30; border-top:1px solid #3f3f46;")
         r1 = QHBoxLayout(row1)
-        r1.setContentsMargins(0, 1, 0, 0)  # WPF Margin="0,1" (line 149)
+        r1.setContentsMargins(0, 1, 0, 0)  # Margin="0,1" (line 149)
         r1.setSpacing(0)
 
         # Inner DockPanel LastChildFill="False" → 4 groups (lines 149-199)
@@ -713,7 +704,7 @@ class MainWindow(QMainWindow):
             if slot:
                 btn.clicked.connect(slot)
             self._tool_diagram_cmds.layout().addWidget(btn)
-        # Keep button refs for CanExecute-style state management (mirror WPF)
+        # Keep button refs for CanExecute-style state management
         self._run_btn = self._tool_diagram_cmds.layout().itemAt(0).widget()
         self._continuous_btn = self._tool_diagram_cmds.layout().itemAt(1).widget()
         self._stop_btn = self._tool_diagram_cmds.layout().itemAt(2).widget()
@@ -734,11 +725,11 @@ class MainWindow(QMainWindow):
         r1.addWidget(toolbar)
         grid_layout.addWidget(row1)
 
-        outer.addWidget(grid, 1)  # stretch=1 → fills remaining space (WPF LastChildFill)
+        outer.addWidget(grid, 1)  # stretch=1 → fills remaining space )
 
-        # ══════════ Right-docked action buttons — WPF FontIconButtonKeys.Command (lines 28-39) ══════════
-        # Same style as Row 2 toolbar — _CMD_BTN matches WPF ButtonKeys.Default + FontIconButtonKeys.Default
-        # Color → Setting (lines 30-34) — WPF ShowColorThemeViewCommand
+        # ══════════ Right-docked action buttons  ══════════
+        # Same style as Row 2 toolbar
+        # Color → Setting
         for icon, tip, slot in [
             (FontIcons.Color,   "颜色主题", self._on_show_theme_dialog),
             (FontIcons.Setting, "设置",     self._on_open_settings),
@@ -938,7 +929,7 @@ class MainWindow(QMainWindow):
         self._right_panel.setFixedWidth(850)
         self._center_right_splitter.addWidget(self._right_panel)
 
-        # WPF Grid layout: GridSplitterBox | center+right splitter
+        # Grid layout: GridSplitterBox | center+right splitter
         workspace = QWidget()
         ws_layout = QHBoxLayout(workspace)
         ws_layout.setContentsMargins(0, 0, 0, 0)
@@ -1018,7 +1009,7 @@ class MainWindow(QMainWindow):
         return panel
 
     def _build_bottom_panel(self):
-        # Use ResultPanel's built-in 3-tab layout (历史/当前/帮助) — WPF aligned
+        # Use ResultPanel's built-in 3-tab layout (历史/当前/帮助)
         self._result_panel = ResultPanel()
         self._result_panel.set_image_viewer(self._img_panel.viewer)
         self._result_panel.node_jump_requested.connect(self._jump_to_node)
@@ -1078,14 +1069,12 @@ class MainWindow(QMainWindow):
         self._time_lbl = QLabel("")
         status.addPermanentWidget(self._time_lbl)
 
-        # Follow theme accent — WPF StatusBar with DynamicResource
+        # Follow theme accent
         self._refresh_status_bar_qss()
         connect_theme(lambda: self._refresh_status_bar_qss())
 
     def _refresh_status_bar_qss(self):
         """Update QStatusBar style to match current theme.
-
-        WPF: StatusBar uses window chrome background, not accent.
         """
         tm = theme_manager
         bg = tm.color("bg_surface_raised").name()
@@ -1113,7 +1102,7 @@ class MainWindow(QMainWindow):
         event_system.subscribe(EventType.WORKFLOW_STOPPED, self._on_wf_stopped)
         event_system.subscribe(EventType.PROJECT_LOADED, self._on_proj_load)
         event_system.subscribe(EventType.PROJECT_SAVED, self._on_proj_save)
-        # File iteration events (WPF "运行全部" / "显示全部")
+        # File iteration events ("运行全部" / "显示全部")
         event_system.subscribe(EventType.FILE_ITERATION_NEXT, self._on_file_iteration_next)
         event_system.subscribe(EventType.FILE_ITERATION_COMPLETED, self._on_file_iteration_completed)
 
@@ -1411,7 +1400,7 @@ class MainWindow(QMainWindow):
         self._sync_proj_labels(project)
 
     def _on_duplicate_diagram(self):
-        """Duplicate current diagram (WPF DuplicationDiagramCommand)."""
+        """Duplicate current diagram"""
         project = project_service.current_project
         if project is None:
             return
@@ -1422,9 +1411,9 @@ class MainWindow(QMainWindow):
             self._log_panel.success(f"已复制流程图: {clone.name}")
 
     def _on_add_from_template(self):
-        """Add diagram from template (WPF AddDiagramByTemplateCommand).
+        """Add diagram from template
 
-        WPF flow:
+        flow:
           1. Guard: no templates → show "不存在模板，请先添加模板"
           2. Show DiagramTemplates selection dialog (ListBox DataTemplate)
           3. On submit: add SelectedDiagramTemplate.Diagram to DiagramDatas
@@ -1446,7 +1435,7 @@ class MainWindow(QMainWindow):
             self._log_panel.success(f"从模板创建: {dlg.added_diagram.name}")
 
     def _on_manage_templates(self):
-        """Open template management dialog (WPF ManageTemplatesCommand)."""
+        """Open template management dialog """
         project = project_service.current_project
         if project is None:
             return
@@ -1459,7 +1448,7 @@ class MainWindow(QMainWindow):
             self._log_panel.success(f"从模板创建: {dlg.added_diagram.name}")
 
     def _load_templates_on_startup(self):
-        """Load global templates on app startup (WPF LoadDiagramTemplates).
+        """Load global templates on app startup
 
         Must run AFTER _discover_nodes() populates node_registry, otherwise
         node_registry.create() returns None for all types and nodes are lost.
@@ -1470,7 +1459,7 @@ class MainWindow(QMainWindow):
             project._templates = list(project_service._templates)
 
     def _persist_templates(self):
-        """Persist templates to disk (WPF: save diagramtemplates.json)."""
+        """Persist templates to disk"""
         project = project_service.current_project
         if project is None:
             return
@@ -1479,9 +1468,8 @@ class MainWindow(QMainWindow):
         project_service.save_templates(project._templates)
 
     def _on_save_as_template(self):
-        """Save current diagram as template (WPF SaveAsDiagramTemplateCommand).
+        """Save current diagram as template
 
-        WPF: TextBoxPresenter dialog with Title="保存模板名称", pre-filled with diagram name.
         Python: QInputDialog with same behavior.
 
         Guard: warns if diagram has no nodes to prevent saving empty templates.
@@ -1514,9 +1502,9 @@ class MainWindow(QMainWindow):
             self._log_panel.success(f"模板已保存: {name.strip()} ({node_count} 个节点)")
 
     def _on_delete_diagram(self):
-        """Delete current diagram (mirrors WPF DeleteDiagramCommand).
+        """Delete current diagram
 
-        WPF pattern:
+        pattern:
           - Model (VisionProjectItemBase) holds DeleteDiagramCommand
           - CanExecute: SelectedDiagramData != null && Count > 1
           - Execute: DiagramDatas.Remove(SelectedDiagramData)
@@ -1538,7 +1526,7 @@ class MainWindow(QMainWindow):
             self._log_panel.warning("至少需要保留一个流程图")
 
     def _on_close_diagram_tab(self, index: int):
-        """Close diagram by tab index (WPF: TabItem close button).
+        """Close diagram by tab index
 
         Same flow as _on_delete_diagram but uses explicit index for
         the case where the user clicks the tab's close button rather
@@ -1574,7 +1562,7 @@ class MainWindow(QMainWindow):
         project.selected_diagram_index = index
         diagram = project.selected_diagram
         page = self._current_diagram_page()
-        self._result_panel.clear_history()  # WPF: Messages per-DiagramData
+        self._result_panel.clear_history()
         self._workflow = diagram.workflow if diagram else None
         self._result_panel.bind_workflow(self._workflow)
         self._result_panel.sync_history_from_workflow()
@@ -1601,13 +1589,8 @@ class MainWindow(QMainWindow):
         self._refresh_command_states(project)
 
     def _refresh_command_states(self, project: ProjectItem | None):
-        """Update toolbar button enabled states to mirror WPF CanExecute.
-
-        WPF: CommandManager.InvalidateRequerySuggested auto-updates button
-        states based on CanExecute predicates. Python/PyQt5 requires explicit
-        updates at state-change points.
-
-        Managed buttons (mirror WPF FlowableDiagramDataBase commands):
+        """Update toolbar button enabled states
+        Managed buttons
           - 开始: enabled when CanStart (state != Running && != Canceling && has nodes)
           - 停止: enabled when CanStop  (state == Running)
           - 重置: enabled when CanReset (always)
@@ -1697,7 +1680,7 @@ class MainWindow(QMainWindow):
         self._select_node(node_data)
 
     def _on_editor_node_double_clicked(self, node_data: NodeBase):
-        """Handle node double-click — open tabbed property dialog (WPF ShowTabEditCommand).
+        """Handle node double-click — open tabbed property dialog
 
         Decoupled: calls open_node_dialog which uses get_property_presenter()
         to resolve the settings object. Different node types can override
@@ -1763,7 +1746,7 @@ class MainWindow(QMainWindow):
     def _on_ev_diag_chg(self, sender, **kwargs):
         if self._workflow:
             self._node_cnt_lbl.setText(f"节点: {len(self._workflow.get_all_nodes())}")
-        # Nodes added/removed → CanStart condition may have changed (WPF CanExecute)
+        # Nodes added/removed → CanStart condition may have changed
         self._refresh_command_states(project_service.current_project)
 
     def _on_wf_start(self, sender, **kwargs):
@@ -1786,7 +1769,7 @@ class MainWindow(QMainWindow):
         """Handle FILE_ITERATION_NEXT — update image display to show current file
         during "运行全部" loop.
 
-        WPF: VisionDiagramDataBase.Start():
+        VisionDiagramDataBase.Start():
           1. ResultImageSource = item.ToImageSource()    // ALWAYS — update image viewer
           2. if (UseAutoSwitch) SrcFilePath = item       // only if ON — update thumbnail
 
@@ -1800,7 +1783,7 @@ class MainWindow(QMainWindow):
         if not file_path:
             return
 
-        # WPF: ResultImageSource = item.ToImageSource() — ALWAYS update display
+        # ResultImageSource = item.ToImageSource() — ALWAYS update display
         import cv2
         try:
             img = cv2.imread(file_path, cv2.IMREAD_COLOR)
@@ -1816,14 +1799,14 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
-        # WPF: if (UseAutoSwitch) SrcFilePath = item — refresh thumbnail panel
+        # if (UseAutoSwitch) SrcFilePath = item — refresh thumbnail panel
         if auto_switch and self._resource_panel.isVisible():
             self._resource_panel.refresh_selection()
 
     def _on_file_iteration_completed(self, sender, **kwargs):
         """Handle FILE_ITERATION_COMPLETED — reset display state after "运行全部" loop.
 
-        WPF: RunModeResult = result (bool?), LogCurrentMessage()
+        RunModeResult = result (bool?), LogCurrentMessage()
         """
         total = kwargs.get("total", 0)
         self._side_status_strip.set_status(f"显示全部完成: {total} 个文件", "#4caf50")
@@ -1887,7 +1870,7 @@ class MainWindow(QMainWindow):
         self._refresh_command_states(project_service.current_project)
 
     def _format_elapsed(self) -> str:
-        """Format elapsed workflow time (WPF TimeSpan display)."""
+        """Format elapsed workflow time"""
         import time
         start = getattr(self, '_wf_start_time', None)
         if start is None:
@@ -1960,7 +1943,7 @@ class MainWindow(QMainWindow):
                 self._sync_proj_labels(project)
 
     def _on_run_workflow(self):
-        """Single-run: execute workflow once (WPF StartCommand).
+        """Single-run: execute workflow once
 
         Executes all nodes in topological order on a worker thread.
         - Each node bar turns green (COMPLETED) or red (ERROR) via events.
@@ -1969,7 +1952,7 @@ class MainWindow(QMainWindow):
         self._start_execution(continuous=False)
 
     def _on_continuous_run(self):
-        """Continuous-run: execute workflow in a loop (WPF RunViewCommand).
+        """Continuous-run: execute workflow in a loop
 
         Camera captures new frames each iteration.  Node bars update in
         real-time.  When user clicks a node, its processed image updates
@@ -1980,7 +1963,7 @@ class MainWindow(QMainWindow):
     def _start_execution(self, continuous: bool = False):
         """Common execution entry point — sync, guard, delegate to WorkflowRunner.
 
-        WPF alignment:
+        alignment:
           - Single run → VisionDiagramDataBase.Start() (single image)
           - "运行全部" → VisionDiagramDataBase.Start() + UseAllImage loop
           - Continuous → loop with interval
@@ -2008,7 +1991,7 @@ class MainWindow(QMainWindow):
             for item in editor.scene.get_all_node_items():
                 item.set_state(NodeState.RUNNING)
 
-        # Detect "运行全部" (WPF: VisionDiagramDataBase.Start() UseAllImage branch)
+        # Detect "运行全部"
         if not continuous:
             start_node = self._workflow.get_start_node_data()
             if isinstance(start_node, SrcFilesVisionNodeData) and start_node.use_all_image:
@@ -2019,7 +2002,7 @@ class MainWindow(QMainWindow):
                     self._wf_runner.start_run_all(
                         file_paths=file_paths,
                         auto_switch=auto_switch,
-                        interval=1.0,  # WPF: Task.Delay(1000)
+                        interval=1.0,  # Task.Delay(1000)
                     )
                     # State finalization is handled by _on_file_iteration_completed
                     return
@@ -2067,9 +2050,9 @@ class MainWindow(QMainWindow):
                 self._img_panel.set_image(node._result_image_source)
 
     def _on_stop_workflow(self):
-        """Stop workflow execution (mirrors WPF StopCommand).
+        """Stop workflow execution
 
-        WPF: Stop() → Canceling → GotoState on all parts → Canceled.
+        Stop() → Canceling → GotoState on all parts → Canceled.
         Python: delegate to WorkflowRunner + direct state reset.
         """
         self._stop_requested = True
@@ -2087,9 +2070,9 @@ class MainWindow(QMainWindow):
         self._refresh_command_states(project_service.current_project)
 
     def _on_reset_workflow_view(self):
-        """Reset workflow to ready state (mirrors WPF ResetCommand).
+        """Reset workflow to ready state
 
-        WPF: Reset() → GotoState(x => FlowableState.Ready) on all parts.
+        Reset() → GotoState(x => FlowableState.Ready) on all parts.
         Python: model.reset() resets states; also reload scene from workflow.
         """
         if self._workflow:
@@ -2155,14 +2138,14 @@ class MainWindow(QMainWindow):
             pass
 
     def _on_result_image_update(self, image):
-        """Handle history row click — update main image display (WPF selection linkage)."""
+        """Handle history row click — update main image display"""
         import numpy as np
         if image is not None:
             self._img_panel.set_image(image)
             self._center_tabs.setCurrentIndex(0)  # switch to image tab
 
     def _on_resource_file_double_clicked(self, path: str):
-        """Open full-size zoom viewer for the image file (WPF ShowZoomViewImageFileCommand)."""
+        """Open full-size zoom viewer for the image file"""
         if not path or not os.path.exists(path):
             return
         # Switch to image tab + load full resolution
@@ -2173,7 +2156,7 @@ class MainWindow(QMainWindow):
             self._img_panel.viewer.fit_to_window()
 
     def toggle_left_panel(self):
-        """Toggle left panel via GridSplitterBox (WPF Mode=Extend)."""
+        """Toggle left panel via GridSplitterBox"""
         self._left_box.toggle_expand()
         self._left_panel_visible = self._left_box.is_expanded
 
@@ -2342,7 +2325,7 @@ class MainWindow(QMainWindow):
             return os.path.basename(path)
 
     def _on_close_window(self):
-        """WPF CloseAfterSaveWindowCommand: save project then close."""
+        """CloseAfterSaveWindowCommand: save project then close."""
         try:
             if project_service.current_project:
                 self._on_save_project()
@@ -2351,7 +2334,7 @@ class MainWindow(QMainWindow):
         self.close()
 
     def _on_open_guide(self):
-        """Open interactive guide overlay — WPF ShowGuideCommand."""
+        """Open interactive guide overlay"""
         from gui.guide_overlay import GuideOverlay
         overlay = GuideOverlay(self)
         # Pass actual widget references directly
@@ -2370,7 +2353,7 @@ class MainWindow(QMainWindow):
         overlay.start()
 
     def _on_open_settings(self):
-        """Open settings dialog — WPF ShowSettingCommand."""
+        """Open settings dialog"""
         dlg = _SettingsDialog(self)
         if dlg.exec_() == QDialog.Accepted:
             self._apply_settings()
@@ -2381,7 +2364,7 @@ class MainWindow(QMainWindow):
             self._theme_toggle.blockSignals(False)
 
     def _apply_settings(self):
-        """Apply persisted settings to the UI — WPF IocSetting.Load()."""
+        """Apply persisted settings to the UI"""
         import json, os
         path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "app_config.json")
         try:
@@ -2416,7 +2399,7 @@ class MainWindow(QMainWindow):
             self._tray_icon.setVisible(tray_enabled)
 
     def _on_show_theme_dialog(self):
-        """Open color theme picker dialog — WPF ShowColorThemeViewCommand."""
+        """Open color theme picker dialog"""
         dlg = ThemePickerDialog(self)
         if dlg.exec_():
             self._apply_theme()
@@ -2426,7 +2409,7 @@ class MainWindow(QMainWindow):
             self._theme_toggle.blockSignals(False)
 
     def _on_toggle_theme(self):
-        """Toggle between dark and light themes (WPF SwitchThemeViewPresenter)."""
+        """Toggle between dark and light themes"""
         theme_manager.toggle()
         self._apply_theme()
         if hasattr(self, '_theme_toggle'):
@@ -2454,7 +2437,7 @@ class MainWindow(QMainWindow):
             self._center_tabs.setStyleSheet(_TAB_STYLE)
 
     def _apply_theme(self):
-        """Reapply theme to ALL controls — WPF RefreshTheme() via DynamicResource."""
+        """Reapply theme to ALL controls"""
         tm = theme_manager
         c = tm.colors
         qss = tm.get_stylesheet()
@@ -2509,7 +2492,7 @@ class MainWindow(QMainWindow):
             self._title_bar.update()
 
     def _on_edit_project(self):
-        """Open project settings dialog (WPF ShowEditProjectCommand)."""
+        """Open project settings dialog """
         project = project_service.current_project
         if project is None:
             project = project_service.new_project()
@@ -2543,7 +2526,7 @@ class MainWindow(QMainWindow):
             project.name = name_edit.text().strip() or project.name
             project.description = desc_edit.text()
             project.author = author_edit.text()
-            # Update file_path to reflect new name (WPF: GetFilePath uses Title)
+            # Update file_path to reflect new name
             if project.file_path and project.name != old_name:
                 d = os.path.dirname(project.file_path)
                 project.file_path = os.path.join(d, f"{project.name}.json")
@@ -2551,7 +2534,7 @@ class MainWindow(QMainWindow):
             self._log_panel.info(f"项目已重命名: {old_name} → {project.name}")
 
     def _show_notification(self, level: str, title: str, message: str):
-        """Show desktop notification (WPF ShowXxxNotifyMessageOutputNodeData)."""
+        """Show desktop notification"""
         from PyQt5.QtWidgets import QSystemTrayIcon
         if QSystemTrayIcon.isSystemTrayAvailable() and QSystemTrayIcon.supportsMessages():
             if not hasattr(self, '_tray_icon'):
@@ -2571,7 +2554,5 @@ class MainWindow(QMainWindow):
             self,
             "关于 VisionFlow",
             "<h2>VisionFlow 2.0</h2><p>视觉流程编辑器</p>"
-            "<p>移植自 WPF-VisionMaster (HeBianGu)</p>"
             "<p>使用 Python + PyQt5 + OpenCV</p><hr>"
-            "<p>当前版本仍在持续做 WPF 对齐修复。</p>",
         )

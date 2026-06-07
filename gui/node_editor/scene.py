@@ -1,15 +1,4 @@
-"""Diagram scene — WPF Diagram + Layer architecture 1:1 port.
-
-Layers (Z-value bands matching WPF NodeLayer / LinkLayer / DynamicLayer):
-  - NodeLayer (Z=10):   NodeItem
-  - LinkLayer (Z=5):    EdgeItem (committed links)
-  - DynamicLayer (Z=100): _dynamic_edge (reusable drag preview)
-
-Event flow (WPF Diagram-level MouseMove/MouseLeftButtonUp pattern):
-  1. SocketItem.mousePressEvent → emits signal → scene.start_edge_drag()
-  2. scene.event() intercepts GraphicsSceneMouseMove → scene._on_scene_mouse_move()
-  3. scene.event() intercepts GraphicsSceneMouseRelease → scene._on_scene_mouse_release()
-  4. QTimer.singleShot(10, _commit_edge) — delayed creation (WPF Dispatcher.BeginInvoke)
+"""Diagram scene
 """
 
 from PyQt5.QtWidgets import (QGraphicsScene, QGraphicsItem, QMenu, QAction,
@@ -36,7 +25,7 @@ from core.node_group import node_data_group_manager
 
 SCENE_RECT = QRectF(-5000, -5000, 10000, 10000)
 
-# Checkerboard tile — 1:1 port of WPF H.Theme BrushKeys Tile pattern
+# Checkerboard tile
 CHECKER_TILE = 40
 CHECKER_CELL = 20
 from gui.theme import theme_manager
@@ -57,13 +46,10 @@ def _make_checker_brush(tile=CHECKER_TILE, cell=CHECKER_CELL,
     return QBrush(pixmap)
 
 
-# ── Layer Z-values (WPF Z-order: NodeLayer → LinkLayer → DynamicLayer) ──
+# ── Layer Z-values ──
 
 class LayerZ:
-    """Z-value constants matching WPF layer ordering.
-
-    In WPF the layers are Panels stacked in a Canvas. In Qt we use Z-values.
-    Higher Z = rendered on top.
+    """Z-value constants
     """
     LINK = 5          # LinkLayer — edges render below nodes
     NODE = 10         # NodeLayer — nodes render above edges
@@ -71,7 +57,7 @@ class LayerZ:
 
 
 class DiagramScene(QGraphicsScene):
-    """Main diagram scene with WPF-aligned layer and event architecture."""
+    """Main diagram scene"""
 
     node_item_added = pyqtSignal(NodeItem)
     node_item_removed = pyqtSignal(str)
@@ -92,17 +78,17 @@ class DiagramScene(QGraphicsScene):
         self._node_items: dict[str, NodeItem] = {}
         self._edge_items: dict[str, EdgeItem] = {}
         self._show_grid = True
-        self._link_drawer: ILinkDrawer = BrokenLinkDrawer()  # WPF default: 折线
+        self._link_drawer: ILinkDrawer = BrokenLinkDrawer()  # 折线
 
-        # ── WPF DynamicLayer: single reusable preview edge ──
+        # ── single reusable preview edge ──
         self._dynamic_edge: EdgeItem | None = None
 
-        # ── WPF Diagram-level drag state (replaces SocketItem-level handling) ──
+        # ── Diagram-level drag state (replaces SocketItem-level handling) ──
         self._connecting = False
         self._drag_from_socket: SocketItem | None = None
         self._drag_to_pos: QPointF = QPointF()
 
-        # ── Pending commit (WPF Dispatcher.BeginInvoke queue) ──
+        # ── Pending commit ──
         self._pending_from: SocketItem | None = None
         self._pending_to: SocketItem | None = None
         self._commit_timer = QTimer()
@@ -122,11 +108,11 @@ class DiagramScene(QGraphicsScene):
         self.selectionChanged.connect(self._on_selection_changed)
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # WPF Diagram-Level Event Handling (event() override)
+    #  Diagram-Level Event Handling (event() override)
     # ═══════════════════════════════════════════════════════════════════════════
 
     def event(self, e: QEvent) -> bool:
-        """Intercept mouse events at scene level — WPF Diagram.MouseMove/.MouseLeftButtonUp.
+        """Intercept mouse events at scene level —  Diagram.MouseMove/.MouseLeftButtonUp.
 
         Qt note: QGraphicsScene.event() fires BEFORE item dispatch. When _connecting
         is True, we intercept move/release here so SocketItem doesn't need drag logic.
@@ -144,13 +130,13 @@ class DiagramScene(QGraphicsScene):
         return super().event(e)
 
     def _on_scene_mouse_move(self, event: QGraphicsSceneMouseEvent):
-        """WPF Diagram_MouseMove equivalent."""
+        """ Diagram_MouseMove equivalent."""
         self._drag_to_pos = event.scenePos()
         if self._dynamic_edge is not None:
             self._dynamic_edge.set_temp_end(self._drag_to_pos)
 
     def _on_scene_mouse_release(self, event: QGraphicsSceneMouseEvent):
-        """WPF Diagram_MouseLeftButtonUp equivalent."""
+        """ Diagram_MouseLeftButtonUp equivalent."""
         if not self._connecting:
             return
         self._connecting = False
@@ -159,7 +145,7 @@ class DiagramScene(QGraphicsScene):
         from_sock = self._drag_from_socket
         self._drag_from_socket = None
 
-        # Hide preview immediately (WPF Clear → _dynamicLink.Visibility = Collapsed)
+        # Hide preview immediately (Clear → _dynamicLink.Visibility = Collapsed)
         if self._dynamic_edge is not None:
             self._dynamic_edge.hide_preview()
 
@@ -167,7 +153,7 @@ class DiagramScene(QGraphicsScene):
             self.status_message.emit("连线已取消")
             return
 
-        # WPF: Dispatcher.BeginInvoke(InputPriority, Create(port))
+        # Dispatcher.BeginInvoke(InputPriority, Create(port))
         self._pending_from = from_sock
         self._pending_to = target
         self._commit_timer.start()
@@ -178,13 +164,13 @@ class DiagramScene(QGraphicsScene):
 
     @property
     def link_drawer(self) -> ILinkDrawer:
-        """WPF Diagram.LinkDrawer — replaceable link drawing strategy."""
+        """ Diagram.LinkDrawer — replaceable link drawing strategy."""
         return self._link_drawer
 
     @link_drawer.setter
     def link_drawer(self, value: ILinkDrawer):
         self._link_drawer = value
-        # Refresh all edges — WPF RefreshLinkDrawer()
+        # Refresh all edges —  RefreshLinkDrawer()
         for edge in self._edge_items.values():
             edge._drawer = value
             edge._rebuild()
@@ -226,7 +212,7 @@ class DiagramScene(QGraphicsScene):
         self.update()
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Node management (WPF Diagram.AddNode / RemoveNode)
+    # Node management (Diagram.AddNode / RemoveNode)
     # ═══════════════════════════════════════════════════════════════════════════
 
     def bind_workflow(self, workflow: WorkflowEngine):
@@ -245,7 +231,7 @@ class DiagramScene(QGraphicsScene):
             y = (count // 5) * 70 - 200
             item.setPos(x, y)
 
-        # DoLayoutPort — position sockets along edges (WPF Layout.DoLayoutPort)
+        # DoLayoutPort — position sockets along edges
         self._do_layout_port(item)
 
         # Assign sequential index
@@ -338,13 +324,13 @@ class DiagramScene(QGraphicsScene):
         return list(self._node_items.values())
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Edge management (WPF Diagram.AddLink / RemoveLink)
+    # Edge management
     # ═══════════════════════════════════════════════════════════════════════════
 
     def create_edge(self, from_socket: SocketItem, to_socket: SocketItem,
                     sync_workflow: bool = True,
                     existing_link: LinkData | None = None) -> EdgeItem | None:
-        """Create a committed edge — WPF Link.Create + diagram.AddLink combined."""
+        """Create a committed edge —  Link.Create + diagram.AddLink combined."""
         # Normalize direction: output → input
         if from_socket.port.is_input and to_socket.port.is_output:
             from_socket, to_socket = to_socket, from_socket
@@ -382,7 +368,7 @@ class DiagramScene(QGraphicsScene):
                 to_port_id=to_socket.port.port_id,
             )
 
-        # Create EdgeItem with scene's default drawer (WPF: diagram.LinkDrawer)
+        # Create EdgeItem with scene's default drawer
         edge = EdgeItem(from_socket, to_socket, link, drawer=self._link_drawer)
         edge.setZValue(LayerZ.LINK)
 
@@ -390,7 +376,7 @@ class DiagramScene(QGraphicsScene):
         self.addItem(edge)
         self._edge_items[link.link_id] = edge
 
-        # Register with sockets AFTER scene.addItem (WPF: LinkLayer.Children.Add then wire up)
+        # Register with sockets AFTER scene.addItem
         from_socket.add_edge(edge)
         to_socket.add_edge(edge)
 
@@ -420,11 +406,11 @@ class DiagramScene(QGraphicsScene):
         return list(self._edge_items.values())
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # WPF Layout: DoLayoutPort / DoLayoutLink
+    # DoLayoutPort / DoLayoutLink
     # ═══════════════════════════════════════════════════════════════════════════
 
     def _do_layout_port(self, node_item: NodeItem):
-        """Position sockets evenly along each edge — WPF Layout.DoLayoutPort()."""
+        """Position sockets evenly along each edge"""
         ports_by_dock: dict[PortDock, list[SocketItem]] = {}
         for sock in node_item.sockets:
             ports_by_dock.setdefault(sock.port.dock, []).append(sock)
@@ -451,7 +437,7 @@ class DiagramScene(QGraphicsScene):
                 sock.setPos(QPointF(x, y))
 
     def _do_layout_link(self, edge: EdgeItem):
-        """Compute start/end from port positions and rebuild path — WPF Layout.DoLayoutLink()."""
+        """Compute start/end from port positions and rebuild path """
         if edge.from_socket is None or edge.to_socket is None:
             return
         start = edge.from_socket.get_center_scene_pos()
@@ -461,7 +447,7 @@ class DiagramScene(QGraphicsScene):
         edge._rebuild()
 
     def _relayout_links_for_node(self, node_item: NodeItem):
-        """Update all edges connected to a node — WPF Layout.DoLayoutLink(node)."""
+        """Update all edges connected to a node """
         node_id = node_item.node_data.node_id
         for edge in self._edge_items.values():
             if (edge.from_socket and edge.from_socket.port.node_id == node_id) or \
@@ -472,11 +458,11 @@ class DiagramScene(QGraphicsScene):
         self._do_layout_port(node_item)
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # WPF DynamicLayer: Drag-to-connect with reusable singleton preview
+    # Drag-to-connect with reusable singleton preview
     # ═══════════════════════════════════════════════════════════════════════════
 
     def _init_dynamic_edge(self):
-        """Lazy-create the single reusable preview edge (WPF _dynamicLink singleton)."""
+        """Lazy-create the single reusable preview edge"""
         if self._dynamic_edge is not None:
             return
         self._dynamic_edge = EdgeItem()
@@ -487,7 +473,7 @@ class DiagramScene(QGraphicsScene):
         self.addItem(self._dynamic_edge)
 
     def start_edge_drag(self, from_socket: SocketItem):
-        """WPF PortLinkBehavior.Init → InitDynamic."""
+        """PortLinkBehavior.Init → InitDynamic."""
         # Only output/both ports can start connections
         if not from_socket.port.is_output:
             return
@@ -526,7 +512,7 @@ class DiagramScene(QGraphicsScene):
         self._commit_timer.start()
 
     def _do_pending_commit(self):
-        """WPF Dispatcher.BeginInvoke callback — delayed edge creation."""
+        """Dispatcher.BeginInvoke callback — delayed edge creation."""
         fs = self._pending_from
         ts = self._pending_to
         self._pending_from = None
@@ -535,7 +521,7 @@ class DiagramScene(QGraphicsScene):
             self._commit_edge(fs, ts)
 
     def _commit_edge(self, from_socket: SocketItem, to_socket: SocketItem):
-        """Delayed edge creation — WPF Dispatcher.BeginInvoke(Create(port))."""
+        """Delayed edge creation"""
         try:
             cmd = AddLinkCommand(self, from_socket, to_socket)
             result = self._cmd_stack.execute(cmd)
@@ -547,7 +533,7 @@ class DiagramScene(QGraphicsScene):
             self.status_message.emit(f"连线异常: {e}")
 
     def _find_socket_at(self, scene_pos: QPointF, exclude: SocketItem = None) -> SocketItem | None:
-        """Hit-test for sockets at scene position — WPF VisualTreeHelper.HitTest equivalent."""
+        """Hit-test for sockets at scene position"""
         exclude_node_id = exclude.port.node_id if exclude else None
         for node_item in self._node_items.values():
             socket = node_item.get_socket_at(scene_pos)
@@ -728,7 +714,7 @@ class DiagramScene(QGraphicsScene):
     # ═══════════════════════════════════════════════════════════════════════════
 
     def on_workflow_state_changed(self, node_id: str, state: str):
-        """Update node AND connected edges to reflect execution state — WPF State triggers."""
+        """Update node AND connected edges to reflect execution state"""
         item = self._node_items.get(node_id)
         if item is None:
             return
@@ -741,7 +727,7 @@ class DiagramScene(QGraphicsScene):
         ns = state_map.get(state, NodeState.IDLE)
         item.set_state(ns)
 
-        # Update connected edges — WPF Link DataTriggers (State=Running/Success/Error)
+        # Update connected edges
         edge_state_map = {
             "running": EdgeState.RUNNING,
             "completed": EdgeState.SUCCESS,
@@ -755,7 +741,7 @@ class DiagramScene(QGraphicsScene):
                 edge.set_state(es)
 
     def on_link_state_changed(self, link_id: str, state: str):
-        """Update an individual link's edge visual state (WPF Link DataTrigger)."""
+        """Update an individual link's edge visual state"""
         edge = self._edge_items.get(link_id)
         if edge is None:
             return
@@ -768,7 +754,7 @@ class DiagramScene(QGraphicsScene):
         edge.set_state(es)
 
     def on_port_state_changed(self, node_id: str, port_id: str, state: str):
-        """Update a socket's visual state (WPF Port DataTrigger)."""
+        """Update a socket's visual state"""
         node_item = self._node_items.get(node_id)
         if node_item is None:
             return

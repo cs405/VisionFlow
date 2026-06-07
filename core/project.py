@@ -1,9 +1,5 @@
 """Project management - multi-diagram projects with save/load/template support.
 
-Ported from H.VisionMaster.Project (VisionProjectItemBase, IVisionProjectItem,
-VisionProjectService) and H.Modules.Project (ProjectServiceBase).
-
-Key WPF alignment:
   - DiagramDatas: ObservableCollection<IVisionDiagramData> → ProjectItem.diagrams (list)
   - SelectedDiagramData → ProjectItem.selected_diagram / selected_diagram_index
   - AddDiagram / DeleteDiagram / DuplicationDiagram / RunView commands
@@ -34,7 +30,6 @@ if TYPE_CHECKING:
 class DiagramData:
     """A single diagram/workflow within a project.
 
-    Mirrors WPF VisionDiagramDataBase / IVisionDiagramData.
     Each diagram has its own workflow, name, dimensions, and canvas location.
     """
 
@@ -103,10 +98,6 @@ class DiagramData:
 
 class ProjectItem:
     """A project containing a collection of diagrams/workflows.
-
-    Ported from C# IVisionProjectItem / VisionProjectItemBase.
-    Mirrors WPF: DiagramDatas (ObservableCollection) → diagrams (list)
-                SelectedDiagramData → selected_diagram
     """
 
     def __init__(self, name: str = "新建项目", file_path: str = ""):
@@ -117,13 +108,13 @@ class ProjectItem:
         self.version: str = "2.0.0"
         self.description: str = ""
         self.author: str = ""
-        # Multi-diagram support (mirrors WPF DiagramDatas)
+        # Multi-diagram support
         self.diagrams: list[DiagramData] = []
         self._selected_diagram_index: int = 0
-        # Template storage (mirrors WPF DiagramTemplates)
+        # Template storage
         self._templates: list[DiagramData] = []
 
-    # -- Diagram management (mirrors WPF commands) --
+    # -- Diagram management --
 
     @property
     def selected_diagram(self) -> DiagramData | None:
@@ -151,7 +142,7 @@ class ProjectItem:
             self._selected_diagram_index = value
 
     def add_diagram(self, name: str = None) -> DiagramData:
-        """Add a new empty diagram (mirrors WPF AddDiagramCommand)."""
+        """Add a new empty diagram."""
         from core.workflow import WorkflowEngine
 
         idx = len(self.diagrams) + 1
@@ -163,7 +154,7 @@ class ProjectItem:
         return d
 
     def delete_diagram(self, diagram: DiagramData = None) -> bool:
-        """Delete a diagram (mirrors WPF DeleteDiagramCommand)."""
+        """Delete a diagram."""
         d = diagram or self.selected_diagram
         if d is None or len(self.diagrams) <= 1:
             return False
@@ -173,7 +164,7 @@ class ProjectItem:
         return True
 
     def duplicate_diagram(self, diagram: DiagramData = None) -> DiagramData | None:
-        """Duplicate a diagram (mirrors WPF DuplicationDiagramCommand)."""
+        """Duplicate a diagram."""
         src = diagram or self.selected_diagram
         if src is None:
             return None
@@ -197,11 +188,11 @@ class ProjectItem:
                 return d
         return None
 
-    # -- Template management (mirrors WPF DiagramTemplates) --
+    # -- Template management--
 
     def save_diagram_as_template(self, diagram: DiagramData = None,
                                    name: str = None) -> DiagramData:
-        """Save a diagram as a reusable template (WPF SaveAsDiagramTemplateCommand)."""
+        """Save a diagram as a reusable template."""
         src = diagram or self.selected_diagram
         if src is None:
             raise ValueError("No diagram selected")
@@ -222,7 +213,7 @@ class ProjectItem:
 
     @property
     def can_delete_diagram(self) -> bool:
-        """Whether the selected diagram can be deleted (mirrors WPF CanExecute)."""
+        """Whether the selected diagram can be deleted."""
         return self.selected_diagram is not None and len(self.diagrams) > 1
 
     def delete_selected_diagram(self) -> DiagramData | None:
@@ -285,7 +276,6 @@ class ProjectItem:
 class ProjectService:
     """Service for saving/loading multi-diagram project files (.json).
 
-    Ported from C# VisionProjectService + ProjectServiceBase.
     Supports: multi-diagram projects, recent projects persistence, templates.
     """
 
@@ -302,7 +292,7 @@ class ProjectService:
         self._load_recent_projects()
         self._templates: list[DiagramData] = []
 
-    # ── Template persistence (WPF: diagramtemplates.json) ──
+    # ── Template persistence ──
 
     @property
     def _template_file(self) -> str:
@@ -335,7 +325,7 @@ class ProjectService:
         with open(self._template_file, "w", encoding="utf-8") as f:
             f.write(json_str)
 
-    # -- Recent projects (QSettings persistence, mirrors WPF ProjectServiceBase) --
+    # -- Recent projects (QSettings persistence) --
 
     @property
     def recent_projects(self) -> list[str]:
@@ -530,7 +520,7 @@ class ProjectService:
 
         return project
 
-    # -- Project CRUD (mirrors WPF ProjectServiceBase) --
+    # -- Project CRUD --
 
     def close_project(self):
         self.current_project = None

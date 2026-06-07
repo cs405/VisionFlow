@@ -1,6 +1,5 @@
 """ROI editor dialog - rectangle, rotated rectangle, and circle ROI types.
 
-Ported from WPF H.Controls.ROIBox (rect/rotated-rect/circle drawing).
 Provides canvas-based region selection with numeric fine-tuning controls
 and three ROI shape types.
 """
@@ -28,7 +27,6 @@ _ROI_TYPE_CIRCLE = "圆形"
 class RoiEditorDialog(QDialog):
     """ROI editor supporting rectangle, rotated rectangle, and circle shapes.
 
-    Mirrors WPF ROIBox with rectangular, rotated-rect, and circle ROI types.
     """
 
     def __init__(self, image: np.ndarray | None = None,
@@ -271,7 +269,7 @@ class RoiEditorDialog(QDialog):
             self.set_rect(((w - sz) // 2, (h - sz) // 2, sz, sz))
 
     def toggle_fullscreen(self):
-        """Toggle full-screen mode (WPF DrawROI '全屏绘制' button)."""
+        """Toggle full-screen mode (DrawROI '全屏绘制' button)."""
         if self._fullscreen:
             self.showNormal()
             self._fullscreen = False

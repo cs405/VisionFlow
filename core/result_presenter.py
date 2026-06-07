@@ -1,7 +1,5 @@
 """Result presenter - structured result items for node execution outputs.
 
-Ported from H.VisionMaster.ResultPresenter/* (DataGridResultPresenter, ValueResultPresenter).
-
 Defines the result item hierarchy:
   - ResultItem: base value result (name, value, type)
   - RectangleResultItem: bounding box with position/size
@@ -31,7 +29,6 @@ class ResultItemType(Enum):
 class ResultItem:
     """Base result item with name and value.
 
-    Ported from C# ValueResultPresenter / IResultPresenter.
     """
     name: str
     value: Any = None
@@ -53,7 +50,6 @@ class ResultItem:
 class RectangleResultItem(ResultItem):
     """A rectangle/bounding box result.
 
-    Ported from C# RectangleResultItem / DataGridResultPresenter.
     Geometry: (x, y, width, height) in image coordinates.
     """
     x: float = 0.0
@@ -78,7 +74,6 @@ class RectangleResultItem(ResultItem):
 class LineResultItem(ResultItem):
     """A line segment result.
 
-    Ported from C# LineResultItem.
     """
     x1: float = 0.0
     y1: float = 0.0
@@ -102,7 +97,6 @@ class LineResultItem(ResultItem):
 class ScoreRectangleResultItem(RectangleResultItem):
     """A bounding box with confidence score.
 
-    Ported from C# ScoreRectangleResultItem.
     """
     score: float = 0.0
 
@@ -139,11 +133,7 @@ class TableResultItem(ResultItem):
 
 @dataclass
 # ═══════════════════════════════════════════════════════════════════════════
-# WPF "历史结果" (History Results) 实现细节
-#
-# 源码：WPF-VisionMaster/Source/VisionMaster/H.VisionMaster.DiagramData/
-#       VisionDiagramDataBase.cs + VisionMessage.cs + IVisionMessage.cs
-#       + 依赖：H.Extensions.Revertible (IRevertibleService / IRevertible)
+# "历史结果" (History Results) 实现细节
 #
 # 核心架构（三层解耦）：
 #
@@ -202,7 +192,7 @@ class TableResultItem(ResultItem):
 #
 # VisionFlow 适配策略:
 #   - VisionMessage dataclass (pure data, 无 Qt 依赖) → core/result_presenter.py
-#   - Messages 集合存储在 WorkflowEngine 上 (WPF: DiagramData) ← 关键解耦
+#   - Messages 集合存储在 WorkflowEngine 上  ← 关键解耦
 #   - WorkflowEngine.on_node_completed() 替代 OnInvokedPart
 #   - ResultPanel 从 active workflow 读取 messages，不拥有数据
 #   - UseInvokedPart → VisionNodeData.use_invoked_part Property
@@ -212,13 +202,13 @@ class TableResultItem(ResultItem):
 
 @dataclass
 class VisionMessage:
-    """WPF IVisionMessage / VisionMessage 1:1 port.
+    """ IVisionMessage / VisionMessage 1:1 port.
 
     Stored on the ResultPanel (or DiagramData) for history table display.
     """
     index: int = 0
-    time_span: str = ""             # formatted time string (WPF: TimeSpan)
-    type_name: str = ""             # module name (WPF: Type)
+    time_span: str = ""             # formatted time string
+    type_name: str = ""             # module name
     message: str = ""               # result text
     state: str = "Success"          # "Success" / "Error" / "Running"
     result_image_source: Any = None  # numpy array for image display
@@ -230,7 +220,6 @@ class VisionMessage:
 class NodeResult:
     """Complete set of results from a single node execution.
 
-    Ported from C# VisionDiagramData's result collection.
     """
     node_id: str = ""
     node_name: str = ""
@@ -282,13 +271,12 @@ class NodeResult:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Result Presenters — ported from WPF H.VisionMaster.ResultPresenter/*
+# Result Presenters
 # ═══════════════════════════════════════════════════════════════════════════
 
 class ValueResultPresenter:
     """Presents individual value items as key-value pairs.
 
-    Ported from C# ValueResultPresenter.
     Generates rows suitable for a 2-column table (Property | Value).
     """
 
@@ -320,7 +308,6 @@ class ValueResultPresenter:
 class DataGridResultPresenter:
     """Presents structured result items with geometry data for grid display.
 
-    Ported from C# DataGridResultPresenter.
     Generates rows with columns: Name | Value | X | Y | Width | Height | Score.
     Supports image viewer linkage via geometry coordinates.
     """

@@ -1,15 +1,4 @@
-"""Toolbox panel — WPF GridSplitterBox + GroupBox "流程资源" 1:1 port.
-
-Aligns with WPF MainWindow.xaml left-side panel:
-  - GridSplitterBox wrapper (Mode=Extend, IsExpanded=False)
-  - Width-threshold dual-mode at 90px:
-    - Wide (>90px): GroupBox "流程资源" with tree/grid toggle + search + favorites
-    - Narrow (≤90px): compact vertical icon-only list
-  - ToggleButton (AlignLeft ⇄ CaretBottomRightSolidCenter8) switches tree/grid
-  - Favorites via QSettings persistence
-  - Search filtering
-  - Recent nodes tracking
-  - Drag-to-canvas support in both grid and tree modes
+"""Toolbox panel — GridSplitterBox + GroupBox "流程资源" 1:1 port.
 """
 
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -139,14 +128,14 @@ class _NodeTileButton(QFrame):
         super().mouseDoubleClickEvent(event)
 
 
-# ── Narrow mode: group icon buttons + popup (WPF ContextMenuPresenter) ──────
+# ── Narrow mode: group icon buttons + popup ──────
 
 # Track currently-active narrow popup for mutual exclusion
 _active_popup_button = None
 
 
 class _DraggableCard(QPushButton):
-    """Popup node card with click-select and drag-to-canvas (WPF StyleNodeDataBase)."""
+    """Popup node card with click-select and drag-to-canvas"""
 
     def __init__(self, type_name: str, display_name: str, color: str, icon: str, parent=None):
         super().__init__(parent)
@@ -218,12 +207,7 @@ class _DraggableCard(QPushButton):
 
 
 class _NarrowGroupPopup(QFrame):
-    """Popup matching WPF ContextMenu + GroupBox with CaptionRightTemplate.
-
-    WPF structure:
-      GroupBox Header=\"{Binding Name}\" (name left)
-        CaptionRightTemplate → icon (right)
-        UniformGrid Columns=\"2\" → node items
+    """Popup
     """
 
     node_type_selected = pyqtSignal(str)
@@ -239,7 +223,7 @@ class _NarrowGroupPopup(QFrame):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Header: group name (left) + icon (right) — WPF CaptionRightTemplate
+        # Header: group name (left) + icon (right)
         header = QWidget()
         header.setStyleSheet("background: #353538; border-radius: 6px 6px 0 0;")
         hl = QHBoxLayout(header)
@@ -263,7 +247,7 @@ class _NarrowGroupPopup(QFrame):
 
         layout.addWidget(header)
 
-        # 2-column grid — WPF UniformGrid Columns="2"
+        # 2-column grid
         body = QWidget()
         body.setStyleSheet("background: #2d2d30; border-radius: 0 0 6px 6px;")
         bl = QVBoxLayout(body)
@@ -285,17 +269,14 @@ class _NarrowGroupPopup(QFrame):
         self.adjustSize()
 
     def _make_node_card(self, m: dict) -> QPushButton:
-        """WPF StyleNodeDataBase card: drag-to-canvas only."""
+        """StyleNodeDataBase card: drag-to-canvas only."""
         btn = _DraggableCard(m["type_name"], m["display_name"], m["color"], m["icon"])
         btn.clicked.connect(lambda: self.close())
         return btn
 
 
 class _NarrowGroupButton(QPushButton):
-    """Group-icon button for narrow mode — 1:1 WPF FontIconToggleButton.
-
-    WPF: <FontIconToggleButton Margin=\"0,5\" FontSize=\"25\"
-             UncheckedGlyph=\"{Binding Icon}\" />
+    """Group-icon button for narrow mode
 
     No border, no background — just the icon glyph at large font size.
     Mutual exclusion: only one button's popup is open at a time.
@@ -370,10 +351,10 @@ class _NarrowGroupButton(QPushButton):
         return super().eventFilter(obj, event)
 
 
-# ── Flow layout (WPF WrapPanel port) ────────────────────────────────────────
+# ── Flow layout ────────────────────────────────────────
 
 class FlowLayout(QLayout):
-    """Horizontal flow layout — items wrap to next row (WPF WrapPanel)."""
+    """Horizontal flow layout — items wrap to next row"""
 
     def __init__(self, parent=None, margin=0, h_spacing=8, v_spacing=8):
         super().__init__(parent)
@@ -444,14 +425,14 @@ class FlowLayout(QLayout):
         return y + line_h - rect.y() + m.bottom()
 
 
-# ── Collapsible group section (WPF Expander port) ────────────────────────────
+# ── Collapsible group section ────────────────────────────
 
 class _CollapsibleGroup(QWidget):
-    """Collapsible group panel matching WPF Expander.
+    """Collapsible group panel
 
     Header: expand arrow + icon + group name, clickable.
     Body: FlowLayout of _NodeTileButton, hidden when collapsed.
-    WPF default: IsExpanded=\"False\".
+    default: IsExpanded=\"False\".
     """
 
     def __init__(self, group_name: str, icon: str, color: str,
@@ -463,7 +444,7 @@ class _CollapsibleGroup(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # ── Header (clickable toggle) — WPF Expander with CaptionRightTemplate ──
+        # ── Header (clickable toggle) ──
         self._header = QPushButton()
         self._header.setFlat(True)
         self._header.setCursor(Qt.PointingHandCursor)
@@ -508,7 +489,7 @@ class _CollapsibleGroup(QWidget):
 
         layout.addWidget(self._header)
 
-        # ── Body (collapsible, 2-column grid — WPF UniformGrid Columns=2) ──
+        # ── Body (collapsible, 2-column grid ──
         self._body = QWidget()
         self._body.setStyleSheet("background: transparent;")
         self._body_grid = QGridLayout(self._body)
@@ -549,7 +530,7 @@ class _DraggableTreeWidget(QTreeWidget):
 # ═══════════════════════════════════════════════════════════════════════════
 
 class ToolboxPanel(QWidget):
-    """WPF-aligned left panel: GridSplitterBox wrapper with wide/narrow modes.
+    """aligned left panel: GridSplitterBox wrapper with wide/narrow modes.
 
     Public API (backward-compatible with existing MainWindow usage):
       - node_type_selected signal
@@ -711,7 +692,7 @@ class ToolboxPanel(QWidget):
         self._grid_scroll.setWidget(self._grid_content)
         vf_layout.addWidget(self._grid_scroll)
 
-        # Narrow mode (compact vertical icon list — WPF ContextMenu presenter)
+        # Narrow mode (compact vertical icon list — ContextMenu presenter)
         self._narrow_widget = QWidget()
         self._narrow_layout = QVBoxLayout(self._narrow_widget)
         self._narrow_layout.setContentsMargins(0, 20, 0, 0)
@@ -775,11 +756,11 @@ class ToolboxPanel(QWidget):
     def _apply_view(self):
         """Show the correct view based on width + toggle state.
 
-        WPF DataTrigger: MenuWidth < 90 → hide GroupBox, show icon bar.
+        DataTrigger: MenuWidth < 90 → hide GroupBox, show icon bar.
         """
         w = self.width()
         if w <= WIDTH_THRESHOLD:
-            # Narrow: hide header + search, show only group icon bar (WPF ContextMenu)
+            # Narrow: hide header + search, show only group icon bar (ContextMenu)
             self._header.hide()
             self._search_box.hide()
             self._tree.hide()
@@ -933,7 +914,7 @@ class ToolboxPanel(QWidget):
         self._grid_layout.addStretch(1)
 
     def _build_grid_group(self, group_name: str, metas: list[dict]) -> int:
-        """Build a collapsible group section (WPF Expander + WrapPanel)."""
+        """Build a collapsible group section (Expander + WrapPanel)."""
         if not metas:
             return 0
         meta = _group_meta(group_name)
@@ -953,7 +934,7 @@ class ToolboxPanel(QWidget):
         return len(metas)
 
     def _refresh_narrow(self):
-        """Build compact group-icon list (WPF ContextMenuPresenter).
+        """Build compact group-icon list (ContextMenuPresenter).
 
         One button per node group. Clicking a group icon opens a popup
         showing that group's nodes in a 2-column grid.
@@ -990,7 +971,7 @@ class ToolboxPanel(QWidget):
         return self._selected_type
 
     def _refresh_qss(self):
-        """Re-apply panel QSS on theme change — WPF DynamicResource refresh."""
+        """Re-apply panel QSS on theme change — DynamicResource refresh."""
         tm = theme_manager
         if hasattr(self, '_search_box'):
             self._search_box.setStyleSheet(

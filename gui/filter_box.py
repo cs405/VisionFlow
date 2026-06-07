@@ -1,6 +1,5 @@
 """Filter box - text search and column filtering for data tables.
 
-Ported from WPF H.Controls.FilterBox / H.Controls.FilterColumnDataGrid.
 Provides a compact filter bar with:
   - Full-text search across all columns
   - Column-specific filter fields

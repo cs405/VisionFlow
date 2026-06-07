@@ -1,10 +1,8 @@
 """Dock manager - QDockWidget-based panel docking with float/auto-hide.
 
-Ported from H.Controls.Dock + H.Controls.GridSplitterBox.
-
 Provides:
   - QDockWidget-based docking (float/dock/tabify)
-  - Auto-hide when panel is narrow (WPF GridSplitterBox behavior)
+  - Auto-hide when panel is narrow
   - QSettings persistence for positions and sizes
   - Panel show/hide with animation-like state transitions
 """

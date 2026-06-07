@@ -1,20 +1,17 @@
-"""Node list view — WPF 流程资源 panel 1:1 port.
-
-Compound widget matching WPF MainWindow.xaml GroupBox "流程资源" + dual-view pattern:
-
+"""Node list view
 Wide mode (>90px):
   ┌─────────────────────────────┐
-  │ 流程资源            [≡|⊞]  │  ← header + FontIconToggleButton (tree/grid)
+  │ 流程资源            [≡|⊞]    │  ← header + FontIconToggleButton (tree/grid)
   ├─────────────────────────────┤
-  │ 🔍 搜索模块...              │  ← search bar
+  │ 🔍 搜索模块...               │  ← search bar
   ├─────────────────────────────┤
-  │ ★ 收藏                     │  ← favorites section
+  │ ★ 收藏                      │  ← favorites section
   │   [icon] [icon] ...         │
-  │ 图像数据源                  │  ← groups
+  │ 图像数据源                    │  ← groups
   │   [icon] [icon] ...         │
   │ ...                         │
   ├─────────────────────────────┤
-  │  5 个分组 · 32 个节点 ★ 3  │  ← stats footer
+  │  5 个分组 · 32 个节点 ★ 3    │  ← stats footer
   └─────────────────────────────┘
 
 Narrow mode (≤90px):
@@ -42,7 +39,7 @@ from core.node_base import NodeBase
 from gui.font_icons import FontIcons, FontIconTextBlock, FontIconToggleButton, icon_font
 
 
-# ── Group metadata matching WPF colors ─────────────────────────────────────
+# ── Group metadata ─────────────────────────────────────
 
 GROUP_META = {
     "图像数据源":   {"color": "#4a9eff", "icon": FontIcons.Photo2},

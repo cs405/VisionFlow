@@ -1,7 +1,5 @@
 """Node registry - quick lookup and instantiation of node types.
 
-Ported from the C# pattern of discovering INodeData implementations via assembly scanning.
-In Python, we use explicit registration + decorators.
 """
 
 from typing import Type, Callable
@@ -13,7 +11,6 @@ class NodeRegistry:
     """Central registry for node types.
 
     Maps node type names -> node classes for instantiation.
-    Supports Python's duck typing instead of C# marker interfaces.
     """
 
     def __init__(self):

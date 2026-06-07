@@ -1,6 +1,4 @@
 """Video file source - reads frames from a video file.
-
-Ported from H.VisionMaster.OpenCV/NodeDatas/1 - Src/SrcVideoFilesNodeData.cs
 """
 
 import os
@@ -15,7 +13,6 @@ from core.workflow import WorkflowEngine
 class SrcVideoFilesNodeData(SrcFilesVisionNodeData, OpenCVNodeDataBase):
     """Reads video frames as image source.
 
-    Mirrors C# SrcVideoFilesNodeData : VideoCaptureNodeDataBase.
     """
     __group__ = "图像数据源"
 

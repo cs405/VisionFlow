@@ -1,6 +1,5 @@
 """Start page - welcome screen with recent projects and quick actions.
 
-Ported from WPF H.Modules.Project (ProjectViewPresenter, ProjectListViewPresenter).
 Shown when no project is open, with:
   - Logo / app title
   - New Project / Open Project buttons

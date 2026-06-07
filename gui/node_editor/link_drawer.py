@@ -1,9 +1,7 @@
-"""ILinkDrawer — WPF ILinkDrawer / BrokenLinkDrawer / BezierLinkDrawer / LineLinkDrawer 1:1 port.
+"""ILinkDrawer —  ILinkDrawer / BrokenLinkDrawer / BezierLinkDrawer / LineLinkDrawer 1:1 port.
 
 Strategy pattern for computing link geometry from start/end points and port docks.
-Decoupled from EdgeItem — replaceable per Diagram (like WPF Diagram.LinkDrawer).
-
-WPF default: BrokenLinkDrawer (orthogonal折线) — see Diagram.RefreshLinkDrawer().
+Decoupled from EdgeItem — replaceable per Diagram
 """
 
 import math
@@ -15,11 +13,11 @@ ARROW_SIZE = 8.0
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# ILinkDrawer — WPF ILinkDrawer interface
+# ILinkDrawer
 # ═══════════════════════════════════════════════════════════════════════════
 
 class ILinkDrawer:
-    """Abstract link geometry strategy (WPF ILinkDrawer)."""
+    """Abstract link geometry strategy."""
 
     def draw_path(self, start: QPointF, end: QPointF,
                   from_dock: PortDock = PortDock.BOTTOM,
@@ -27,7 +25,7 @@ class ILinkDrawer:
         raise NotImplementedError
 
     def arrow(self, start: QPointF, end: QPointF) -> QPolygonF:
-        """Arrowhead at end point — WPF GetArrowPoints using rotation matrix.
+        """Arrowhead at end point
 
         Returns an empty polygon for degenerate (near-zero-length) inputs.
         """
@@ -48,13 +46,13 @@ class ILinkDrawer:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Port.ChangedPoint — WPF Port.ChangedPoint(Point, double)
+# Port.ChangedPoint
 # ═══════════════════════════════════════════════════════════════════════════
 
 def changed_point(pos: QPointF, dock: PortDock, span: float) -> QPointF:
-    """Offset a point along its dock direction by span — WPF Port.ChangedPoint().
+    """Offset a point along its dock direction by span
 
-    This is how WPF computes the "inner point" that the broken line starts
+    This is how computes the "inner point" that the broken line starts
     from before bending. The direction depends on which side of the node
     the port is on.
     """
@@ -70,11 +68,11 @@ def changed_point(pos: QPointF, dock: PortDock, span: float) -> QPointF:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# LineLinkDrawer — WPF LineLinkDrawer (straight line)
+# LineLinkDrawer
 # ═══════════════════════════════════════════════════════════════════════════
 
 class LineLinkDrawer(ILinkDrawer):
-    """Straight line (WPF LineLinkDrawer)."""
+    """Straight line."""
 
     def draw_path(self, start, end, from_dock=PortDock.BOTTOM, to_dock=PortDock.TOP):
         path = QPainterPath()
@@ -84,11 +82,11 @@ class LineLinkDrawer(ILinkDrawer):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# BezierLinkDrawer — WPF BezierLinkDrawer (cubic bezier curve)
+# BezierLinkDrawer
 # ═══════════════════════════════════════════════════════════════════════════
 
 class BezierLinkDrawer(ILinkDrawer):
-    """Cubic Bezier with port-dock-aware control points (WPF BezierLinkDrawer)."""
+    """Cubic Bezier with port-dock-aware control points"""
 
     def __init__(self, span: float = 50.0):
         self.span = span
@@ -106,13 +104,13 @@ class BezierLinkDrawer(ILinkDrawer):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# BrokenLinkDrawer (DEFAULT) — WPF BrokenLinkDrawer 1:1 port
+# BrokenLinkDrawer (DEFAULT)
 # ═══════════════════════════════════════════════════════════════════════════
 
 class BrokenLinkDrawer(ILinkDrawer):
-    """Orthogonal link routing — 1:1 port of WPF BrokenLinkDrawer.
+    """Orthogonal link routing.
 
-    Algorithm (matching WPF exactly):
+    Algorithm:
       1. Compute inner1/2 via Port.ChangedPoint(start/end, InnerSpan)
       2. Test two crossing candidates: cross1(inner1.x, inner2.y) and cross2(inner2.x, inner1.y)
       3. Check if each crossing lies on the segment from start->inner1 or end->inner2
@@ -125,7 +123,7 @@ class BrokenLinkDrawer(ILinkDrawer):
         self.inner_span = inner_span
 
     def _on_segment(self, p1: QPointF, p2: QPointF, q: QPointF) -> bool:
-        """WPF OnSegment — is point Q on line segment P1-P2?"""
+        """ OnSegment — is point Q on line segment P1-P2?"""
         # Cross-product check: (Q-P1) × (P2-P1) == 0 means collinear
         cross = (q.x() - p1.x()) * (p2.y() - p1.y()) - \
                 (p2.x() - p1.x()) * (q.y() - p1.y())
@@ -136,7 +134,7 @@ class BrokenLinkDrawer(ILinkDrawer):
                 min(p1.y(), p2.y()) - 0.001 <= q.y() <= max(p1.y(), p2.y()) + 0.001)
 
     def _bend_count(self, points: list) -> int:
-        """WPF GetBrokenCount — count direction changes in polyline."""
+        """ GetBrokenCount — count direction changes in polyline."""
         bends = 0
         for i in range(2, len(points)):
             p1, p2, c = points[i - 2], points[i - 1], points[i]
@@ -146,7 +144,7 @@ class BrokenLinkDrawer(ILinkDrawer):
         return bends
 
     def _center(self, points: list) -> QPointF:
-        """WPF GetCenter — find the center of the polyline for label placement."""
+        """ GetCenter — find the center of the polyline for label placement."""
         if not points:
             return QPointF()
         # All vertical
@@ -173,7 +171,7 @@ class BrokenLinkDrawer(ILinkDrawer):
         return path
 
     def draw_path(self, start, end, from_dock=PortDock.BOTTOM, to_dock=PortDock.TOP):
-        """WPF BrokenLinkDrawer.DrawPath — full orthogonal routing algorithm."""
+        """ BrokenLinkDrawer.DrawPath — full orthogonal routing algorithm."""
         inner1 = changed_point(start, from_dock, self.inner_span)
         inner2 = changed_point(end, to_dock, self.inner_span)
 

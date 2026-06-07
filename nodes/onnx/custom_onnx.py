@@ -1,6 +1,4 @@
 """Custom ONNX nodes - preconfigured for specific models.
-
-Ported from H.App.VisionMaster.OpenCV/NodeDatas/ (5 specialized ONNX nodes).
 """
 
 import cv2

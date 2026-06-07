@@ -1,7 +1,5 @@
 """Workflow engine - orchestrates node graph execution.
 
-Ported from H.Controls.Diagram.Presenter + H.Controls.Diagram.Presenters.Workflow.
-
 Handles:
   - Node graph topology (nodes + links)
   - Topological sort for execution order
@@ -33,20 +31,20 @@ class WorkflowState(Enum):
     ERROR = auto()
 
     def can_start(self) -> bool:
-        """WPF CanStart: not already running."""
+        """not already running."""
         return self != WorkflowState.RUNNING
 
     def can_stop(self) -> bool:
-        """WPF CanStop: currently running."""
+        """currently running."""
         return self == WorkflowState.RUNNING
 
     def can_reset(self) -> bool:
-        """WPF CanReset: always available."""
+        """ CanReset: always available."""
         return True
 
 
 class DiagramFlowableMode(Enum):
-    """Run mode — controls execution granularity (WPF DiagramFlowableMode)."""
+    """Run mode — controls execution granularity."""
     NODE = 0   # 按节点运行
     LINK = 1   # 按节点+连线运行
     PORT = 2   # 按节点+连线+端口运行
@@ -54,8 +52,6 @@ class DiagramFlowableMode(Enum):
 
 class WorkflowEngine:
     """Manages a node graph and executes it.
-
-    Ported from C# IFlowableDiagramData + DiagramDataBase + FlowableDiagramData.
     Each WorkflowEngine instance represents one diagram/document.
     """
 
@@ -71,11 +67,10 @@ class WorkflowEngine:
         self.result_image_source: Any = None
         self.flowable_mode: DiagramFlowableMode = DiagramFlowableMode.NODE
         self.message: str = ""
-        # WPF: ObservableCollection<IVisionMessage> Messages on DiagramData
         self.messages: list[VisionMessage] = []
         self.current_message: VisionMessage | None = None
         self._messages_lock = threading.Lock()  # protect messages from ThreadPoolExecutor
-        self._history_callbacks: list[Callable] = []  # WPF: PropertyChanged → UI binding
+        self._history_callbacks: list[Callable] = []  # PropertyChanged → UI binding
 
     # -- Node management --
 
@@ -108,10 +103,10 @@ class WorkflowEngine:
     def get_all_nodes(self) -> list[NodeBase]:
         return list(self._nodes.values())
 
-    # ── History Messages (WPF: VisionDiagramDataBase.OnInvokedPart + Messages) ─
+    # ── History Messages ─
 
     def on_history_changed(self, callback: Callable):
-        """Register a callback invoked when Messages changes (WPF: binding equivalent).
+        """Register a callback invoked when Messages changes.
 
         The callback receives no arguments — callers should read get_messages_snapshot().
         Called from any thread; callers should marshal to their target thread as needed.
@@ -127,7 +122,7 @@ class WorkflowEngine:
                 pass
 
     def on_node_completed(self, node: VisionNodeData, state: str, time_span: str):
-        """WPF OnInvokedPart(IPartData) equivalent — add/update history message.
+        """ OnInvokedPart(IPartData) equivalent — add/update history message.
 
         Decoupled from UI: WorkflowEngine owns the Messages collection,
         ResultPanel reads from it. Each workflow has its own Messages,
@@ -146,7 +141,7 @@ class WorkflowEngine:
         result_image = getattr(node, '_result_image_source', None)
 
         with self._messages_lock:
-            # WPF: find existing by ResultNodeData match → update (for video/camera nodes)
+            # find existing by ResultNodeData match → update (for video/camera nodes)
             for msg in self.messages:
                 if msg.result_node_data is node:
                     msg.time_span = time_span
@@ -175,7 +170,7 @@ class WorkflowEngine:
             self._notify_history_callbacks()
 
     def _log_current_message_locked(self):
-        """WPF LogCurrentMessage() — caller must hold _messages_lock."""
+        """ LogCurrentMessage() — caller must hold _messages_lock."""
         if not self.messages:
             self.current_message = None
             return
@@ -197,7 +192,7 @@ class WorkflowEngine:
             return list(self.messages)
 
     def clear_messages(self):
-        """Clear history messages (WPF: Messages.Clear() on new run)."""
+        """Clear history messages."""
         with self._messages_lock:
             self.messages.clear()
             self.current_message = None
@@ -369,24 +364,24 @@ class WorkflowEngine:
         self._execution_order = result
         return result
 
-    # -- Execution (mirrors WPF FlowableDiagramDataBase) --
+    # -- Execution --
 
     def can_start(self) -> bool:
-        """WPF CanStart: state can start AND there are flowable nodes."""
+        """ CanStart: state can start AND there are flowable nodes."""
         return self.state.can_start() and len(self._nodes) > 0
 
     def can_stop(self) -> bool:
-        """WPF CanStop: state == Running."""
+        """ CanStop: state == Running."""
         return self.state.can_stop()
 
     def can_reset(self) -> bool:
-        """WPF CanReset: always available."""
+        """ CanReset: always available."""
         return self.state.can_reset()
 
     def get_start_node_data(self) -> NodeBase | None:
         """Find the start node (no upstream connections, has output ports).
 
-        WPF: GetStartNodeDatas() → TryGetStartNodeData<T>().
+         GetStartNodeDatas() → TryGetStartNodeData<T>().
         """
         starts = [n for n in self._nodes.values()
                   if len(n.from_node_datas) == 0
@@ -394,9 +389,9 @@ class WorkflowEngine:
         return starts[0] if starts else None
 
     def start(self) -> FlowableResult:
-        """Execute workflow (WPF StartCommand).
+        """Execute workflow (StartCommand).
 
-        WPF: StartCommand → await this.Start() → InvokeState → Wait → node.Start()
+        StartCommand → await this.Start() → InvokeState → Wait → node.Start()
         Python: guards → get_start_node → execute() on caller's thread.
         """
         if not self.can_start():
@@ -408,7 +403,7 @@ class WorkflowEngine:
     # ═══════════════════════════════════════════════════════════════════════
     # TODO: run_all_images — WPF VisionDiagramDataBase.Start() "运行全部" port
     #
-    # WPF 实现要点（VisionDiagramDataBase.Start(), RunDiagramDataPresenter）：
+    # 实现要点（VisionDiagramDataBase.Start(), RunDiagramDataPresenter）：
     #
     # 1. 找到起始节点，判断是否为 ISrcFilesNodeData
     # 2. 如果 UseAllImage == true：
@@ -527,7 +522,7 @@ class WorkflowEngine:
         return self._execute_node(node)
 
     def stop(self):
-        """Stop execution (WPF: Diagram.State = Canceling → GotoState).
+        """Stop execution.
 
         Sets workflow to STOPPED state. The execute() loop checks
         this flag before processing each level and breaks out.
@@ -538,7 +533,7 @@ class WorkflowEngine:
     def _execute_node(self, node: NodeBase) -> FlowableResult:
         """Execute a single node + surrounding links/ports based on mode.
 
-        WPF recursive chain:  Node → Port → Link → Port → Node
+        recursive chain:  Node → Port → Link → Port → Node
         Python (topo-sort):  execute node, then invoke links/ports per mode.
         """
         self._invoke_count += 1

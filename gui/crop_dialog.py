@@ -1,6 +1,5 @@
 """Template crop dialog - ROI-based image cropping for template creation.
 
-Ported from WPF Base64MatchingNodeData.CropImagePresenter.
 Lets the user select a region on the source image and extracts it as a
 template image that can be used directly or converted to base64 for
 template matching nodes.

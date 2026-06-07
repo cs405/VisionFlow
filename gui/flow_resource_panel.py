@@ -1,18 +1,16 @@
-"""Flow resource panel — WPF 图像源 Expander 1:1 port.
-
-Ported from WPF MainWindow.xaml lines 302-413 (OpenCVSrcFilesNodeDataBase DataTemplate).
+"""Flow resource panel —  图像源 Expander 1:1 port.
 
 Layout (horizontal):
   ┌─────────────────────────────────────────────────┐
   │ 图像源 1/10   [运行全部] [自动切换] [文件][夹][删][清] │ ← header
   ├─────────────────────────────────────────────────┤
-  │ ◀ │ [img1][img2][img3][img4]... │ ▶           │ ← thumbnail strip + page btns
+  │ ◀ │ [img1][img2][img3][img4]... │ ▶             │ ← thumbnail strip + page btns
   └─────────────────────────────────────────────────┘
 
 Features:
   - 75×75 QPixmap thumbnails loaded asynchronously via QThread
   - Horizontal scrolling with Shift+wheel support
-  - Page left/right floating navigation buttons (matches WPF FontIcons.PageLeft/PageRight)
+  - Page left/right floating navigation buttons
   - Selection syncs to main image viewer
   - Double-click opens full-size zoom viewer
   - Toolbar: Add File / Add Folder / Delete / Clear + ToggleButtons
@@ -127,12 +125,12 @@ from gui.theme import theme_manager, connect_theme
 #   - 工具提示 "上一页"/"下一页" 和 "上一张"/"下一张"
 # ═══════════════════════════════════════════════════════════════════════════
 
-# ── Thumbnail constants matching WPF ───────────────────────────────────────
+# ── Thumbnail constants matching  ───────────────────────────────────────
 
-THUMB_SIZE = 75         # WPF: Width="75" Height="75"
+THUMB_SIZE = 75
 THUMB_MARGIN = 2
 STRIP_HEIGHT = 106      # 90 for list + top/bottom padding
-PAGE_BTN_SIZE = 40      # WPF: FontSize="25" — large enough for MDL2 icons
+PAGE_BTN_SIZE = 40
 
 
 # ── Async thumbnail loader ────────────────────────────────────────────────
@@ -211,12 +209,9 @@ class ThumbnailLoader(QThread):
 # ── Thumbnail widget ──────────────────────────────────────────────────────
 
 class ThumbnailButton(QPushButton):
-    """Clickable 75×75 thumbnail matching WPF Image item template.
+    """Clickable 75×75 thumbnail
 
-    WPF: Border Width="75" Height="75" ToolTip="{Binding}"
-         Image Source="{Binding ., Converter={GetImageSourceFromFilePathConverter}}"
-
-    Colors follow theme via connect_theme — WPF {DynamicResource} equivalent.
+    Colors follow theme via connect_theme
     """
 
     clicked_with_path = pyqtSignal(str)
@@ -299,13 +294,7 @@ class ThumbnailButton(QPushButton):
 # ═══════════════════════════════════════════════════════════════════════════
 
 class FlowResourcePanel(QWidget):
-    """WPF-aligned image source panel with thumbnail strip.
-
-    Mirrors the WPF MainWindow.xaml bottom image source area:
-      - Header: title + index + toolbar buttons + toggles
-      - Body: horizontal scrollable 75×75 thumbnail strip
-      - Page left/right overlay navigation buttons
-      - Async thumbnail loading
+    """aligned image source panel with thumbnail strip.
 
     Signals:
         file_selected(str) — emitted when a thumbnail is clicked (= selected)
@@ -350,7 +339,7 @@ class FlowResourcePanel(QWidget):
 
         h_layout.addStretch(1)
 
-        # Toggle buttons (WPF: ToggleButton IsChecked bound to UseAllImage / UseAutoSwitch)
+        # Toggle buttons
         self._run_all_btn = QPushButton("运行全部")
         self._run_all_btn.setCheckable(True)
         self._run_all_btn.setFixedHeight(24)
@@ -374,7 +363,7 @@ class FlowResourcePanel(QWidget):
         sep.setFixedHeight(20)
         h_layout.addWidget(sep)
 
-        # FontIcon action buttons (WPF: AddImageData / AddImageDatas / DeleteImageData / ClearImageDatas commands)
+        # FontIcon action buttons
         # QSS regenerated in _refresh_header_qss(); initial style set here
         self._add_file_btn = FontIconButton(FontIcons.OpenFile, tooltip="添加文件", font_size=13)
         self._add_file_btn.clicked.connect(self._add_files)
@@ -386,12 +375,12 @@ class FlowResourcePanel(QWidget):
 
         self._del_btn = FontIconButton(FontIcons.Cancel, tooltip="删除", font_size=13)
         self._del_btn.clicked.connect(self._delete_current)
-        self._del_btn.setEnabled(False)  # WPF: CanExecute → disabled when no files
+        self._del_btn.setEnabled(False)
         h_layout.addWidget(self._del_btn)
 
         self._clear_btn = FontIconButton(FontIcons.Delete, tooltip="清空", font_size=13)
         self._clear_btn.clicked.connect(self._clear_files)
-        self._clear_btn.setEnabled(False)  # WPF: CanExecute → disabled when no files
+        self._clear_btn.setEnabled(False)
         h_layout.addWidget(self._clear_btn)
 
         layout.addWidget(self._header_bar)
@@ -404,7 +393,6 @@ class FlowResourcePanel(QWidget):
         strip_layout.setSpacing(0)
 
         # Scroll area holding thumbnails
-        # WPF: ScrollViewer with HorizontalScrollBarVisibility="Auto"
         # Qt: setWidgetResizable(True) fills viewport height; minimumSize controls width
         self._scroll_area = QScrollArea()
         self._scroll_area.setFixedHeight(THUMB_SIZE + 14)
@@ -412,9 +400,9 @@ class FlowResourcePanel(QWidget):
         self._scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self._scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._scroll_area.setFrameShape(QFrame.NoFrame)
-        self._scroll_area.setFocusPolicy(Qt.NoFocus)  # WPF: ScrollViewer Focusable="false"
+        self._scroll_area.setFocusPolicy(Qt.NoFocus)
 
-        # Allow horizontal scroll with Shift+wheel (WPF: ScrollViewerBebavior UseHorizontalMouseWheel)
+        # Allow horizontal scroll with Shift+wheel
         self._scroll_area.wheelEvent = self._scroll_wheel_event
 
         # Thumbnail container widget
@@ -422,13 +410,13 @@ class FlowResourcePanel(QWidget):
         self._thumb_layout = QHBoxLayout(self._thumb_container)
         self._thumb_layout.setContentsMargins(36, 4, 36, 4)  # space for page buttons
         self._thumb_layout.setSpacing(2)
-        self._thumb_layout.setAlignment(Qt.AlignLeft)  # WPF: stack from left, no stretch
+        self._thumb_layout.setAlignment(Qt.AlignLeft)
         # stretch is NOT added here — stretch inside QScrollArea would compress thumbnails
 
         self._scroll_area.setWidget(self._thumb_container)
         strip_layout.addWidget(self._scroll_area)
 
-        # ── Page navigation overlay (WPF: ScrollViewerPageLeft/RightCommand) ──
+        # ── Page navigation overlay ──
         # Font rendered via QSS font-family (setStyleSheet overrides setFont)
         self._page_left_btn = QPushButton(FontIcons.PageLeft)
         self._page_left_btn.setFixedSize(PAGE_BTN_SIZE, PAGE_BTN_SIZE)
@@ -444,7 +432,7 @@ class FlowResourcePanel(QWidget):
         self._page_right_btn.setToolTip("下一页")
         self._page_right_btn.clicked.connect(self._page_right)
 
-        # Overlay page buttons on scroll area (WPF: Margin="5,0" ≈ 2px edge gap)
+        # Overlay page buttons on scroll area
         self._page_left_btn.setParent(self._scroll_area)
         self._page_left_btn.move(2, (self._scroll_area.height() - PAGE_BTN_SIZE) // 2)
         self._page_left_btn.show()
@@ -453,14 +441,14 @@ class FlowResourcePanel(QWidget):
         QTimer.singleShot(100, self._reposition_page_buttons)  # wait for layout
         self._page_right_btn.show()
 
-        # Theme-aware styling — WPF {DynamicResource} equivalent
+        # Theme-aware styling
         connect_theme(self._refresh_all_qss)
 
         layout.addWidget(self._strip_container)
         self.setFixedHeight(STRIP_HEIGHT + 34)
 
     def _refresh_all_qss(self):
-        """Update all hardcoded colors to current theme — WPF {DynamicResource} equivalent."""
+        """Update all hardcoded colors to current theme"""
         tm = theme_manager
         bg_raised = tm.color("bg_surface_raised").name()
         bg_deep = tm.color("bg_surface_deep").name()
@@ -482,7 +470,7 @@ class FlowResourcePanel(QWidget):
             f"color: {text_secondary}; font-size: 11px; background: transparent;"
         )
 
-        # ── Toggle buttons (WPF ToggleButton style) ──
+        # ── Toggle buttons ──
         toggle_qss = f"""
             QPushButton {{
                 background: transparent; border: 1px solid {border}; border-radius: 2px;
@@ -494,7 +482,7 @@ class FlowResourcePanel(QWidget):
         self._run_all_btn.setStyleSheet(toggle_qss)
         self._auto_switch_btn.setStyleSheet(toggle_qss)
 
-        # ── Action buttons (WPF FontIconButton command style) ──
+        # ── Action buttons ──
         action_qss = f"""
             QPushButton {{
                 background: transparent; border: 1px solid transparent; border-radius: 3px;
@@ -510,7 +498,7 @@ class FlowResourcePanel(QWidget):
         # ── Thumbnail strip container ──
         self._strip_container.setStyleSheet(f"background: {bg_deep};")
 
-        # ── Scroll area (WPF: ScrollViewer with BorderBrush template) ──
+        # ── Scroll area ──
         self._scroll_area.setStyleSheet(f"""
             QScrollArea {{ background: {bg_deep}; border: none; }}
             QScrollBar:horizontal {{
@@ -524,7 +512,7 @@ class FlowResourcePanel(QWidget):
             }}
         """)
 
-        # ── Page navigation buttons (WPF FontIconButton overlay) ──
+        # ── Page navigation buttons ──
         # Must declare font-family in QSS — setStyleSheet() overrides setFont()
         page_qss = f"""
             QPushButton {{
@@ -537,7 +525,7 @@ class FlowResourcePanel(QWidget):
         self._page_left_btn.setStyleSheet(page_qss)
         self._page_right_btn.setStyleSheet(page_qss)
 
-    # ── Scroll with Shift+wheel (WPF behavior) ──────────────────────────
+    # ── Scroll with Shift+wheel ──────────────────────────
 
     def _scroll_wheel_event(self, event):
         """Override QScrollArea wheelEvent: Shift+wheel → horizontal scroll."""
@@ -563,7 +551,7 @@ class FlowResourcePanel(QWidget):
         self._page_left_btn.move(2, cy)
         self._page_right_btn.move(pw - PAGE_BTN_SIZE - 2, cy)
 
-    # ── Page navigation (WPF: ScrollViewer.PageLeft / PageRight) ────────────
+    # ── Page navigation ────────────
 
     def _page_left(self):
         """Scroll thumbnail strip left by one viewport width."""
@@ -581,7 +569,6 @@ class FlowResourcePanel(QWidget):
     def set_node(self, node: "SrcFilesVisionNodeData | None"):
         """Bind to a source file node and load its thumbnails.
 
-        WPF: ItemsSource="{Binding SrcFilePaths}" auto-refreshes on binding change.
         VisionFlow: explicit rebuild + showEvent ensures correct sizing.
         """
         self._stop_loader()
@@ -625,7 +612,6 @@ class FlowResourcePanel(QWidget):
     def _refresh_header(self):
         """Update header title, index, toggle state, and action button states.
 
-        WPF: bindings auto-refresh all UI elements.
         VisionFlow: explicit refresh call.
         """
         node = self._current_node
@@ -651,7 +637,7 @@ class FlowResourcePanel(QWidget):
         if current and current in paths:
             idx = paths.index(current) + 1
 
-        # Show file size for current file (WPF: [12.3 MB] filename)
+        # Show file size for current file
         size_text = ""
         if current and os.path.exists(current):
             try:
@@ -691,7 +677,6 @@ class FlowResourcePanel(QWidget):
     def _build_thumbnails(self):
         """Create thumbnail buttons for all file paths.
 
-        WPF: ItemsControl generates ItemTemplate for each item in ItemsSource.
         VisionFlow: manually create ThumbnailButton for each path.
         """
         node = self._current_node
@@ -742,15 +727,14 @@ class FlowResourcePanel(QWidget):
         if self._current_node:
             self._current_node.use_auto_switch = checked
 
-    # ── File operations (WPF-aligned) ────────────────────────────────────
+    # ── File operations────────────────────────────────────
 
-    # Image file filter — WPF: ShowOpenImageFiles() internal filter
+    # Image file filter
     IMAGE_FILTER = "图像文件 (*.png *.jpg *.jpeg *.bmp *.tiff *.tif *.webp);;所有文件 (*.*)"
     IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".webp")
 
     def _add_files(self):
-        """WPF AddImageDataCommand → AddFile() → IOFileDialog.ShowOpenImageFiles().
-
+        """
         Decoupled: QFileDialog is used here (GUI layer), but node.add_files()
         remains pure data operation. The node doesn't know about Qt.
         """
@@ -762,13 +746,11 @@ class FlowResourcePanel(QWidget):
         had_existing = bool(self._current_node.src_file_paths)
         self._current_node.add_files(list(paths))
 
-        # WPF: add files → binding auto-refreshes ListBox
         # VisionFlow: incremental thumbnail build + header refresh
         self._add_thumbnails_incremental(list(paths))
         self._refresh_header()
         self._update_action_buttons()
 
-        # WPF: auto-select first file if none was selected
         if not had_existing:
             first = self._current_node.src_file_path
             self._selected_path = first
@@ -777,17 +759,6 @@ class FlowResourcePanel(QWidget):
         self.files_changed.emit()
 
     def _add_folder(self):
-        """WPF AddImageDatasCommand → AddFiles() → IOFolderDialog.ShowOpenFolderAction().
-
-        WPF implementation details:
-          - selectedFolderPath.GetAllImages()  →  recursive scan via DirectoryEx.GetAllFiles()
-          - SrcFilePaths.AddRange(images)       →  batch add
-          - Skips hidden & system files         →  !HasFlag(Hidden|System)
-          - Supported extensions: jpg jpeg png gif pdf tga tif svg bmp dds eps webp
-
-        VisionFlow: delegates to node.add_files_from_folder(recursive=True) which
-        mirrors WPF's recursive GetAllFiles + IsImage filtering.
-        """
         folder = QFileDialog.getExistingDirectory(self, "选择图像文件夹")
         if not folder or not self._current_node:
             return
@@ -795,7 +766,6 @@ class FlowResourcePanel(QWidget):
         had_existing = bool(self._current_node.src_file_paths)
         old_count = len(self._current_node.src_file_paths)
 
-        # WPF: selectedFolderPath.GetAllImages() → recursive + hidden-filtered
         self._current_node.add_files_from_folder(folder, recursive=True)
 
         new_count = len(self._current_node.src_file_paths)
@@ -805,8 +775,6 @@ class FlowResourcePanel(QWidget):
 
         # Determine which paths are new (those just appended)
         new_paths = self._current_node.src_file_paths[old_count:]
-
-        # WPF: binding auto-refreshes ItemsControl
         # VisionFlow: incremental thumbnail build for added files only
         self._add_thumbnails_incremental(new_paths)
         self._refresh_header()
@@ -819,12 +787,8 @@ class FlowResourcePanel(QWidget):
         self.files_changed.emit()
 
     def _delete_current(self):
-        """WPF DeleteImageDataCommand → ShowDeleteDialog → Remove + select adjacent.
-
+        """
         Shows confirmation dialog before removing the current file.
-        WPF: int index = SrcFilePaths.IndexOf(SrcFilePath)
-             SrcFilePaths.Remove(SrcFilePath)
-             SrcFilePath = find ?? SrcFilePaths.FirstOrDefault()
         """
         if not self._current_node:
             return
@@ -832,7 +796,6 @@ class FlowResourcePanel(QWidget):
         if not current:
             return
 
-        # WPF: IocMessage.Dialog.ShowDeleteDialog() — confirmation
         reply = QMessageBox.question(
             self, "确认删除",
             f"确定要删除当前图像吗？\n{os.path.basename(current)}",
@@ -862,10 +825,8 @@ class FlowResourcePanel(QWidget):
             self.file_selected.emit(new_current)
 
     def _clear_files(self):
-        """WPF ClearImageDatasCommand → ShowDeleteAllDialog → SrcFilePaths.Clear().
-
+        """
         Shows confirmation before clearing all files.
-        WPF CanExecute: requires SrcFilePaths.Count > 0.
         """
         if not self._current_node:
             return
@@ -873,7 +834,6 @@ class FlowResourcePanel(QWidget):
         if count == 0:
             return
 
-        # WPF: IocMessage.Dialog.ShowDeleteAllDialog() — confirmation
         reply = QMessageBox.question(
             self, "确认清空",
             f"确定要清空所有图像文件吗？\n当前共有 {count} 个文件",
@@ -891,12 +851,10 @@ class FlowResourcePanel(QWidget):
         self._selected_path = ""
         self.files_changed.emit()
 
-    # ── Incremental thumbnail builder (WPF binding auto-update equivalent) ─
+    # ── Incremental thumbnail builder ─
 
     def _add_thumbnails_incremental(self, new_paths: list[str]):
         """Add new thumbnail buttons without rebuilding existing ones.
-
-        WPF: data binding auto-refreshes the ItemsControl when SrcFilePaths changes.
         VisionFlow: must explicitly create buttons for new files only.
         """
         for path in new_paths:
@@ -921,7 +879,7 @@ class FlowResourcePanel(QWidget):
             loader.thumbnail_ready.connect(self._on_thumbnail_ready)
             loader.start()
 
-    # ── Button state management (WPF CanExecute equivalent) ──────────────
+    # ── Button state management ──────────────
 
     def _update_container_size(self):
         """Set container minimum width from thumbnail count + spacing + margins.
@@ -941,10 +899,6 @@ class FlowResourcePanel(QWidget):
 
     def _update_action_buttons(self):
         """Enable/disable delete & clear buttons based on file list state.
-
-        WPF:
-          ClearImageDatasCommand.CanExecute → this.SrcFilePaths?.Count > 0
-          DeleteImageDataCommand — always available if node is set
         """
         node = self._current_node
         has_files = node is not None and len(getattr(node, 'src_file_paths', []) or []) > 0
@@ -974,7 +928,7 @@ class FlowResourcePanel(QWidget):
     def refresh_selection(self):
         """Lightweight refresh — update header index + thumbnail highlight only.
 
-        WPF "自动切换" equivalent: during "运行全部", when UseAutoSwitch=ON,
+        "自动切换" equivalent: during "运行全部", when UseAutoSwitch=ON,
         the SrcFilePath binding causes the thumbnail ListBox to update its
         selected item automatically. In VisionFlow, we call this explicitly
         from the FILE_ITERATION_NEXT event handler when auto_switch is ON.
@@ -987,6 +941,6 @@ class FlowResourcePanel(QWidget):
         # Update header index/filename
         self._refresh_header()
 
-        # Update thumbnail selection highlight (WPF: SelectedItem="{Binding SrcFilePath}")
+        # Update thumbnail selection highlight
         for path, btn in self._thumbnails.items():
             btn.set_selected(path == current)

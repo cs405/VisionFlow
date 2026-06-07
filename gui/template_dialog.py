@@ -1,4 +1,4 @@
-"""Template manager dialog — WPF ListBoxPresenter + ManageTemplatesCommand port.
+"""Template manager dialog
 
 Shows all saved templates, allows delete and select-to-add.
 """
@@ -10,7 +10,7 @@ from core.project import ProjectItem
 
 
 class TemplateManagerDialog(QDialog):
-    """Template management dialog — WPF 模板管理 1:1 port."""
+    """Template management dialog —  模板管理"""
 
     def __init__(self, project: ProjectItem, parent=None):
         super().__init__(parent)

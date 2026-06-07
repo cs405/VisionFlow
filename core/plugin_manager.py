@@ -1,8 +1,4 @@
 """Plugin manager - discovers and loads node modules dynamically.
-
-Ported from the C# assembly-scanning pattern used by NodeDataGroupBase.
-In C#, groups discover node types via Assembly.GetInstances<T>().
-In Python, we use importlib to discover and load node modules.
 """
 
 import importlib

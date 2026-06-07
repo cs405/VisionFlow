@@ -1,6 +1,4 @@
 """Camera capture source - captures frames from a webcam.
-
-Ported from H.VisionMaster.OpenCV/NodeDatas/1 - Src/CameraCaptureNodeData.cs
 """
 
 import cv2
@@ -13,8 +11,6 @@ from core.workflow import WorkflowEngine
 
 class CameraCaptureNodeData(SrcFilesVisionNodeData, OpenCVNodeDataBase):
     """Captures frames from a camera device.
-
-    Mirrors C# CameraCaptureNodeData : VideoCaptureNodeDataBase.
     """
     __group__ = "图像数据源"
 
@@ -26,6 +22,8 @@ class CameraCaptureNodeData(SrcFilesVisionNodeData, OpenCVNodeDataBase):
         SrcFilesVisionNodeData.__init__(self)
         OpenCVNodeDataBase.__init__(self)
         self.name = "摄像头"
+        self.src_file_paths.clear()
+        self.src_file_path = ""
 
     def invoke_core(self, src_image_node_data, from_node_data, diagram) -> FlowableResult:
         cap = cv2.VideoCapture(self.camera_index)

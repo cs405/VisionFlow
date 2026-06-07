@@ -1,4 +1,4 @@
-"""Event system - ported from H.VisionMaster diagram events + C# event pattern.
+"""Event system
 
 Pub/sub for workflow execution events, node state changes, and property changes.
 """
@@ -24,7 +24,7 @@ class EventType(Enum):
     NODE_SELECTED = auto()
     NODE_DESELECTED = auto()
 
-    # Port / Link lifecycle (WPF FlowablePortData / FlowableLinkData invoke)
+    # Port / Link lifecycle
     PORT_STARTED = auto()
     PORT_COMPLETED = auto()
     LINK_STARTED = auto()

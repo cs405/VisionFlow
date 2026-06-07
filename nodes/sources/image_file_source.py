@@ -1,6 +1,4 @@
 """Image file source node - loads images from file list.
-
-Ported from H.VisionMaster.OpenCV/NodeDatas/1 - Src/SrcImageFilesNodeData.cs
 """
 
 import os
@@ -15,7 +13,6 @@ from core.workflow import WorkflowEngine
 class SrcImageFilesNodeData(SrcFilesVisionNodeData, OpenCVNodeDataBase):
     """Loads images from a file list. The primary data source for image processing.
 
-    Mirrors C# SrcImageFilesNodeData : OpenCVSrcFilesNodeDataBase
     """
     __group__ = "图像数据源"
 

@@ -1,12 +1,9 @@
 """Node group system - toolbox categories for node discovery.
 
-Ported from H.VisionMaster.NodeGroup/Groups/ (10 groups).
-
 Each group discovers node types implementing a marker interface and orders them
 for display in the toolbox. In Python, we use class decorators / __init_subclass__
-instead of C# assembly scanning + marker interfaces.
 
-Categories (from C#):
+Categories :
   10000 - 图像数据源 (SrcImageDataGroup)
   10001 - 系统数据源 (ZooNodeDataGroup)
   10100 - 图像预处理模块 (PreprocessingDataGroup)
@@ -29,7 +26,6 @@ from core.node_base import NodeBase
 class NodeGroup:
     """A category/group of nodes shown in the toolbox.
 
-    Ported from C# NodeDataGroupBase.
     """
 
     def __init__(self, name: str, description: str = "", order: int = 0,
@@ -72,10 +68,6 @@ class NodeGroup:
 
 class NodeDataGroupBase:
     """Manages all node groups and provides discovery.
-
-    Ported from C# NodeDataGroupBase + assembly scanning.
-    Instead of C# reflection over assemblies, Python uses explicit registration
-    or __init_subclass__ hooks.
     """
 
     def __init__(self):
@@ -144,11 +136,11 @@ class NodeDataGroupBase:
 
 
 # =============================================================================
-# Standard groups - matching the C# NodeGroup definitions
+# Standard groups
 # =============================================================================
 
 def create_standard_groups() -> NodeDataGroupBase:
-    """Create all standard node groups matching the C# definitions."""
+    """Create all standard node groups"""
     manager = NodeDataGroupBase()
 
     groups = [

@@ -1,4 +1,4 @@
-"""Guide overlay — WPF GuideBox + GuideBoxAdorner port.
+"""Guide overlay
 
 Semi-transparent overlay covering the main window, with a "hole" highlighting
 the current step's target widget, and a floating popup with instructions.
@@ -19,8 +19,6 @@ from PyQt5.QtGui import (QPainter, QPen, QColor, QBrush, QPainterPath)
 
 class GuideOverlay(QWidget):
     """Modal overlay guiding users through UI features.
-
-    WPF equivalent: GuideBox inside GuideBoxAdorner on AdornerLayer.
     """
 
     finished = pyqtSignal()

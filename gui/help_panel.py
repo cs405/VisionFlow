@@ -1,6 +1,5 @@
 """Help panel - structured node documentation display.
 
-Ported from WPF IHelpPresenter / HelpNodeDataBase.
 Displays node metadata, parameter documentation, and help URL in
 a rich text widget with sections for:
   - Node name & description
