@@ -144,8 +144,11 @@ class WorkflowRunner:
             if not start_node.use_all_image:
                 break
 
-            if auto_switch:
-                start_node.src_file_path = file_path
+            # Always update the source node's current file — the node's
+            # invoke_core() reads src_file_path to load the image.
+            # auto_switch only controls whether the UI thumbnail panel
+            # follows along (see FILE_ITERATION_NEXT handler).
+            start_node.src_file_path = file_path
 
             # Notify UI that we're starting a file iteration
             # Pass auto_switch so UI can decide whether to refresh the thumbnail panel
