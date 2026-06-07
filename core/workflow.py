@@ -391,6 +391,12 @@ class WorkflowEngine:
     def start(self) -> FlowableResult:
         """Execute workflow (StartCommand).
 
+        "运行全部" (run_all_images) is handled by WorkflowRunner.start_run_all()
+        which iterates SrcFilePaths, updates src_file_path before each iteration,
+        and publishes FILE_ITERATION_NEXT events for the UI. UseAutoSwitch affects
+        only the thumbnail panel refresh (FlowResourcePanel.refresh_selection()),
+        not the actual file switching — src_file_path is always updated.
+
         StartCommand → await this.Start() → InvokeState → Wait → node.Start()
         Python: guards → get_start_node → execute() on caller's thread.
         """
@@ -399,43 +405,6 @@ class WorkflowEngine:
         if self.get_start_node_data() is None:
             return FlowableResult.error(message="未找到起始节点（需要无输入端口且有输出端口的节点）")
         return self.execute()
-
-    # ═══════════════════════════════════════════════════════════════════════
-    # TODO: run_all_images — WPF VisionDiagramDataBase.Start() "运行全部" port
-    #
-    # 实现要点（VisionDiagramDataBase.Start(), RunDiagramDataPresenter）：
-    #
-    # 1. 找到起始节点，判断是否为 ISrcFilesNodeData
-    # 2. 如果 UseAllImage == true：
-    #    a. 遍历所有 SrcFilePaths
-    #    b. 每次循环：
-    #       - 检查状态（CANCELLING → break）
-    #       - 检查 UseAllImage 是否仍为 true（可中途取消）
-    #       - 更新 ResultImageSource = item.ToImageSource()  # 显示当前图（始终）
-    #       - 如果 UseAutoSwitch → 更新 SrcFilePath = item    # 缩略图跟随
-    #       - 调用源节点 Start() 触发整个流程
-    #       - 收集结果到 Messages 集合
-    #       - Task.Delay(1000) — 1秒间隔
-    # 3. 如果 UseAllImage == false：单次运行
-    # 4. 外部 RunDiagramDataPresenter.StartAllCommand 手动遍历文件列表
-    #    → StartOne() 临时设置 UseAllImage=false, 运行, 恢复原值
-    #
-    # ═══════════════════════════════════════════════════════════════════════
-    # TODO: "自动切换" (UseAutoSwitch) 实现要点
-    #
-    # WPF 实现（VisionDiagramDataBase.Start() line 167）：
-    #
-    #   this.ResultImageSource = item.ToImageSource();   // ALWAYS 更新显示
-    #   if (visionImageSource.UseAutoSwitch)              // 仅 auto_switch=ON 时
-    #       this.SrcImageNodeData.SrcFilePath = item;     // 才更新当前文件指针
-    #
-    # 解耦策略：
-    #   - ResultImageSource 更新 → FILE_ITERATION_NEXT 事件 → UI 始终更新图像
-    #   - SrcFilePath 更新    → WorkflowRunner._run_all() 检查 auto_switch
-    #   - 缩略图面板刷新      → MainWindow 收到事件后检查 auto_switch 状态
-    #                         调用 FlowResourcePanel.refresh_selection()（轻量刷新）
-    #   - WPF 绑定自动生效     → VisionFlow 需显式调用 refresh_selection()
-    # ═══════════════════════════════════════════════════════════════════════
 
     def execute(self) -> FlowableResult:
         """Execute the entire workflow.

@@ -31,98 +31,27 @@ from gui.font_icons import FontIcons, FontIconButton, FontIconTextBlock, ICON_FO
 from gui.theme import theme_manager, connect_theme
 
 # ═══════════════════════════════════════════════════════════════════════════
-# TODO: WPF "图片缩略图显示" 实现细节
+# Architecture summary (ported from WPF MainWindow.xaml lines 355-502):
 #
-# WPF MainWindow.xaml lines 355-413 — ListBox thumbnail strip:
+# Thumbnail strip — 9 WPF features → VisionFlow equivalents:
+#   1. VirtualizingStackPanel   → all ThumbnailButtons created upfront (>100: known limit)
+#   2. Focusable="false"        → QScrollArea.setFocusPolicy(Qt.NoFocus)
+#   3. UseHorizontalMouseWheel  → _scroll_wheel_event (Shift+wheel)
+#   4. ItemTemplate + Converter → ThumbnailLoader async QThread
+#   5. PageLeft/PageRight       → _page_left_btn / _page_right_btn overlay
+#   6. SelectionChanged         → _on_thumbnail_clicked → file_selected signal
+#   7. MouseDoubleClick         → double_clicked_path signal → zoom viewer
+#   8. Header index "1/10"      → _refresh_header() manual calc
+#   9. ToolTip="{Binding}"      → setToolTip(file_path)
 #
-#   ListBox Height="90"
-#     ItemsSource="{Binding SrcFilePaths}"         ← 绑定到文件路径列表
-#     SelectedItem="{Binding SrcFilePath}"          ← 双向绑定当前选中
-#     ScrollViewer.HorizontalScrollBarVisibility="Auto"
-#     ScrollViewer.VerticalScrollBarVisibility="Disabled"
+# Single-step navigation ("上一张"/"下一张"):
+#   - _step_left_btn / _step_right_btn → _step_left() / _step_right()
+#   - calls node.move_prev() / node.move_next()
+#   - use_all_image=False blocks wrap-around (node returns False at bounds)
 #
-#   1. ItemsPanel → VirtualizingStackPanel Orientation="Horizontal"
-#      - UI 虚拟化：只渲染可见区域的缩略图，支持数千张图片不卡顿
-#      - VisionFlow: 所有 ThumbnailButton 一次性创建（无虚拟化，>100 张时需优化）
-#
-#   2. ScrollViewer Focusable="false"
-#      - 禁止滚动区域获取键盘焦点，防止 Windows 蓝色焦点矩形框
-#      - VisionFlow: QScrollArea.setFocusPolicy(Qt.NoFocus)
-#
-#   3. ScrollViewerBebavior UseHorizontalMouseWheel="True"
-#      - Shift+滚轮 → 水平滚动
-#      - VisionFlow: _scroll_wheel_event 重写 wheelEvent
-#
-#   4. ItemTemplate → Border 75×75 + Image Source Converter
-#      - GetImageSourceFromFilePathConverter: 按需加载，只在缩略图可见时才读取文件
-#      - VisionFlow: ThumbnailLoader 提前加载全部（可改进为可见区域优先）
-#
-#   5. Page navigation: ScrollViewerPageLeftCommand / ScrollViewerPageRightCommand
-#      - 浮动在 ScrollViewer 上方的 FontIconButton
-#      - VisionFlow: _page_left_btn / _page_right_btn overlay
-#
-#   6. SelectionChanged → ImageFileSelectionChangedCommand
-#      - 缩略图点击 → 主图像区更新
-#      - VisionFlow: _on_thumbnail_clicked → file_selected 信号 → main_window
-#
-#   7. MouseDoubleClick → ShowZoomViewImageFileCommand
-#      - 双击 → 全尺寸图像查看器
-#      - VisionFlow: double_clicked_path 信号 → main_window
-#
-#   8. Header TextBlockIndexOfBebavior — "1/10" 索引显示
-#      - 绑定 SrcFilePath + SrcFilePaths，自动显示当前索引
-#      - VisionFlow: _refresh_header() 手动计算 idx/total
-#
-#   9. ToolTip="{Binding}" — 悬浮显示完整文件路径
-#      - VisionFlow: setToolTip(file_path) ✅
-#
-# VisionFlow 适配要点：
-#   - 主题色通过 theme_manager.color() 动态获取，不硬编码
-#   - 缩略图样式用 QSS 属性选择器 [selected="true"] 对标 WPF 选中态
-#   - 增量构建 (_add_thumbnails_incremental) 对标 WPF 数据绑定自动刷新
-#   - 大规模虚拟化暂不实现，但 lazy load（可见优先）可后续优化
-# ═══════════════════════════════════════════════════════════════════════════
-#
-# TODO: WPF "上一页/下一页" (PageLeft/PageRight) 导航按钮实现
-#
-# WPF MainWindow.xaml lines 379-390, 491-502:
-#
-#   <FontIconButton Margin="5,0"
-#       HorizontalAlignment="Left"
-#       Command="{ScrollViewerPageLeftCommand}"
-#       CommandParameter="{Binding ElementName=sv}"
-#       Content="{x:Static FontIcons.PageLeft}"
-#       FontSize="25" />
-#   <FontIconButton Margin="5,0"
-#       HorizontalAlignment="Right"
-#       Command="{ScrollViewerPageRightCommand}"
-#       CommandParameter="{Binding ElementName=sv}"
-#       Content="{x:Static FontIcons.PageRight}"
-#       FontSize="25" />
-#
-# WPF 关键设计点：
-#   1. FontIconButton — 字体图标按钮，用 Content 显示图标字符
-#   2. FontSize="25" — 大号图标，醒目可点击
-#   3. FontIcons.PageLeft  =     FontIcons.PageRight = 
-#   4. ScrollViewerPageLeftCommand  → scrollViewer.PageLeft()
-#      ScrollViewerPageRightCommand → scrollViewer.PageRight()
-#      (继承自 ScrollViewerScrollToHomeCommand / ScrollViewerScrollToEndCommand)
-#   5. CommandParameter 绑定到 ScrollViewer 元素名 "sv"
-#   6. Margin="5,0" + HorizontalAlignment — 距边框 5px
-#   7. 放在 ListBox ControlTemplate 的 Grid 中，浮在 ScrollViewer 上方
-#
-# WPF "上一张/下一张" 单步导航（非页面滚动）：
-#   - ISrcFilesNodeData.MoveNext() 扩展方法
-#     → int index = SrcFilePaths.IndexOf(SrcFilePath)
-#     → index = index < Count - 1 ? index + 1 : 0
-#     → SrcFilePath = SrcFilePaths[index]
-#   - 当 use_all_image=false 时，move_next 到末尾返回 false（不循环）
-#
-# VisionFlow 适配策略：
-#   - PageLeft/PageRight overlay 按钮已实现 (_page_left_btn / _page_right_btn)
-#   - 字体大小从 14pt 提升到 18pt 对标 WPF FontSize="25" 视觉比例
-#   - 新增单步导航: _step_left() / _step_right() → node.move_next() / move_prev()
-#   - 工具提示 "上一页"/"下一页" 和 "上一张"/"下一张"
+# Page navigation ("上一页"/"下一页"):
+#   - _page_left_btn / _page_right_btn → _page_left() / _page_right()
+#   - scrolls thumbnail strip by one viewport width, overlay on QScrollArea
 # ═══════════════════════════════════════════════════════════════════════════
 
 # ── Thumbnail constants matching  ───────────────────────────────────────
@@ -383,6 +312,25 @@ class FlowResourcePanel(QWidget):
         self._clear_btn.setEnabled(False)
         h_layout.addWidget(self._clear_btn)
 
+        # Step navigation separator
+        sep2 = QFrame()
+        sep2.setFrameShape(QFrame.VLine)
+        sep2.setStyleSheet("background: #505050;")
+        sep2.setFixedWidth(1)
+        sep2.setFixedHeight(20)
+        h_layout.addWidget(sep2)
+
+        # Single-step navigation — "上一张" / "下一张"
+        self._step_left_btn = FontIconButton(FontIcons.ChevronLeft, tooltip="上一张", font_size=14)
+        self._step_left_btn.clicked.connect(self._step_left)
+        self._step_left_btn.setEnabled(False)
+        h_layout.addWidget(self._step_left_btn)
+
+        self._step_right_btn = FontIconButton(FontIcons.ChevronRight, tooltip="下一张", font_size=14)
+        self._step_right_btn.clicked.connect(self._step_right)
+        self._step_right_btn.setEnabled(False)
+        h_layout.addWidget(self._step_right_btn)
+
         layout.addWidget(self._header_bar)
 
         # ── Thumbnail strip with overlay page buttons ──
@@ -491,7 +439,8 @@ class FlowResourcePanel(QWidget):
             QPushButton:hover {{ background: {bg_hover}; border-color: {border}; }}
             QPushButton:disabled {{ color: {text_secondary}; background: transparent; }}
         """
-        for btn in (self._add_file_btn, self._add_folder_btn, self._del_btn, self._clear_btn):
+        for btn in (self._add_file_btn, self._add_folder_btn, self._del_btn, self._clear_btn,
+                     self._step_left_btn, self._step_right_btn):
             if btn is not None:
                 btn.setStyleSheet(action_qss)
 
@@ -563,6 +512,55 @@ class FlowResourcePanel(QWidget):
         bar = self._scroll_area.horizontalScrollBar()
         bar.setValue(bar.value() + self._scroll_area.viewport().width())
 
+    # ── Step navigation ─────────
+
+    def _step_left(self):
+        """Single-step to the previous file — "上一张".
+
+        WPF: ISrcFilesNodeData.MoveNext() extension method (reverse direction).
+        Calls node.move_prev() then updates thumbnail selection and header.
+        """
+        node = self._current_node
+        if node is None or not node.src_file_paths:
+            return
+        if not node.move_prev():
+            return  # use_all_image=False and already at first → no-op
+
+        new_path = node.src_file_path
+        self._selected_path = new_path
+        for path, btn in self._thumbnails.items():
+            btn.set_selected(path == new_path)
+        self._scroll_to_thumbnail(new_path)
+        self._refresh_header()
+        self._update_action_buttons()
+        self.file_selected.emit(new_path)
+
+    def _step_right(self):
+        """Single-step to the next file — "下一张".
+
+        Calls node.move_next() then updates thumbnail selection and header.
+        """
+        node = self._current_node
+        if node is None or not node.src_file_paths:
+            return
+        if not node.move_next():
+            return  # use_all_image=False and already at last → no-op
+
+        new_path = node.src_file_path
+        self._selected_path = new_path
+        for path, btn in self._thumbnails.items():
+            btn.set_selected(path == new_path)
+        self._scroll_to_thumbnail(new_path)
+        self._refresh_header()
+        self._update_action_buttons()
+        self.file_selected.emit(new_path)
+
+    def _scroll_to_thumbnail(self, file_path: str):
+        """Scroll the strip so the given thumbnail is visible."""
+        btn = self._thumbnails.get(file_path)
+        if btn is None:
+            return
+        self._scroll_area.ensureWidgetVisible(btn, xMargin=40, yMargin=0)
 
     # ── Node binding ────────────────────────────────────────────────────
 
@@ -898,13 +896,15 @@ class FlowResourcePanel(QWidget):
         self._thumb_container.setMinimumSize(total_w, 0)
 
     def _update_action_buttons(self):
-        """Enable/disable delete & clear buttons based on file list state.
+        """Enable/disable action & step buttons based on file list state.
         """
         node = self._current_node
         has_files = node is not None and len(getattr(node, 'src_file_paths', []) or []) > 0
         has_selection = bool(getattr(node, 'src_file_path', '') if node else '')
         self._del_btn.setEnabled(has_files and has_selection)
         self._clear_btn.setEnabled(has_files)
+        self._step_left_btn.setEnabled(has_files and has_selection)
+        self._step_right_btn.setEnabled(has_files and has_selection)
 
     # ── Public API ──────────────────────────────────────────────────────
 

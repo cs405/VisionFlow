@@ -1799,7 +1799,9 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
-        # if (UseAutoSwitch) SrcFilePath = item — refresh thumbnail panel
+        # WPF: if (UseAutoSwitch) SrcFilePath = item — refresh thumbnail panel
+        # SrcFilePath itself is always updated by WorkflowRunner before the event.
+        # Here we only refresh the UI thumbnail strip when auto_switch is ON.
         if auto_switch and self._resource_panel.isVisible():
             self._resource_panel.refresh_selection()
 
