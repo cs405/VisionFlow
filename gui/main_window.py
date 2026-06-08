@@ -532,8 +532,8 @@ class MainWindow(QMainWindow):
 
         self._wf_ui_update.connect(self._on_wf_ui_update)  # 连接工作流UI更新信号到处理函数
 
-        self._setup_window()
-        self._setup_caption_bar()
+        self._setup_window()  # 设置窗口
+        self._setup_caption_bar()  # 设置标题栏
         self._setup_main_surface()
         self._setup_status_bar()
         self._wire_signals()
@@ -548,33 +548,33 @@ class MainWindow(QMainWindow):
         self._load_templates_on_startup()
 
     def _setup_window(self):
-        self.setWindowTitle("VisionFlow — VisionFlow")
-        self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
-        width = self._ui_layout_metrics["window_width"]
-        height = self._ui_layout_metrics["window_height"]
-        self.resize(width, height)
-        self.setMinimumSize(1180, 720)
-        self.setPalette(theme_manager.colors.to_palette())
-        self.setStyleSheet(theme_manager.get_stylesheet())
-        theme_manager.theme_changed.connect(lambda _: self._apply_theme())
-        font = QFont("Microsoft YaHei", 9)
-        self.setFont(font)
-        icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "icons", "logo.ico")
-        if os.path.exists(icon_path):
-            self.setWindowIcon(QIcon(icon_path))
-        screen = QApplication.primaryScreen()
-        if screen is not None:
-            geometry = screen.geometry()
-            self.move((geometry.width() - width) // 2, (geometry.height() - height) // 2)
+        self.setWindowTitle("VisionFlow — VisionFlow")  # 窗口名称
+        self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)  # 无边框窗口
+        width = self._ui_layout_metrics["window_width"]  # 窗口宽度
+        height = self._ui_layout_metrics["window_height"]  # 窗口高度
+        self.resize(width, height)  # 重新设置窗口
+        self.setMinimumSize(1180, 720)  # 最小窗口大小
+        self.setPalette(theme_manager.colors.to_palette())  # 设置窗口调色板
+        self.setStyleSheet(theme_manager.get_stylesheet())  # 设置窗口样式表
+        theme_manager.theme_changed.connect(lambda _: self._apply_theme())  # 主题改变时应用新主题
+        font = QFont("Microsoft YaHei", 9)  # 字体为微软雅黑 9 号大小
+        self.setFont(font)  # 设置字体
+        icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "icons", "logo.ico")  # 设置窗口图标
+        if os.path.exists(icon_path):  # 如果存在图标
+            self.setWindowIcon(QIcon(icon_path))  # 设置图标
+        screen = QApplication.primaryScreen()  # 获取主屏幕
+        if screen is not None:  # 如果屏幕存在
+            geometry = screen.geometry()  # 获取屏幕几何信息
+            self.move((geometry.width() - width) // 2, (geometry.height() - height) // 2)  # 将窗口移动到屏幕中心
 
         self._init_dwm_shadow()
 
     def _init_dwm_shadow(self):
-        """Extend DWM frame into client area for native drop-shadow."""
+        """将 DWM 框架扩展到客户端区域，以实现原生阴影效果"""
         try:
-            hwnd = int(self.winId())
-            margins = (ctypes.c_int * 4)(-1, -1, -1, -1)
-            ctypes.windll.dwmapi.DwmExtendFrameIntoClientArea(hwnd, margins)
+            hwnd = int(self.winId())  # 获取窗口句柄
+            margins = (ctypes.c_int * 4)(-1, -1, -1, -1)  # 设置边距为 -1 以扩展到整个窗口
+            ctypes.windll.dwmapi.DwmExtendFrameIntoClientArea(hwnd, margins)  # 调用 DWM API 扩展框架
         except Exception:
             pass
 
@@ -713,54 +713,56 @@ class MainWindow(QMainWindow):
 
     def _setup_caption_bar(self):
         """
-        Outer DockPanel (DataContext=Project):
-          Separator(H=20, Right) | ActionDockPanel(Right) | UniformGrid(Rows=2)
-            Row0: DockPanel:  Menu(Left) | "项目名称:XXX"(Center)
-            Row1: Border(top) | DockPanel(LastChildFill=False): 4 button groups
+        外部停靠面板（数据上下文=项目）：
+        分隔符（高度=20，右侧）| 操作停靠面板（右侧）| 统一网格（行数=2）
+        第0行：停靠面板：菜单（左侧）|“项目名称：XXX”（中心）
+        第1行：边框（顶部）| 停靠面板（最后子元素填充=False）：4个按钮组
         """
-        bar = QWidget()
-        bar.setFixedHeight(self._ui_layout_metrics["caption_height"])
-        bar.setStyleSheet("background: #1e1e1e;")
-        self._caption_bar = bar
+        bar = QWidget()  # 外部停靠面板
+        bar.setFixedHeight(self._ui_layout_metrics["caption_height"])  # 设置固定高度
+        bar.setStyleSheet("background: #1e1e1e;")  # 设置背景颜色
+        self._caption_bar = bar  # 保存引用以便后续访问
 
         # ── outer DockPanel (line 24) ──
-        outer = QHBoxLayout(bar)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(0)
+        outer = QHBoxLayout(bar)  # 外部水平布局
+        outer.setContentsMargins(0, 0, 0, 0)  # 去除外边距
+        outer.setSpacing(0)  # 去除控件间距
 
-        # ══════════ Column 0: Icon + Title (Framework MainWindow.xaml lines 108-133) ══════════
-        col0 = QWidget()
-        col0_layout = QHBoxLayout(col0)
-        col0_layout.setContentsMargins(10, 20, 0, 20)  # TitleMargin="10 20"
-        col0_layout.setSpacing(0)
-
+        # ══════════ Column 0: Icon + Title  ══════════
+        col0 = QWidget()  # 列0：图标和标题
+        col0_layout = QHBoxLayout(col0)  # 列0水平布局
+        col0_layout.setContentsMargins(10, 20, 0, 20)  # 设置内边距（左=10，顶部/底部=20）
+        col0_layout.setSpacing(0)  # 去除控件间距
+        # 加载 logo 图片
         logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "icons", "logo.png")
         if os.path.exists(logo_path):
             logo = QLabel()
-            logo.setPixmap(QPixmap(logo_path).scaled(16, 16, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            # 设置 logo 大小为 32x32
+            logo.setPixmap(QPixmap(logo_path).scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation))
             logo.setStyleSheet("padding: 0 5px 0 0;")  # Margin="0,0,5,0"
             col0_layout.addWidget(logo)
 
-        title_lbl = QLabel("VisionFlow")
+        title_lbl = QLabel("VisionFlow")  # 标题
+        # 设置标题样式：白色、加粗、字体大小 30px
         title_lbl.setStyleSheet("color: #dcdcdc; font-size: 30px; font-weight: bold; padding: 0 0 0 5px;")
-        col0_layout.addWidget(title_lbl)
+        col0_layout.addWidget(title_lbl)  # 将标题添加到列0布局
 
         outer.addWidget(col0)
 
-        # ══════════ UniformGrid Rows="2" Margin="0,2" (lines 41-42) — fills remaining space ══════════
-        grid = QWidget()
-        grid_layout = QVBoxLayout(grid)
-        grid_layout.setContentsMargins(0, 2, 0, 2)
-        grid_layout.setSpacing(0)
+        # ══════════ UniformGrid Rows="2" Margin="0,2" — fills remaining space ══════════
+        grid = QWidget()  # 统一网格，包含两行
+        grid_layout = QVBoxLayout(grid)  # 统一网格垂直布局
+        grid_layout.setContentsMargins(0, 2, 0, 2)  # 设置内边距（顶部/底部=2）
+        grid_layout.setSpacing(0)  # 去除控件间距
 
-        # ---- Row 0: DockPanel with Menu(left) + "项目名称:XXX"(center) (lines 43-145) ----
-        row0 = QWidget()
-        r0 = QHBoxLayout(row0)
-        r0.setContentsMargins(8, 0, 0, 0)
-        r0.setSpacing(0)
+        # ---- Row 0: DockPanel with Menu(left) + "项目名称:XXX"(center)  ----
+        row0 = QWidget()  # 第0行：包含菜单和项目名称
+        r0 = QHBoxLayout(row0)  # 第0行水平布局
+        r0.setContentsMargins(8, 0, 0, 0)  # 设置内边距（左=8）
+        r0.setSpacing(0)  # 去除控件间距
 
-        # Menu — HorizontalAlignment="Left", Background="Transparent", Margin="0,1" (lines 44-47)
-        menu_bar = QMenuBar()
+        # Menu — HorizontalAlignment="Left", Background="Transparent", Margin="0,1"
+        menu_bar = QMenuBar()  # 菜单栏
         menu_bar.setStyleSheet(
             "QMenuBar { background: transparent; color: #dcdcdc; padding: 0; margin: 1px 0; }"
             "QMenuBar::item { padding: 6px 12px; background: transparent; }"
@@ -770,10 +772,10 @@ class MainWindow(QMainWindow):
             "QMenu::item:selected { background: #0078d4; }"
             "QMenu::separator { height: 1px; background: #505050; margin: 4px 10px; }"
         )
-        self._build_menus(menu_bar)
-        r0.addWidget(menu_bar)  # NO stretch → left-aligned (HorizontalAlignment="Left")
+        self._build_menus(menu_bar)  # 构建菜单项
+        r0.addWidget(menu_bar)  # 将菜单栏添加到第0行布局
 
-        # "项目名称：XXX" — Margin="10,0", HorizontalAlignment="Center" (lines 137-144)
+        # "项目名称：XXX" — Margin="10,0", HorizontalAlignment="Center"
         r0.addStretch(1)
         r0.addWidget(self._lbl("项目名称：", "#c8c8c8", 12, pad="0 4px"))
         self._cap_proj_lbl = self._lbl("无项目", "#0078d4", 12, bold=True, pad="0 12px")
@@ -782,20 +784,20 @@ class MainWindow(QMainWindow):
 
         grid_layout.addWidget(row0)
 
-        # ---- Row 1: Border(top) + DockPanel toolbar (lines 146-200) ----
-        row1 = QWidget()
+        # ---- Row 1: Border(top) + DockPanel toolbar ----
+        row1 = QWidget()  # 第1行：包含顶部边框和工具栏
         row1.setStyleSheet("background:#2d2d30; border-top:1px solid #3f3f46;")
-        r1 = QHBoxLayout(row1)
-        r1.setContentsMargins(0, 1, 0, 0)  # Margin="0,1" (line 149)
+        r1 = QHBoxLayout(row1)  # 第1行水平布局
+        r1.setContentsMargins(0, 1, 0, 0)  # Margin="0,1"
         r1.setSpacing(0)
 
-        # Inner DockPanel LastChildFill="False" → 4 groups (lines 149-199)
+        # Inner DockPanel LastChildFill="False" → 4 groups
         toolbar = QWidget()
         tb = QHBoxLayout(toolbar)
         tb.setContentsMargins(6, 3, 6, 3)
         tb.setSpacing(2)
 
-        # Group 1 — New | Open | Edit | Save (lines 155-158)
+        # Group 1 — New | Open | Edit | Save
         for icon, tip, slot in [
             (FontIcons.Page,                "新建项目", self._on_new_project),
             (FontIcons.OpenFolderHorizontal, "打开项目", self._on_open_project),
@@ -808,7 +810,7 @@ class MainWindow(QMainWindow):
             tb.addWidget(btn)
         tb.addWidget(_hsep())
 
-        # Group 2 — project-level commands (VisionProjectItemBase, 7 commands) (lines 161-175)
+        # Group 2 — project-level commands
         self._tool_project_cmds = QWidget()
         self._tool_project_cmds.setLayout(QHBoxLayout())
         self._tool_project_cmds.layout().setContentsMargins(0, 0, 0, 0)
@@ -833,7 +835,7 @@ class MainWindow(QMainWindow):
         tb.addWidget(self._tool_project_cmds)
         tb.addWidget(_hsep())
 
-        # Group 3 — diagram commands (DiagramDataBase hierarchy, 9 commands) (lines 179-193)
+        # Group 3 — diagram commands
         self._tool_diagram_cmds = QWidget()
         self._tool_diagram_cmds.setLayout(QHBoxLayout())
         self._tool_diagram_cmds.layout().setContentsMargins(0, 0, 0, 0)
@@ -853,31 +855,31 @@ class MainWindow(QMainWindow):
         ]:
             btn = FontIconButton(icon, tooltip=tip, font_size=16)
             btn.setStyleSheet(_CMD_BTN)
-            if slot:
-                btn.clicked.connect(slot)
-            self._tool_diagram_cmds.layout().addWidget(btn)
+            if slot:  # 仅连接有功能的按钮
+                btn.clicked.connect(slot)  # 连接按钮点击事件到对应槽函数
+            self._tool_diagram_cmds.layout().addWidget(btn)  # 将按钮添加到图表命令工具栏
         # Keep button refs for CanExecute-style state management
-        self._run_btn = self._tool_diagram_cmds.layout().itemAt(0).widget()
-        self._continuous_btn = self._tool_diagram_cmds.layout().itemAt(1).widget()
-        self._stop_btn = self._tool_diagram_cmds.layout().itemAt(2).widget()
-        self._reset_btn = self._tool_diagram_cmds.layout().itemAt(3).widget()
+        self._run_btn = self._tool_diagram_cmds.layout().itemAt(0).widget()  # 单次执行按钮
+        self._continuous_btn = self._tool_diagram_cmds.layout().itemAt(1).widget()  # 连续执行按钮
+        self._stop_btn = self._tool_diagram_cmds.layout().itemAt(2).widget()  # 停止按钮
+        self._reset_btn = self._tool_diagram_cmds.layout().itemAt(3).widget()  # 重置按钮
         # Start with stop/reset disabled (no running workflow)
-        self._stop_btn.setEnabled(False)
-        self._reset_btn.setEnabled(False)
+        self._stop_btn.setEnabled(False)  # 初始状态下停止按钮不可用
+        self._reset_btn.setEnabled(False)  # 初始状态下重置按钮不可
 
-        tb.addWidget(self._tool_diagram_cmds)
-        tb.addWidget(_hsep())
+        tb.addWidget(self._tool_diagram_cmds)  # 将图表命令工具栏添加到第1行布局
+        tb.addWidget(_hsep())  # 分隔符
 
-        # Group 4 — View | TabEdit (lines 195-198)
-        self._tool_view_btn = FontIconButton(FontIcons.View, tooltip="查看", font_size=16)
-        self._tool_view_btn.setStyleSheet(_CMD_BTN)
-        tb.addWidget(self._tool_view_btn)
+        # Group 4 — View | TabEdit
+        self._tool_view_btn = FontIconButton(FontIcons.View, tooltip="查看", font_size=16)  # 查看按钮
+        self._tool_view_btn.setStyleSheet(_CMD_BTN)  # 设置样式
+        tb.addWidget(self._tool_view_btn)  # 将查看按钮添加到第1行布局
 
-        tb.addStretch(1)
-        r1.addWidget(toolbar)
-        grid_layout.addWidget(row1)
+        tb.addStretch(1)  # 添加弹性空间将后续按钮推到右侧
+        r1.addWidget(toolbar)  # 将工具栏添加到第1行布局
+        grid_layout.addWidget(row1)  # 将第1行添加到主布局
 
-        outer.addWidget(grid, 1)  # stretch=1 → fills remaining space )
+        outer.addWidget(grid, 1)  # 将主布局添加到外层布局，并设置伸缩因子为1使其占满剩余空间
 
         # ══════════ Right-docked action buttons  ══════════
         # Same style as Row 2 toolbar
@@ -892,18 +894,18 @@ class MainWindow(QMainWindow):
                 btn.clicked.connect(slot)
             outer.addWidget(btn)
 
-        # ISwitchThemeViewPresenter — Brightness(sun)=checked, QuietHours(moon)=unchecked (line 35)
+        # 切换主题色小太阳符号
         self._theme_toggle = FontIconToggleButton(FontIcons.Brightness, FontIcons.QuietHours, font_size=16)
-        self._theme_toggle.setToolTip("切换明/暗主题")
+        self._theme_toggle.setToolTip("切换明/暗主题")  # 设置工具提示
         self._theme_toggle.setStyleSheet(_CMD_BTN + """
             FontIconToggleButton:checked { color: #dcdcdc; }
             FontIconToggleButton:checked:hover { background: #3e3e42; }
         """)
-        self._theme_toggle.setChecked(theme_manager.is_dark)
-        self._theme_toggle.toggled.connect(lambda _: self._on_toggle_theme())
-        outer.addWidget(self._theme_toggle)
+        self._theme_toggle.setChecked(theme_manager.is_dark)  # 根据当前主题设置初始状态
+        self._theme_toggle.toggled.connect(lambda _: self._on_toggle_theme())  # 连接主题切换事件
+        outer.addWidget(self._theme_toggle)  # 将主题切换按钮添加到外层布局
 
-        # About → Guide (lines 36-39)
+        # About → Guide
         for icon, tip, slot in [
             (FontIcons.Info,  "关于",     self._on_about),
             (FontIcons.Smartcard, "新手向导", self._on_open_guide),
@@ -914,14 +916,14 @@ class MainWindow(QMainWindow):
                 btn.clicked.connect(slot)
             outer.addWidget(btn)
 
-        # ══════════ Rightmost 20px separator (lines 25-27) ══════════
-        sep20 = QFrame()
-        sep20.setFrameShape(QFrame.VLine)
-        sep20.setStyleSheet("color: #505050;")
-        sep20.setFixedSize(1, 20)
-        outer.addWidget(sep20)
+        # ══════════ Rightmost 20px separator ══════════
+        sep20 = QFrame()  # 创建一个新的QFrame作为分隔符
+        sep20.setFrameShape(QFrame.VLine)  # 设置为垂直线
+        sep20.setStyleSheet("color: #505050;")  # 设置分隔符颜色
+        sep20.setFixedSize(1, 20)  # 设置分隔符的固定大小（宽1px，高20px）
+        outer.addWidget(sep20)  # 将分隔符添加到外层布局
 
-        # ══════════ Window chrome buttons (from Framework/MainWindow.xaml Column 2) ══════════
+        # ══════════ Window chrome buttons ══════════
         _WIN = (
             "QPushButton { background:transparent; border:none; color:#999;"
             " font-family:'Segoe Fluent Icons','Segoe MDL2 Assets','Segoe UI Symbol';"
@@ -935,24 +937,24 @@ class MainWindow(QMainWindow):
             (FontIcons.ChromeRestore,  "还原",   self._toggle_max, "_restore_btn"),
             (FontIcons.ChromeClose,    "关闭",   self._on_close_window, None),
         ]:
-            btn = QPushButton(icon)
-            btn.setToolTip(tip)
-            btn.setStyleSheet(_WIN)
-            if icon == FontIcons.ChromeClose:
-                btn.setObjectName("close_btn")
-            btn.clicked.connect(slot)
-            if btn_attr:
-                setattr(self, btn_attr, btn)
-            outer.addWidget(btn)
-        self._restore_btn.hide()
+            btn = QPushButton(icon)  # 创建一个新的QPushButton，使用图标作为按钮文本
+            btn.setToolTip(tip)  # 设置工具提示
+            btn.setStyleSheet(_WIN)  # 应用窗口按钮的样式
+            if icon == FontIcons.ChromeClose:  # 如果是关闭按钮，设置对象名称以应用特定的样式
+                btn.setObjectName("close_btn")  # 设置对象名称为"close_btn"
+            btn.clicked.connect(slot)  # 连接按钮点击事件到对应的槽函数
+            if btn_attr:  # 如果需要保存按钮引用（最大化/还原按钮）
+                setattr(self, btn_attr, btn)  # 将按钮引用保存为实例属性
+            outer.addWidget(btn)  # 将按钮添加到外层布局
+        self._restore_btn.hide()  # 初始状态下隐藏还原按钮，因为窗口默认是未最大化的
 
         # ── drag support ──
-        self._caption_bar = bar
-        bar.installEventFilter(self)
-        for child in bar.findChildren(QWidget):
-            child.installEventFilter(self)
+        self._caption_bar = bar  # 保存标题栏引用以支持拖动窗口
+        bar.installEventFilter(self)  # 安装事件过滤器以捕获标题栏的鼠标事件实现拖动
+        for child in bar.findChildren(QWidget):  # 为标题栏及其子组件安装事件过滤器，确保在点击这些组件时也能拖动窗口
+            child.installEventFilter(self)  # 安装事件过滤器到标题栏的子组件
 
-        self.setMenuWidget(bar)
+        self.setMenuWidget(bar)  # 将自定义标题栏设置为窗口的菜单组件，这样它就会出现在窗口的顶部，并且可以与窗口的系统按钮（最小化、最大化、关闭）一起使用
 
     def eventFilter(self, obj, event):
         """Intercept mouse events on caption widgets for window drag / double-click."""
@@ -1978,7 +1980,7 @@ class MainWindow(QMainWindow):
             self._diagram_status_strip.set_status("流程图运行中...", "#2196f3")  # 更新流程图状态栏
             self._side_status_strip.set_status("结果区正在等待输出...", "#2196f3")  # 更新结果区状态栏
             self._refresh_command_states(project_service.current_project)  # 刷新命令状态
-        elif event == "done":  # 如果工作流完成
+        elif event == "done":  # 如果工作流完成，整条流程的每个节点都执行完，且没有出错、没有被停止，就会触发 done。
             elapsed = self._format_elapsed()  # 计算工作流运行的时间
             label = "连续执行中" if getattr(self, '_continuous_mode', False) else "流程执行完成"  # 根据是否连续执行来设置标签
             self._state_lbl.setText(f"{FontIcons.Completed} {label}")  # 更新状态标签
@@ -1999,32 +2001,32 @@ class MainWindow(QMainWindow):
                 self._update_image_context(self._selected_node)  # 更新图像上下文
                 if isinstance(self._selected_node, VisionNodeData):  # 如果选中的节点是视觉节点
                     mat = self._selected_node.mat  # 获取节点的图像数据
-                    if mat is not None:
-                        self._img_panel.set_image(mat)
-                    elif getattr(self._selected_node, '_result_image_source', None) is not None:
-                        self._img_panel.set_image(self._selected_node._result_image_source)
-        elif event == "error":
-            self._continuous_mode = False
-            self._live_preview_timer.stop()
-            self._refresh_command_states(project_service.current_project)
-            elapsed = self._format_elapsed()
-            self._state_lbl.setText(f"{FontIcons.Error} 错误")
-            self._state_lbl.setStyleSheet("color: #f44336; font-weight: bold;")
-            msg = getattr(data.get("result"), 'message', '流程错误')
-            self._msg_lbl.setText(f"{msg} (用时: {elapsed})")
-            self._diagram_status_strip.set_status(f"流程图错误：{msg}", "#f44336")
-            self._side_status_strip.set_status("结果区收到错误消息", "#f44336")
+                    if mat is not None:  # 如果图像源有数据
+                        self._img_panel.set_image(mat)  # 更新图像数据
+                    elif getattr(self._selected_node, '_result_image_source', None) is not None:  # 如果节点有结果图像源
+                        self._img_panel.set_image(self._selected_node._result_image_source)  # 更新图像数据
+        elif event == "error":  # 某个节点发生错误
+            self._continuous_mode = False  # 关闭连续模式
+            self._live_preview_timer.stop()  # 计时停止
+            self._refresh_command_states(project_service.current_project)  # 刷新命令状态
+            elapsed = self._format_elapsed()  # 计算工作流运行的时间
+            self._state_lbl.setText(f"{FontIcons.Error} 错误")  # 刷新状态
+            self._state_lbl.setStyleSheet("color: #f44336; font-weight: bold;")  # 设置状态标签的样式为红色
+            msg = getattr(data.get("result"), 'message', '流程错误')  # 获取错误消息
+            self._msg_lbl.setText(f"{msg} (用时: {elapsed})")  # 显示错误消息和用时
+            self._diagram_status_strip.set_status(f"流程图错误：{msg}", "#f44336")  # 更新流程图状态栏为红色
+            self._side_status_strip.set_status("结果区收到错误消息", "#f44336")  # 更新结果区状态栏为红色
             # Refresh all node bars (fallback)
-            if self._diagram_editor:
-                self._diagram_editor.refresh_all_node_states()
-        elif event == "stopped":
-            self._continuous_mode = False
-            self._state_lbl.setText(f"{FontIcons.Stop} 已停止")
-            self._state_lbl.setStyleSheet("color: #ff9800; font-weight: bold;")
+            if self._diagram_editor:  # 如果流程图编辑器存在
+                self._diagram_editor.refresh_all_node_states()  # 更新所有节点状态
+        elif event == "stopped":  # 如果事务停止
+            self._continuous_mode = False  # 关闭连续模式
+            self._state_lbl.setText(f"{FontIcons.Stop} 已停止")  # 更新状态标签
+            self._state_lbl.setStyleSheet("color: #ff9800; font-weight: bold;")  # 设置状态标签的样式为橙色
             self._msg_lbl.setText("流程已被用户停止")
-            self._diagram_status_strip.set_status("流程图已停止", "#ff9800")
-            self._side_status_strip.set_status("结果区已停止等待", "#ff9800")
-        self._refresh_command_states(project_service.current_project)
+            self._diagram_status_strip.set_status("流程图已停止", "#ff9800")  # 更新流程图状态栏为橙色
+            self._side_status_strip.set_status("结果区已停止等待", "#ff9800")  # 更新结果区状态栏为橙色
+        self._refresh_command_states(project_service.current_project)  # 刷新命令状态
 
     def _format_elapsed(self) -> str:
         """Format elapsed workflow time"""
