@@ -11,14 +11,17 @@ Usage:
 """
 
 from __future__ import annotations
-from typing import TYPE_CHECKING
+# from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from core.interfaces import (INodeService, IProjectService,
-                                  IThemeService, IEventBus)
-    from core.events import EventSystem
-    from core.registry import NodeRegistry
-    from core.node_group import NodeDataGroupBase
+# if TYPE_CHECKING:
+import core.events as _ev
+import core.node_group as _ng
+import core.registry as _reg
+from core.interfaces import (INodeService, IProjectService,
+                              IThemeService)
+from core.events import EventSystem
+from core.registry import NodeRegistry
+from core.node_group import NodeDataGroupBase, create_standard_groups
 
 
 class AppContext:
@@ -29,12 +32,12 @@ class AppContext:
     """
 
     def __init__(self):
-        self._event_bus: EventSystem | None = None
-        self._node_registry: NodeRegistry | None = None
-        self._node_groups: NodeDataGroupBase | None = None
-        self._project_service: IProjectService | None = None
-        self._node_service: INodeService | None = None
-        self._theme_service: IThemeService | None = None
+        self._event_bus: EventSystem | None = None  # 事务总线
+        self._node_registry: NodeRegistry | None = None  # 节点注册
+        self._node_groups: NodeDataGroupBase | None = None  # 节点组
+        self._project_service: IProjectService | None = None  # 项目服务
+        self._node_service: INodeService | None = None  # 节点服务
+        self._theme_service: IThemeService | None = None  # 主题服务
 
     # ── Bootstrap ───────────────────────────────────────────────────
 
@@ -45,16 +48,16 @@ class AppContext:
         that imports node_registry / node_data_group_manager / event_system
         continues to work during the migration period.
         """
-        import core.events as _ev
-        import core.node_group as _ng
-        import core.registry as _reg
+        # import core.events as _ev
+        # import core.node_group as _ng
+        # import core.registry as _reg
 
-        self._event_bus = _ev.EventSystem()
-        self._node_groups = _ng.create_standard_groups()
-        self._node_registry = _reg.NodeRegistry()
+        self._event_bus = _ev.EventSystem()  # 初始化事务总线
+        self._node_groups = _ng.create_standard_groups()  # 初始化节点组，左侧节点控制面板
+        self._node_registry = _reg.NodeRegistry()  # 节点注册
 
         # Wire registry to groups
-        self._node_registry._groups = self._node_groups
+        self._node_registry._groups = self._node_groups  # 将节点注册的组类更新为左侧控制面板的组类
 
         # ── Sync legacy globals (backward compat) ──
         _ev.event_system = self._event_bus
