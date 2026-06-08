@@ -605,11 +605,6 @@ class VisionNodeDataBase(NodeBase):
     Adds flow-control delay parameters.
     """
 
-    preview_milliseconds_delay = Property(1500, name="预览延迟", group=PropertyGroupNames.FLOW_PARAMETERS,
-                                         description="设置生成图像后预览等待时间")
-    invoke_milliseconds_delay = Property(500, name="执行延迟", group=PropertyGroupNames.FLOW_PARAMETERS,
-                                         description="执行完成后等待时间")
-
 
 # =============================================================================
 # ShowPropertyNodeDataBase - property presenter
@@ -806,10 +801,9 @@ class VisionNodeData(DemoNodeDataBase):
 
         if self.use_result_image_source:
             self._update_result_image_source()
-            # 只有起始节点（摄像头/图像源）才执行预览延迟，下游处理节点跳过此sleep，
-            # 避免每个节点累加延迟导致帧率极低
-            if getattr(self, 'use_start', False):
-                time.sleep(self.preview_milliseconds_delay / 1000.0)
+            # preview_milliseconds_delay 已移除：结果图像在上一行已更新完毕，
+            # UI 通过 _tick_live_preview 定时器和 workflow "done" 事件获取图像，
+            # 不需要阻塞工作流线程等待。帧率由 _run_continuous 统一控制。
 
         if self._result_presenter is None:
             self._result_presenter = self.create_result_presenter()
@@ -909,8 +903,6 @@ class VisionNodeData(DemoNodeDataBase):
     def to_dict(self) -> dict:
         data = super().to_dict()
         data["use_invoked_part"] = self.use_invoked_part
-        data["preview_milliseconds_delay"] = self.preview_milliseconds_delay
-        data["invoke_milliseconds_delay"] = self.invoke_milliseconds_delay
         return data
 
     def dispose(self):
@@ -1213,6 +1205,8 @@ class SrcFilesVisionNodeData(ROINodeData):
     use_all_image = Property(False, name="使用所有图像", group=PropertyGroupNames.RUN_PARAMETERS)
     use_auto_switch = Property(True, name="自动切换", group=PropertyGroupNames.RUN_PARAMETERS)
     src_file_path = Property("", name="当前文件", group=PropertyGroupNames.RUN_PARAMETERS)
+    invoke_milliseconds_delay = Property(33, name="执行延迟", group=PropertyGroupNames.FLOW_PARAMETERS,
+                                         description="连续执行时，每次采集图像的目标间隔（毫秒）。33ms≈30FPS，500ms≈2FPS")
 
     def __init__(self):
         self.src_file_paths: list[str] = []
@@ -1367,6 +1361,7 @@ class SrcFilesVisionNodeData(ROINodeData):
         data["src_file_path"] = self.src_file_path
         data["use_all_image"] = self.use_all_image
         data["use_auto_switch"] = self.use_auto_switch
+        data["invoke_milliseconds_delay"] = self.invoke_milliseconds_delay
         return data
 
     @classmethod
