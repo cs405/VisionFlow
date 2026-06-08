@@ -14,7 +14,7 @@ class NodeRegistry:
     """
 
     def __init__(self):
-        self._nodes: dict[str, Type[NodeBase]] = {}
+        self._nodes: dict[str, Type[NodeBase]] = {}  # 节点
         self._categories: dict[str, list[str]] = {}  # category -> [type_names]
 
     def register(self, node_type: Type[NodeBase], category: str = ""):

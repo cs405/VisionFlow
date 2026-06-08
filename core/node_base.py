@@ -238,30 +238,30 @@ class LinkData:
 # =============================================================================
 
 class NodeBase(ABC):
-    """Root base class for all diagram nodes.
-
-    Provides: ports, styling, diagram data management, serialization.
+    """
+    所有图表节点的根基类。
+    提供：端口、样式、图表数据管理和序列化。
     """
 
     def __init__(self):
-        self._id = str(uuid.uuid4())[:8]
-        self._name = self.__class__.__name__
-        self._text = ""
-        self._title = ""
+        self._id = str(uuid.uuid4())[:8]  # 节点 id
+        self._name = self.__class__.__name__  # 显示名称，默认为类名
+        self._text = ""  # 显示文本
+        self._title = ""  # 标题
 
-        # Property change callbacks
+        # 属性更改回调
         self._property_callbacks: dict[str, list[Callable]] = {}
 
-        # Styling (from StyleNodeDataBase)
-        self.width: float = 120.0
-        self.height: float = 35.0
-        self.corner_radius: float = 2.0
-        self.fill_color: str = "#FFFFFF"
-        self.flag_length: float = 10.0
+        # 样式属性
+        self.width: float = 120.0  # 宽
+        self.height: float = 35.0  # 高
+        self.corner_radius: float = 2.0  # 圆角
+        self.fill_color: str = "#FFFFFF"  # 填充色
+        self.flag_length: float = 10.0  # 标志长度
 
-        # Ports
+        # 端口
         self.ports: list[Port] = []
-        self._init_ports()
+        self._init_ports()  # 初始化端口
 
         # Diagram data
         self._diagram_data: WorkflowEngine | None = None
@@ -380,7 +380,7 @@ class NodeBase(ABC):
     # -- Ports --
 
     def _init_ports(self):
-        """Initialize the 4 default ports (Top/Bottom/Left/Right)."""
+        """初始化 4 个默认端口（上/下/左/右"""
         self.ports = []
         # Top - Input
         p = self.create_port_data()
@@ -672,15 +672,15 @@ class DemoNodeDataBase(HelpNodeDataBase):
 # =============================================================================
 
 class VisionNodeData(DemoNodeDataBase):
-    """Core generic vision processing node.
-
-    This is the central class - most vision nodes extend this.
-    Key responsibilities:
-      - Hold the Mat (current image numpy array)
-      - Provide ResultImages list
-      - Implement the Invoke lifecycle (find source/from, execute, return result)
-      - Flow control helpers: OK(), Error(), Break()
-      - Image disposal management
+    """
+    核心通用视觉处理节点。
+    这是核心类——大多数视觉节点都继承自它。
+    主要职责：
+        - 维护 Mat 对象（当前图像的 NumPy 数组）
+        - 提供 ResultImages 列表
+        - 实现 Invoke 生命周期（查找源/来源、执行、返回结果）
+        - 流程控制辅助函数：OK()、Error()、Break()
+        - 图像处理管理
     """
 
     # UseInvokedPart - controls whether output goes to history/preview
@@ -851,10 +851,8 @@ class VisionNodeData(DemoNodeDataBase):
         ...
 
     def _update_result_image_source(self):
-        """Update the result image source for GUI display.
-
-        Default implementation stores the current Mat as result_image_source.
-        Override only if custom serialization/format is needed.
+        """
+        更新图像结果图像源
         """
         self._result_image_source = self._mat if self._mat is not None else None
 

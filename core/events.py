@@ -57,6 +57,7 @@ class EventSystem:
     """Global event bus. Supports subscribe/publish with optional sender filtering."""
 
     def __init__(self):
+        # 回调函数字典，键为事件类型，值为可调用对象的列表，支持一个事件触发多个处理函数
         self._handlers: dict[EventType, list[Callable]] = defaultdict(list)
 
     def subscribe(self, event_type: EventType, handler: Callable):

@@ -274,9 +274,9 @@ class ProjectItem:
 # =============================================================================
 
 class ProjectService:
-    """Service for saving/loading multi-diagram project files (.json).
-
-    Supports: multi-diagram projects, recent projects persistence, templates.
+    """
+    用于保存/加载多图项目文件（.json）的服务
+    支持：多图项目、最近项目持久化、模板
     """
 
     FILE_EXTENSION = ".json"

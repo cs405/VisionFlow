@@ -71,8 +71,8 @@ class NodeDataGroupBase:
     """
 
     def __init__(self):
-        self._groups: dict[str, NodeGroup] = {}
-        self._node_registry: dict[str, Type[NodeBase]] = {}  # type_name -> type
+        self._groups: dict[str, NodeGroup] = {}  # 组，存放左侧控制面板的大组
+        self._node_registry: dict[str, Type[NodeBase]] = {}  # 注册节点
 
     # -- Group management --
 

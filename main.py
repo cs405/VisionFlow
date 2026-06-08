@@ -19,14 +19,20 @@ Usage:
 
 import sys
 import os
+import argparse
+import importlib
+import inspect
+import logging
 
+from core.node_base import NodeBase
+from gui.theme import theme_manager
+from services.app_context import AppContext, set_app_context
 # Ensure the project root is on the path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
 def setup_logging():
     """Configure logging for the application."""
-    import logging
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -40,13 +46,12 @@ def bootstrap_app_context():
     This is the SINGLE place where all services are wired together.
     No other module should create global singletons.
     """
-    from services.app_context import AppContext, set_app_context
 
     ctx = AppContext()
-    ctx.init_defaults()
+    ctx.init_defaults()  # 初始化获得左侧控制面板内部有哪些组
 
     # ── Discover and register all node types ──
-    _discover_nodes(ctx)
+    _discover_nodes(ctx)  # 发现并注册所有节点
 
     set_app_context(ctx)
     return ctx
@@ -58,9 +63,6 @@ def _discover_nodes(ctx):
     Replaces the old plugin_manager.discover_nodes_package() which
     relied on import-time side effects.
     """
-    import importlib
-    import inspect
-    from core.node_base import NodeBase
 
     # Standard node packages
     packages = [
@@ -134,17 +136,16 @@ def run_gui(ctx, project_path: str = None):
         sys.exit(1)
 
     app = QApplication(sys.argv)
-    app.setApplicationName("VisionFlow")
-    app.setOrganizationName("VisionFlow")
-    app.setApplicationVersion("2.0.0")
-
+    app.setApplicationName("VisionFlow")  # 设置 app 名称
+    app.setOrganizationName("VisionFlow")  # 设置组织名称
+    app.setApplicationVersion("2.0.0")  # 设置版本号
+    # logo 路径 assets/icons/logo.ico
     icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                              "assets", "icons", "logo.ico")
     if os.path.exists(icon_path):
-        app.setWindowIcon(QIcon(icon_path))
+        app.setWindowIcon(QIcon(icon_path))  # 设置 logo 图标
 
     # Apply theme via ThemeManager (single source of truth)
-    from gui.theme import theme_manager
     app.setStyle("Fusion")
     app.setPalette(theme_manager.colors.to_palette())
     app.setStyleSheet(theme_manager.get_stylesheet())
@@ -165,8 +166,6 @@ def run_gui(ctx, project_path: str = None):
 
 def main():
     """Main entry point — explicit bootstrap, no hidden side effects."""
-    import argparse
-
     parser = argparse.ArgumentParser(
         description="VisionFlow - Visual Workflow Editor for Computer Vision"
     )

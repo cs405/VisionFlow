@@ -9,6 +9,7 @@
 import ctypes
 import os
 import json
+import time
 from datetime import datetime
 
 from PyQt5.QtWidgets import (
@@ -508,29 +509,28 @@ class MainWindow(QMainWindow):
         if ctx is None:
             from services.app_context import get_app_context
             ctx = get_app_context()
-        self._ctx = ctx
-        self._workflow: WorkflowEngine | None = None
-        self._selected_node: NodeBase | None = None
-        self._diagram_editor: DiagramEditorWidget | None = None
-        self._diagram_pages: dict[str, QWidget] = {}
-        self._diagram_headers: dict[str, _DiagramTabHeader] = {}
-        self._project_loaded = False
-        self._continuous_mode = False
-        self._stop_requested = False
-        self._wf_runner = WorkflowRunner()
-        self._live_preview_timer = QTimer(self)
-        self._live_preview_timer.setInterval(50)
-        self._live_preview_timer.timeout.connect(self._tick_live_preview)
-        self._left_panel_visible = True
-        self._right_panel_visible = True
-        self._saved_right_width = _ps.get_i("right_width", 420)
-        self._saved_right_width = _ps.get_i("right_width", 420)
-        self._ui_layout_profile = self._load_shared_ui_layout_profile()
-        self._ui_layout_metrics = self._compute_ui_layout_metrics()
-        self._ui_profile_capture_pending = self._ui_layout_profile is None
-        self._ui_profile_capture_scheduled = False
+        self._ctx = ctx  # ctx 包含总线事务，节点组，节点注册，节点服务，项目服务和主题服务
+        self._workflow: WorkflowEngine | None = None  # 工作流
+        self._selected_node: NodeBase | None = None  # 选择的节点
+        self._diagram_editor: DiagramEditorWidget | None = None  # 流程图编辑器
+        self._diagram_pages: dict[str, QWidget] = {}  # 流程图页面缓存
+        self._diagram_headers: dict[str, _DiagramTabHeader] = {}  # 流程图标签页头部组件缓存
+        self._project_loaded = False  # 是否加载项目
+        self._continuous_mode = False  # 是否连续模式
+        self._stop_requested = False  # 是否停止
+        self._wf_runner = WorkflowRunner()  # 工作流运行
+        self._live_preview_timer = QTimer(self)  # 实时预览定时器
+        self._live_preview_timer.setInterval(50)  # 默认20 FPS，计时 50 ms
+        self._live_preview_timer.timeout.connect(self._tick_live_preview) # 计时器
+        self._left_panel_visible = True  # 左侧面板是否可见
+        self._right_panel_visible = True  # 右侧面板可见
+        self._saved_right_width = _ps.get_i("right_width", 420)  # 右侧面板宽度
+        self._ui_layout_profile = self._load_shared_ui_layout_profile()  # UI布局配置
+        self._ui_layout_metrics = self._compute_ui_layout_metrics()  # UI布局度量，为了适应不同屏幕显示一样的画面
+        self._ui_profile_capture_pending = self._ui_layout_profile is None  # 是否等待捕获UI布局配置，第一次运行没有配置会捕获一次
+        self._ui_profile_capture_scheduled = False  # 是否已经安排了UI布局配置捕获，避免重复捕获
 
-        self._wf_ui_update.connect(self._on_wf_ui_update)
+        self._wf_ui_update.connect(self._on_wf_ui_update)  # 连接工作流UI更新信号到处理函数
 
         self._setup_window()
         self._setup_caption_bar()
@@ -584,7 +584,7 @@ class MainWindow(QMainWindow):
         self._schedule_ui_profile_capture()
 
     def _load_shared_ui_layout_profile(self):
-        profile = _load_app_config().get("ui_layout_profile")
+        profile = _load_app_config().get("ui_layout_profile")  # 从根目录的 app_config.json 中加载 ui_layout_profile
         return profile if isinstance(profile, dict) else None
 
     def _screen_available_size(self):
@@ -1775,21 +1775,22 @@ class MainWindow(QMainWindow):
                     diagram.workflow = editor._workflow
 
     def _select_node(self, node: NodeBase | None):
-        # Stop live preview when switching nodes or deselecting
-        self._live_preview_timer.stop()
-        self._selected_node = node
-        self._property_panel.set_node(node)
-        self._help_panel.set_node(node)
+        # 切换节点或取消选择时停止实时预览
+        self._live_preview_timer.stop()  # 停止计时器以停止实时预览
+        self._selected_node = node  # 选中的节点
+        self._property_panel.set_node(node)  # 更新属性面板显示选中节点的属性
+        self._help_panel.set_node(node)  # 更新帮助面板显示选中节点的帮助信息
+        # 更新模块结果标题显示选中节点的名称
         self._module_result_title.setText(f"模块名称 <{node.name}>" if node else "模块名称 <未选择>")
-        if isinstance(node, VisionNodeData):
-            self._result_panel.show_node_results(node)
-            self._result_panel.show_help(node)
+        if isinstance(node, VisionNodeData): # 仅当选中节点是 VisionNodeData 时才启用实时预览
+            self._result_panel.show_node_results(node)  # 在结果面板显示选中节点的结果
+            self._result_panel.show_help(node)  # 在结果面板显示选中节点的帮助信息
         else:
-            self._result_panel.show_node_results(None)
-            self._result_panel.show_help(None)
-        self._update_image_context(node)
+            self._result_panel.show_node_results(None)  # 非 VisionNodeData 时不显示结果
+            self._result_panel.show_help(None)  # 非 VisionNodeData 时不显示帮助
+        self._update_image_context(node)  # 更新图像上下文显示选中节点的相关图像
 
-        if isinstance(node, SrcFilesVisionNodeData):
+        if isinstance(node, SrcFilesVisionNodeData):  # 如果选中节点是 SrcFilesVisionNodeData，则启用实时预览功能
             self._resource_panel.set_node(node)
             self._resource_panel.setVisible(True)
         else:
@@ -1968,34 +1969,36 @@ class MainWindow(QMainWindow):
         self._finalize_execution_state()
 
     def _on_wf_ui_update(self, event: str, data: dict):
-        """Slot called on MAIN THREAD via queued signal.  Safe to touch widgets."""
-        if event == "start":
-            self._wf_start_time = __import__('time').time()
-            self._state_lbl.setText(f"{FontIcons.Sync} 运行中")
-            self._state_lbl.setStyleSheet("color: #2196f3; font-weight: bold;")
-            self._msg_lbl.setText("流程运行中...")
-            self._diagram_status_strip.set_status("流程图运行中...", "#2196f3")
-            self._side_status_strip.set_status("结果区正在等待输出...", "#2196f3")
-            self._refresh_command_states(project_service.current_project)
-        elif event == "done":
-            elapsed = self._format_elapsed()
-            label = "连续执行中" if getattr(self, '_continuous_mode', False) else "流程执行完成"
-            self._state_lbl.setText(f"{FontIcons.Completed} {label}")
-            self._state_lbl.setStyleSheet("color: #4caf50; font-weight: bold;")
-            self._msg_lbl.setText(f"{label} (用时: {elapsed})")
-            self._diagram_status_strip.set_status(f"{label} · 用时: {elapsed}", "#4caf50")
-            self._side_status_strip.set_status("结果区已更新", "#4caf50")
+        """槽函数通过队列信号在主线程上被调用。可以安全地操作控件"""
+        if event == "start":  # 如果工作流开始
+            self._wf_start_time = __import__('time').time()  # 工作流开始的时间
+            self._state_lbl.setText(f"{FontIcons.Sync} 运行中")  # 将状态标志变为运行中
+            self._state_lbl.setStyleSheet("color: #2196f3; font-weight: bold;")  # 设置状态标签的样式
+            self._msg_lbl.setText("流程运行中...")  # 显示流程运行中的消息
+            self._diagram_status_strip.set_status("流程图运行中...", "#2196f3")  # 更新流程图状态栏
+            self._side_status_strip.set_status("结果区正在等待输出...", "#2196f3")  # 更新结果区状态栏
+            self._refresh_command_states(project_service.current_project)  # 刷新命令状态
+        elif event == "done":  # 如果工作流完成
+            elapsed = self._format_elapsed()  # 计算工作流运行的时间
+            label = "连续执行中" if getattr(self, '_continuous_mode', False) else "流程执行完成"  # 根据是否连续执行来设置标签
+            self._state_lbl.setText(f"{FontIcons.Completed} {label}")  # 更新状态标签
+            self._state_lbl.setStyleSheet("color: #4caf50; font-weight: bold;")  # 设置状态标签的样式
+            self._msg_lbl.setText(f"{label} (用时: {elapsed})")  # 显示流程完成的消息和用时
+            self._diagram_status_strip.set_status(f"{label} · 用时: {elapsed}", "#4caf50")  # 更新流程图状态栏
+            self._side_status_strip.set_status("结果区已更新", "#4caf50")  # 更新结果区状态栏
             # Refresh all node bars (fallback in case per-node signals were lost)
-            if self._diagram_editor:
-                self._diagram_editor.refresh_all_node_states()
+            if self._diagram_editor:  # 如果流程图编辑器存在
+                self._diagram_editor.refresh_all_node_states()  # 更新所有节点状态
             # Keep stop button enabled during continuous execution
-            if getattr(self, '_continuous_mode', False):
-                self._refresh_command_states(project_service.current_project)
-            # In continuous mode, refresh the user-selected node's image
+            if getattr(self, '_continuous_mode', False):  # 如果在连续执行模式
+                self._refresh_command_states(project_service.current_project)  # 刷新命令状态
+            # 在连续模式下，刷新用户选择的节点的图像
+            # 先尝试读取 self._continuous_mode，如果这个属性不存在，才返回默认值 False
+            # 如果是连续模式且节点被选中
             if getattr(self, '_continuous_mode', False) and self._selected_node:
-                self._update_image_context(self._selected_node)
-                if isinstance(self._selected_node, VisionNodeData):
-                    mat = self._selected_node.mat
+                self._update_image_context(self._selected_node)  # 更新图像上下文
+                if isinstance(self._selected_node, VisionNodeData):  # 如果选中的节点是视觉节点
+                    mat = self._selected_node.mat  # 获取节点的图像数据
                     if mat is not None:
                         self._img_panel.set_image(mat)
                     elif getattr(self._selected_node, '_result_image_source', None) is not None:
@@ -2025,14 +2028,13 @@ class MainWindow(QMainWindow):
 
     def _format_elapsed(self) -> str:
         """Format elapsed workflow time"""
-        import time
-        start = getattr(self, '_wf_start_time', None)
-        if start is None:
+        start = getattr(self, '_wf_start_time', None)  # 获取工作流开始时间
+        if start is None:  # 如果没有开始时间，返回"00:00:00"
             return "00:00:00"
-        seconds = time.time() - start
-        h = int(seconds // 3600)
-        m = int((seconds % 3600) // 60)
-        s = int(seconds % 60)
+        seconds = time.time() - start # 计算秒
+        h = int(seconds // 3600)  # 计算小时
+        m = int((seconds % 3600) // 60)  # 计算分钟
+        s = int(seconds % 60)  # 计算秒
         if h > 0:
             return f"{h:02d}:{m:02d}:{s:02d}"
         return f"{m:02d}:{s:02d}"
@@ -2192,15 +2194,15 @@ class MainWindow(QMainWindow):
                 item.set_state(NodeState.COMPLETED)
 
     def _tick_live_preview(self):
-        """Refresh the image viewer from the selected node during continuous execution."""
-        node = self._selected_node
-        if node is None or not self._continuous_mode:
-            self._live_preview_timer.stop()
+        """在连续执行期间，从选定节点刷新图像查看器"""
+        node = self._selected_node  # 节点为选中的节点
+        if node is None or not self._continuous_mode:  # 如果未选中节点或者不是连续的模式
+            self._live_preview_timer.stop()  # 计时器停止
             return
-        if isinstance(node, VisionNodeData):
-            if node.mat is not None:
-                self._img_panel.set_image(node.mat)
-            elif node._result_image_source is not None:
+        if isinstance(node, VisionNodeData):  # 如果节点是视觉节点
+            if node.mat is not None:  # 节点图像矩阵存在数据
+                self._img_panel.set_image(node.mat)  # 将节点图片刷新在图片显示区域
+            elif node._result_image_source is not None:  # 如果节点的
                 self._img_panel.set_image(node._result_image_source)
 
     def _on_stop_workflow(self):
@@ -2411,28 +2413,29 @@ class MainWindow(QMainWindow):
         self._bottom_visible = not self._bottom_visible
 
     def _update_image_context(self, node: NodeBase | None):
-        if node is None:
-            self._img_panel.clear_context_info()
+        """根据节点的不同情况，更新图像面板显示的信息"""
+        if node is None: # 如果为空节点
+            self._img_panel.clear_context_info() # 清空图像显示区域
             return
 
         badge = "无结果"
-        badge_color = "#3f3f46"
+        badge_color = "#3f3f46"  # 灰色
         if isinstance(node, SrcFilesVisionNodeData):
             badge = "原始图像"
-            badge_color = "#0078d4"
+            badge_color = "#0078d4"  # 蓝色
         elif isinstance(node, VisionNodeData) and (node.mat is not None or node.result_image_source is not None):
             badge = "模块结果"
-            badge_color = "#4caf50"
+            badge_color = "#4caf50"  # 绿色
 
-        source_path, source_hint = self._find_source_context(node)
+        source_path, source_hint = self._find_source_context(node)  # 查找图像来源路径和提示信息
         self._img_panel.set_result_badge(badge, badge_color)
         self._img_panel.set_source_hint(source_hint)
         self._img_panel.set_message_banner(getattr(node, "message", ""))
-        if source_path:
+        if source_path:  # 如果有图像路径 → 显示图像路径和像素尺寸（宽×高）
             pixel_w = getattr(node, 'pixel_width', 0) or 0
             pixel_h = getattr(node, 'pixel_height', 0) or 0
             self._img_panel.set_image_info(source_path, pixel_w, pixel_h)
-        else:
+        else:  # 如果没有 → 清空图像信息
             self._img_panel.set_image_info(None)
 
     def _find_source_context(self, node: NodeBase | None) -> tuple[str | None, str]:
