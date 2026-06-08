@@ -7,6 +7,7 @@ import numpy as np
 from core.node_base import OpenCVNodeDataBase, SrcFilesVisionNodeData, Property, PropertyGroupNames
 from core.data_packet import FlowableResult
 from core.workflow import WorkflowEngine
+from core.events import EventType, event_system
 
 
 class CameraCaptureNodeData(SrcFilesVisionNodeData, OpenCVNodeDataBase):
@@ -26,11 +27,20 @@ class CameraCaptureNodeData(SrcFilesVisionNodeData, OpenCVNodeDataBase):
         self.src_file_path = ""
         # 摄像头长连接：只在首次 invoke 时打开，dispose 时释放，避免每次拍照都重新 open/close
         self._cap: cv2.VideoCapture | None = None
+        # 监听流程停止事件，自动释放摄像头资源
+        event_system.subscribe(EventType.WORKFLOW_STOPPED, self._on_workflow_stopped)
+
+    def _on_workflow_stopped(self, sender, **kwargs):
+        """流程停止时立即释放摄像头硬件资源"""
+        if self._cap is not None:
+            self._cap.release()  # 关闭摄像头，释放硬件
+            self._cap = None
 
     def _ensure_cap(self) -> cv2.VideoCapture | None:
-        """懒加载摄像头连接，只打开一次"""
+        """懒加载摄像头连接，只在未打开时重新创建"""
         if self._cap is not None and self._cap.isOpened():
             return self._cap
+        # 摄像头未打开（可能是初次或停止后被释放），重新创建连接
         self._cap = cv2.VideoCapture(self.camera_index)
         if not self._cap.isOpened():
             self._cap = None
@@ -54,7 +64,8 @@ class CameraCaptureNodeData(SrcFilesVisionNodeData, OpenCVNodeDataBase):
         self._result_image_source = self._mat
 
     def dispose(self):
-        """释放摄像头长连接"""
+        """释放摄像头长连接并取消事件订阅"""
+        event_system.unsubscribe(EventType.WORKFLOW_STOPPED, self._on_workflow_stopped)
         if self._cap is not None:
             self._cap.release()  # 释放摄像头硬件资源
             self._cap = None
