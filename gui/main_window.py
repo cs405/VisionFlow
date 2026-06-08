@@ -94,6 +94,34 @@ class PanelState:
 
 _ps = PanelState()
 
+_UI_PROFILE_VERSION = 1
+_DEFAULT_WINDOW_WIDTH = 1460
+_DEFAULT_WINDOW_HEIGHT = 900
+_DEFAULT_LEFT_WIDTH = 280
+_DEFAULT_RIGHT_WIDTH = 850
+_DEFAULT_CENTER_HEIGHT = 800
+_DEFAULT_BOTTOM_HEIGHT = 180
+_DEFAULT_RESOURCE_HEIGHT = 118
+_DEFAULT_CAPTION_HEIGHT = 85
+
+
+def _app_config_path():
+    return os.path.join(os.path.dirname(os.path.dirname(__file__)), "app_config.json")
+
+
+def _load_app_config():
+    try:
+        with open(_app_config_path(), "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _save_app_config(data: dict):
+    with open(_app_config_path(), "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
 
 class _Sep(QFrame):
     def __init__(self, vertical=True):
@@ -497,6 +525,10 @@ class MainWindow(QMainWindow):
         self._right_panel_visible = True
         self._saved_right_width = _ps.get_i("right_width", 420)
         self._saved_right_width = _ps.get_i("right_width", 420)
+        self._ui_layout_profile = self._load_shared_ui_layout_profile()
+        self._ui_layout_metrics = self._compute_ui_layout_metrics()
+        self._ui_profile_capture_pending = self._ui_layout_profile is None
+        self._ui_profile_capture_scheduled = False
 
         self._wf_ui_update.connect(self._on_wf_ui_update)
 
@@ -518,8 +550,8 @@ class MainWindow(QMainWindow):
     def _setup_window(self):
         self.setWindowTitle("VisionFlow — VisionFlow")
         self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
-        width = _ps.get_i("window_width", 1460)
-        height = _ps.get_i("window_height", 900)
+        width = self._ui_layout_metrics["window_width"]
+        height = self._ui_layout_metrics["window_height"]
         self.resize(width, height)
         self.setMinimumSize(1180, 720)
         self.setPalette(theme_manager.colors.to_palette())
@@ -549,6 +581,125 @@ class MainWindow(QMainWindow):
     def showEvent(self, event):
         super().showEvent(event)
         self._init_dwm_shadow()
+        self._schedule_ui_profile_capture()
+
+    def _load_shared_ui_layout_profile(self):
+        profile = _load_app_config().get("ui_layout_profile")
+        return profile if isinstance(profile, dict) else None
+
+    def _screen_available_size(self):
+        screen = QApplication.primaryScreen()
+        if screen is None:
+            return _DEFAULT_WINDOW_WIDTH, _DEFAULT_WINDOW_HEIGHT
+        geometry = screen.availableGeometry()
+        width = max(1, geometry.width())
+        height = max(1, geometry.height())
+        return width, height
+
+    @staticmethod
+    def _scaled_int(value: int | float, scale: float, minimum: int) -> int:
+        return max(minimum, int(round(float(value) * scale)))
+
+    def _compute_ui_layout_metrics(self):
+        left_width = _ps.get_i("left_width", _DEFAULT_LEFT_WIDTH)
+        bottom_height = _ps.get_i("bottom_height", _DEFAULT_BOTTOM_HEIGHT)
+        metrics = {
+            "window_width": _ps.get_i("window_width", _DEFAULT_WINDOW_WIDTH),
+            "window_height": _ps.get_i("window_height", _DEFAULT_WINDOW_HEIGHT),
+            "left_width": left_width,
+            "right_width": _DEFAULT_RIGHT_WIDTH,
+            "center_height": _DEFAULT_CENTER_HEIGHT,
+            "bottom_height": bottom_height,
+            "resource_height": _DEFAULT_RESOURCE_HEIGHT,
+            "caption_height": _DEFAULT_CAPTION_HEIGHT,
+        }
+
+        profile = self._ui_layout_profile
+        if not profile:
+            return metrics
+
+        base_screen = profile.get("screen") or {}
+        base_width = max(1, int(base_screen.get("width", metrics["window_width"])))
+        base_height = max(1, int(base_screen.get("height", metrics["window_height"])))
+        current_width, current_height = self._screen_available_size()
+        scale_x = current_width / base_width
+        scale_y = current_height / base_height
+
+        window = profile.get("window") or {}
+        layout = profile.get("layout") or {}
+
+        metrics["window_width"] = min(
+            current_width,
+            self._scaled_int(window.get("width", metrics["window_width"]), scale_x, 1180),
+        )
+        metrics["window_height"] = min(
+            current_height,
+            self._scaled_int(window.get("height", metrics["window_height"]), scale_y, 720),
+        )
+        metrics["left_width"] = self._scaled_int(layout.get("left_width", metrics["left_width"]), scale_x, 50)
+        metrics["right_width"] = self._scaled_int(layout.get("right_width", metrics["right_width"]), scale_x, 420)
+        metrics["center_height"] = self._scaled_int(layout.get("center_height", metrics["center_height"]), scale_y, 420)
+        metrics["bottom_height"] = self._scaled_int(layout.get("bottom_height", metrics["bottom_height"]), scale_y, 120)
+        metrics["resource_height"] = self._scaled_int(layout.get("resource_height", metrics["resource_height"]), scale_y, 84)
+        metrics["caption_height"] = self._scaled_int(layout.get("caption_height", metrics["caption_height"]), scale_y, 72)
+
+        max_left = max(50, metrics["window_width"] - 980)
+        metrics["left_width"] = min(metrics["left_width"], max_left)
+        max_right = max(420, metrics["window_width"] - metrics["left_width"] - 320)
+        metrics["right_width"] = min(metrics["right_width"], max_right)
+        max_center_height = max(420, metrics["window_height"] - 120)
+        metrics["center_height"] = min(metrics["center_height"], max_center_height)
+        max_bottom_height = max(120, metrics["window_height"] - 360)
+        metrics["bottom_height"] = min(metrics["bottom_height"], max_bottom_height)
+        metrics["resource_height"] = min(metrics["resource_height"], 180)
+        return metrics
+
+    def _schedule_ui_profile_capture(self):
+        if not self._ui_profile_capture_pending or self._ui_profile_capture_scheduled:
+            return
+        self._ui_profile_capture_scheduled = True
+        QTimer.singleShot(0, self._capture_ui_layout_profile)
+
+    def _capture_ui_layout_profile(self):
+        self._ui_profile_capture_scheduled = False
+        if not self._ui_profile_capture_pending:
+            return
+
+        screen_width, screen_height = self._screen_available_size()
+        left_width = self._left_box.menu_width() if hasattr(self, "_left_box") else _DEFAULT_LEFT_WIDTH
+        right_width = self._right_panel.width() if hasattr(self, "_right_panel") and self._right_panel.width() > 0 else _DEFAULT_RIGHT_WIDTH
+        center_height = self._center_splitter.widget(0).height() if hasattr(self, "_center_splitter") else _DEFAULT_CENTER_HEIGHT
+        if center_height <= 0:
+            center_height = _DEFAULT_CENTER_HEIGHT
+        bottom_height = _ps.get_i("bottom_height", _DEFAULT_BOTTOM_HEIGHT)
+        if hasattr(self, "_center_splitter"):
+            sizes = self._center_splitter.sizes()
+            if len(sizes) >= 2 and sizes[1] > 0:
+                bottom_height = sizes[1]
+
+        data = _load_app_config()
+        data["ui_layout_profile"] = {
+            "version": _UI_PROFILE_VERSION,
+            "screen": {
+                "width": screen_width,
+                "height": screen_height,
+            },
+            "window": {
+                "width": self.width(),
+                "height": self.height(),
+            },
+            "layout": {
+                "left_width": left_width,
+                "right_width": right_width,
+                "center_height": center_height,
+                "bottom_height": bottom_height,
+                "resource_height": self._resource_panel.height() if hasattr(self, "_resource_panel") and self._resource_panel.height() > 0 else _DEFAULT_RESOURCE_HEIGHT,
+                "caption_height": self._caption_bar.height() if hasattr(self, "_caption_bar") and self._caption_bar.height() > 0 else _DEFAULT_CAPTION_HEIGHT,
+            },
+        }
+        _save_app_config(data)
+        self._ui_layout_profile = data["ui_layout_profile"]
+        self._ui_profile_capture_pending = False
 
     def changeEvent(self, event):
         """Toggle Maximize ↔ Restore visibility on window state change"""
@@ -568,8 +719,9 @@ class MainWindow(QMainWindow):
             Row1: Border(top) | DockPanel(LastChildFill=False): 4 button groups
         """
         bar = QWidget()
-        bar.setFixedHeight(85)
+        bar.setFixedHeight(self._ui_layout_metrics["caption_height"])
         bar.setStyleSheet("background: #1e1e1e;")
+        self._caption_bar = bar
 
         # ── outer DockPanel (line 24) ──
         outer = QHBoxLayout(bar)
@@ -926,7 +1078,7 @@ class MainWindow(QMainWindow):
         self._center_right_splitter.addWidget(self._diagram_panel)
 
         self._right_panel = self._build_side_panel()
-        self._right_panel.setFixedWidth(850)
+        self._right_panel.setFixedWidth(self._ui_layout_metrics["right_width"])
         self._center_right_splitter.addWidget(self._right_panel)
 
         # Grid layout: GridSplitterBox | center+right splitter
@@ -949,7 +1101,7 @@ class MainWindow(QMainWindow):
         self._center_splitter.setHandleWidth(2)
         self._center_splitter.setStyleSheet("QSplitter::handle { background: #505050; }")
         center_panel = self._build_center_panel()
-        center_panel.setFixedHeight(800)
+        center_panel.setFixedHeight(self._ui_layout_metrics["center_height"])
         self._center_splitter.addWidget(center_panel)
         self._center_splitter.addWidget(self._build_bottom_panel())
 
@@ -999,7 +1151,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._center_tabs, 1)
 
         self._resource_panel = FlowResourcePanel()
-        self._resource_panel.setFixedHeight(118)
+        self._resource_panel.setFixedHeight(self._ui_layout_metrics["resource_height"])
         self._resource_panel.setVisible(False)
         layout.addWidget(self._resource_panel)
 
@@ -1124,9 +1276,9 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
     def _apply_splitter_state(self):
-        left_width = _ps.get_i("left_width", 280)
-        right_width = _ps.get_i("right_width", 420)
-        bottom_height = _ps.get_i("bottom_height", 180)
+        left_width = self._ui_layout_metrics["left_width"] if self._ui_layout_profile else _ps.get_i("left_width", 280)
+        right_width = self._ui_layout_metrics["right_width"] if self._ui_layout_profile else _ps.get_i("right_width", 420)
+        bottom_height = self._ui_layout_metrics["bottom_height"] if self._ui_layout_profile else _ps.get_i("bottom_height", 180)
 
         self._left_box.set_menu_width(left_width)
         self._center_right_splitter.setSizes([max(640, self.width() - left_width - right_width), right_width])

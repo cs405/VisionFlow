@@ -2,5 +2,24 @@
   "auto_start": false,
   "show_tray": true,
   "show_theme_btn": false,
-  "show_grid": true
+  "show_grid": true,
+  "ui_layout_profile": {
+    "version": 1,
+    "screen": {
+      "width": 2560,
+      "height": 1528
+    },
+    "window": {
+      "width": 2560,
+      "height": 1528
+    },
+    "layout": {
+      "left_width": 50,
+      "right_width": 850,
+      "center_height": 800,
+      "bottom_height": 120,
+      "resource_height": 118,
+      "caption_height": 85
+    }
+  }
 }
