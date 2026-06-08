@@ -806,7 +806,10 @@ class VisionNodeData(DemoNodeDataBase):
 
         if self.use_result_image_source:
             self._update_result_image_source()
-            time.sleep(self.preview_milliseconds_delay / 1000.0)
+            # 只有起始节点（摄像头/图像源）才执行预览延迟，下游处理节点跳过此sleep，
+            # 避免每个节点累加延迟导致帧率极低
+            if getattr(self, 'use_start', False):
+                time.sleep(self.preview_milliseconds_delay / 1000.0)
 
         if self._result_presenter is None:
             self._result_presenter = self.create_result_presenter()

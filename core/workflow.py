@@ -529,8 +529,8 @@ class WorkflowEngine:
         # ── Execute the node itself ──
         if isinstance(node, VisionNodeData):
             result = node.invoke(previors, self)
-            import time
-            time.sleep(node.invoke_milliseconds_delay / 1000.0)
+            # invoke_milliseconds_delay 不再在此处 sleep，帧率由
+            # WorkflowRunner._run_continuous 根据起始节点的设置统一控制
         else:
             result = FlowableResult.ok()
 
