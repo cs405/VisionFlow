@@ -1,10 +1,8 @@
 """算术运算节点：加/减、乘/除、幂运算。"""
 
 import cv2
-import numpy as np
 from core.node_base import OpenCVNodeDataBase, Property, PropertyGroupNames
 from core.data_packet import FlowableResult
-from core.workflow import WorkflowEngine
 
 
 class AddSubtract(OpenCVNodeDataBase):
@@ -12,7 +10,9 @@ class AddSubtract(OpenCVNodeDataBase):
     # 节点所属分组（用于UI分类）
     __group__ = "图像预处理模块"
     # 运算类型属性（Add/Subtract）
-    operation = Property("Add", name="运算", group=PropertyGroupNames.RUN_PARAMETERS)
+    # operation = Property("Add", name="运算", group=PropertyGroupNames.RUN_PARAMETERS)
+    operation = Property("Add", name="运算", group=PropertyGroupNames.RUN_PARAMETERS,
+                         editor="choices", choices=["Add", "Subtract"])
     # 标量值属性
     scalar = Property(50.0, name="标量值", group=PropertyGroupNames.RUN_PARAMETERS)
 
@@ -59,7 +59,8 @@ class MultiplyDivide(OpenCVNodeDataBase):
     # 节点所属分组（用于UI分类）
     __group__ = "图像预处理模块"
     # 运算类型属性（Multiply/Divide）
-    operation = Property("Multiply", name="运算", group=PropertyGroupNames.RUN_PARAMETERS)
+    operation = Property("Multiply", name="运算", group=PropertyGroupNames.RUN_PARAMETERS,
+                         editor="choices", choices=["Multiply", "Divide"])
     # 标量值属性
     scalar = Property(2.0, name="标量值", group=PropertyGroupNames.RUN_PARAMETERS)
 
