@@ -21,7 +21,7 @@ from typing import Any, Callable
 
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QScrollArea, QFormLayout,
                               QLineEdit, QSpinBox, QDoubleSpinBox, QCheckBox,
-                              QComboBox, QLabel, QPushButton,QHBoxLayout,
+                              QComboBox, QLabel, QPushButton,QHBoxLayout, QColorDialog,
                               QFileDialog, QSlider, QListWidget, QTabWidget, QDialog)
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from gui.theme import theme_manager, connect_theme
@@ -263,19 +263,25 @@ def _create_color_editor(parent, prop_name, prop_desc, current_value):
             else:
                 # 默认白色
                 r, g, b = 255, 255, 255
+            # 获取节点保存的输入图像，供吸管取色使用
+            node = getattr(parent, '_current_node', None)
+            picker_img = getattr(node, '_picker_mat', None) if node is not None else None
             # 打开颜色选择器
-            result = ColorPickerDialog.get_color(rgb=(r, g, b), parent=parent)
+            result = ColorPickerDialog.get_color(rgb=(r, g, b), picker_image=picker_img, parent=parent)
             if result:
                 # 获取十六进制值
                 hex_val = result.get("hex", initial)
                 # 更新预览
                 _update_preview(hex_val)
+                # 写回节点属性（持久化取色结果）
+                parent._set_property_value(prop_name, hex_val)
+                # 触发单步重执行，立即刷新画面
+                if node is not None and hasattr(node, 'update_invoke_current'):
+                    node.update_invoke_current()
                 return
         except Exception:
             pass
-        # 后备方案：系统颜色对话框
-        from PyQt5.QtWidgets import QColorDialog
-        from PyQt5.QtGui import QColor
+
         # 打开系统颜色选择器
         color = QColorDialog.getColor(parent=parent)
         # 如果选择了有效颜色
@@ -284,6 +290,11 @@ def _create_color_editor(parent, prop_name, prop_desc, current_value):
             hex_val = "#{:02X}{:02X}{:02X}".format(color.red(), color.green(), color.blue())
             # 更新预览
             _update_preview(hex_val)
+            # 写回节点属性
+            parent._set_property_value(prop_name, hex_val)
+            node = getattr(parent, '_current_node', None)
+            if node is not None and hasattr(node, 'update_invoke_current'):
+                node.update_invoke_current()
 
     # 连接按钮点击信号
     btn.clicked.connect(_pick)

@@ -1,11 +1,11 @@
-"""带有RGB/HSV同步和可选图像取色的颜色选择器对话框。"""
+"""带有RGB/HSV同步和图像取色的颜色选择器对话框。"""
 
 from __future__ import annotations
 
 import cv2
 import numpy as np
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QColor
+from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtGui import QColor, QPixmap
 from PyQt5.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -18,13 +18,97 @@ from PyQt5.QtWidgets import (
     QFormLayout,
     QLineEdit,
     QColorDialog,
+    QScrollArea,
+    QApplication,
+    QSizePolicy,
 )
 
 
-class ColorPickerDialog(QDialog):
-    """使用RGB/HSV控件或从ImageViewer采样来选取颜色。"""
+class ImagePickLabel(QLabel):
+    """可点击取色的图像标签
 
-    def __init__(self, rgb: tuple[int, int, int] = (255, 255, 255), viewer=None, parent=None):
+    将 BGR 图像缩放显示，鼠标左键点击时反算原始坐标，
+    提取像素的 BGR 值并通过 color_picked 信号发出 RGB 元组。
+    """
+    color_picked = pyqtSignal(tuple)  # (r, g, b)
+
+    def __init__(self, bgr_image: np.ndarray, parent=None):
+        super().__init__(parent)
+        # 保存副本用于取色时反查像素值
+        self._bgr = bgr_image.copy()
+        h, w = bgr_image.shape[:2]
+
+        # 使用已有的稳定转换（避免 QImage 直接引用 numpy 内存导致悬空指针闪退）
+        from gui.image_viewer import numpy_to_pixmap
+        self._full_pixmap = numpy_to_pixmap(bgr_image)
+
+        # 缩放到适合屏幕
+        screen = QApplication.primaryScreen().availableGeometry()
+        max_w = int(screen.width() * 0.75)
+        max_h = int(screen.height() * 0.75)
+        self._scaled = self._full_pixmap.scaled(
+            max_w, max_h, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self._scale_x = w / max(self._scaled.width(), 1)
+        self._scale_y = h / max(self._scaled.height(), 1)
+        self.setPixmap(self._scaled)
+        self.setCursor(Qt.CrossCursor)
+        self.setMouseTracking(True)
+        self.setAlignment(Qt.AlignCenter)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+    def mousePressEvent(self, event):
+        if event.button() != Qt.LeftButton:
+            return
+        sw = self._scaled.width()
+        sh = self._scaled.height()
+        ox = (self.width() - sw) // 2
+        oy = (self.height() - sh) // 2
+        x = int((event.x() - ox) * self._scale_x)
+        y = int((event.y() - oy) * self._scale_y)
+        h, w = self._bgr.shape[:2]
+        x, y = max(0, min(w - 1, x)), max(0, min(h - 1, y))
+        pixel = self._bgr[y, x]
+        if len(self._bgr.shape) == 2:
+            self.color_picked.emit((int(pixel), int(pixel), int(pixel)))
+        else:
+            b, g, r = int(pixel[0]), int(pixel[1]), int(pixel[2])
+            self.color_picked.emit((r, g, b))
+
+
+class ImagePickDialog(QDialog):
+    """从图像取色的模态对话框 — 对应 WPF ImageColorPickerBoxPresenter。
+
+    显示节点的输入图像，用户点击目标区域即可提取该像素的 RGB 颜色。
+    """
+    def __init__(self, bgr_image: np.ndarray, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("从图像取色 — 点击目标颜色区域")
+        self._color = None
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setStyleSheet("QScrollArea { border: none; background: #1e1e1e; }")
+        self._label = ImagePickLabel(bgr_image)
+        self._label.color_picked.connect(self._on_picked)
+        scroll.setWidget(self._label)
+        layout.addWidget(scroll)
+        h, w = bgr_image.shape[:2]
+        self.resize(min(w + 20, 1200), min(h + 20, 900))
+
+    def _on_picked(self, rgb: tuple):
+        self._color = rgb
+        self.accept()
+
+    @property
+    def picked_rgb(self) -> tuple | None:
+        return self._color
+
+
+class ColorPickerDialog(QDialog):
+    """使用RGB/HSV控件或从图像采样来选取颜色。"""
+
+    def __init__(self, rgb: tuple[int, int, int] = (255, 255, 255),
+                 viewer=None, picker_image: np.ndarray = None, parent=None):
         """初始化颜色选择器对话框
 
         参数：
@@ -40,6 +124,8 @@ class ColorPickerDialog(QDialog):
         self.resize(420, 320)
         # 保存图像查看器引用
         self._viewer = viewer
+        # 保存静态取色图像（对应WPF ImageColorPickerPresenter.ImageSource）
+        self._picker_image = picker_image
         # 更新中标志（防止循环更新）
         self._updating = False
 
@@ -173,8 +259,8 @@ class ColorPickerDialog(QDialog):
         # 添加到布局
         layout.addWidget(buttons)
 
-        # 根据是否有查看器来启用取色按钮
-        self._pick_button.setEnabled(self._viewer is not None)
+        # 根据是否有查看器或取色图像来启用取色按钮
+        self._pick_button.setEnabled(self._viewer is not None or self._picker_image is not None)
 
     def _wrap_layout(self, layout: QHBoxLayout) -> QWidget:
         """将水平布局包装成控件"""
@@ -336,7 +422,14 @@ class ColorPickerDialog(QDialog):
             self.set_rgb((color.red(), color.green(), color.blue()))
 
     def _start_pick_from_viewer(self):
-        """开始从图像查看器取色"""
+        """开始从图像取色 — 优先使用静态图像，其次使用ImageViewer"""
+        # 如果有静态取色图像（来自HSV节点的输入），弹出ImagePickDialog
+        if self._picker_image is not None:
+            dlg = ImagePickDialog(self._picker_image, self)
+            if dlg.exec_() == QDialog.Accepted and dlg.picked_rgb is not None:
+                self.set_rgb(dlg.picked_rgb)
+            return
+
         # 如果没有查看器，返回
         if self._viewer is None:
             return
@@ -386,19 +479,21 @@ class ColorPickerDialog(QDialog):
         super().closeEvent(event)
 
     @classmethod
-    def get_color(cls, rgb: tuple[int, int, int] = (255, 255, 255), viewer=None, parent=None) -> dict | None:
+    def get_color(cls, rgb: tuple[int, int, int] = (255, 255, 255),
+                  viewer=None, picker_image: np.ndarray = None, parent=None) -> dict | None:
         """静态方法：打开颜色选择器对话框并获取颜色
 
         参数：
             rgb: 初始RGB颜色，默认白色
             viewer: 图像查看器对象
+            picker_image: 用于取色的静态图像（BGR格式numpy数组），优先级高于viewer
             parent: 父对象
 
         返回：
             如果确定则返回颜色数据字典，否则返回None
         """
         # 创建对话框实例
-        dialog = cls(rgb=rgb, viewer=viewer, parent=parent)
+        dialog = cls(rgb=rgb, viewer=viewer, picker_image=picker_image, parent=parent)
         # 如果用户确认
         if dialog.exec_() == QDialog.Accepted:
             # 返回颜色数据
