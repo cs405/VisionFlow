@@ -12,7 +12,8 @@ class SplitBGR(OpenCVNodeDataBase):
     # 节点所属分组（用于UI分类）
     __group__ = "图像预处理模块"
     # 输出通道属性（B/G/R）
-    channel = Property("B", name="输出通道", group=PropertyGroupNames.RUN_PARAMETERS)
+    channel = Property("B", name="输出通道", group=PropertyGroupNames.RUN_PARAMETERS,
+                       editor="choices", choices=["B", "G", "R"])
 
     def __init__(self):
         """初始化BGR通道分离节点"""
