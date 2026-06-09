@@ -1,4 +1,5 @@
-"""Repeat - pixel replication node."""
+"""重复节点 - 像素复制节点"""
+
 import cv2
 import numpy as np
 from core.node_base import OpenCVNodeDataBase, Property, PropertyGroupNames
@@ -7,20 +8,47 @@ from core.workflow import WorkflowEngine
 
 
 class Repeat(OpenCVNodeDataBase):
+    """图像像素复制节点（使用numpy的tile函数进行平铺复制）"""
+    # 节点所属分组（用于UI分类）
     __group__ = "图像预处理模块"
+    # 纵向重复次数属性（沿Y轴方向重复）
     repeat_y = Property(2, name="纵向重复次数", group=PropertyGroupNames.RUN_PARAMETERS)
+    # 横向重复次数属性（沿X轴方向重复）
     repeat_x = Property(2, name="横向重复次数", group=PropertyGroupNames.RUN_PARAMETERS)
 
     def __init__(self):
+        """初始化像素复制节点"""
+        # 调用父类构造函数
         super().__init__()
+        # 设置节点显示名称
         self.name = "像素复制"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
+        """核心处理逻辑
+
+        参数：
+            src: 源节点数据
+            from_node: 上游节点
+            diagram: 工作流引擎
+
+        返回：
+            处理结果
+        """
+        # 获取输入图像（优先使用_prepared_input，否则使用上游节点的mat）
         mat = self.get_input_mat(from_node.mat if from_node else None)
-        if mat is None: return self.error(None, "无输入图像")
-        result = np.tile(mat, (self.repeat_y, self.repeat_x) if len(mat.shape) == 2
-                          else (self.repeat_y, self.repeat_x, 1))
+        # 如果输入图像为空，返回错误结果
+        if mat is None:
+            return self.error(None, "无输入图像")
+        # 根据图像维度决定tile的重复模式
+        if len(mat.shape) == 2:
+            # 灰度图：2维，重复模式为 (repeat_y, repeat_x)
+            result = np.tile(mat, (self.repeat_y, self.repeat_x))
+        else:
+            # 彩色图：3维，重复模式为 (repeat_y, repeat_x, 1)，通道维度不重复
+            result = np.tile(mat, (self.repeat_y, self.repeat_x, 1))
+        # 将结果转换为与输入相同的数据类型
         return self.ok(result.astype(mat.dtype))
 
     def _update_result_image_source(self):
+        """更新结果图像源"""
         self._result_image_source = self._mat
