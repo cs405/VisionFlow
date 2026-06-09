@@ -12,9 +12,9 @@ class Normalize(OpenCVNodeDataBase):
     # 节点所属分组（用于UI分类）
     __group__ = "图像预处理模块"
     # Alpha属性（目标范围的下限或归一化因子）
-    alpha = Property(1.0, name="Alpha", group=PropertyGroupNames.RUN_PARAMETERS)
+    alpha = Property(0.0, name="Alpha", group=PropertyGroupNames.RUN_PARAMETERS)
     # Beta属性（目标范围的上限）
-    beta = Property(0.0, name="Beta", group=PropertyGroupNames.RUN_PARAMETERS)
+    beta = Property(255.0, name="Beta", group=PropertyGroupNames.RUN_PARAMETERS)
     # 归一化类型属性
     norm_type = Property("MinMax", name="归一化类型", group=PropertyGroupNames.RUN_PARAMETERS,
                          editor="choices", choices=["MinMax", "L1", "L2", "Inf"])
@@ -47,12 +47,19 @@ class Normalize(OpenCVNodeDataBase):
             "MinMax": cv2.NORM_MINMAX,  # 最小-最大归一化
             "L1": cv2.NORM_L1,          # L1范数归一化
             "L2": cv2.NORM_L2,          # L2范数归一化
-            "INF": cv2.NORM_INF         # 无穷范数归一化
+            "Inf": cv2.NORM_INF         # 无穷范数归一化
         }
-        # 创建与输入图像相同形状的浮点数组
-        result = np.zeros_like(mat, dtype=np.float32)
-        # 执行归一化
-        cv2.normalize(mat, result, self.alpha, self.beta, nmap.get(self.norm_type, cv2.NORM_MINMAX))
+
+        norm_code = nmap.get(self.norm_type, cv2.NORM_MINMAX)
+        alpha = float(self.alpha)
+        beta = float(self.beta)
+
+        # MinMax 场景下若上下限写反会造成结果接近全黑，自动纠正为升序区间
+        if norm_code == cv2.NORM_MINMAX and alpha > beta:
+            alpha, beta = beta, alpha
+
+        # 不再强制输出 float32，保持与输入一致的类型，避免 0~1 浮点图在 UI 中发黑
+        result = cv2.normalize(mat, None, alpha, beta, norm_code, dtype=-1)
         # 返回成功结果
         return self.ok(result)
 
