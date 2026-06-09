@@ -1,9 +1,9 @@
-"""Node group system - toolbox categories for node discovery.
+"""节点分组系统 - 工具箱中的节点分类。
 
-Each group discovers node types implementing a marker interface and orders them
-for display in the toolbox. In Python, we use class decorators / __init_subclass__
+每个分组通过标记接口发现节点类型，并按顺序在工具箱中显示。
+在 Python 中，我们使用类装饰器 / __init_subclass__ 实现。
 
-Categories :
+分类：
   10000 - 图像数据源 (SrcImageDataGroup)
   10001 - 系统数据源 (ZooNodeDataGroup)
   10100 - 图像预处理模块 (PreprocessingDataGroup)
@@ -24,38 +24,44 @@ from core.node_base import NodeBase
 
 
 class NodeGroup:
-    """A category/group of nodes shown in the toolbox.
-
-    """
+    """工具箱中显示的一个节点分类/分组。"""
 
     def __init__(self, name: str, description: str = "", order: int = 0,
                  icon: str = "", category: str = ""):
+        # 分组名称
         self.name = name
+        # 分组描述
         self.description = description
+        # 排序顺序（数值越小越靠前）
         self.order = order
+        # 分组图标
         self.icon = icon
+        # 分组类别（默认与名称相同）
         self.category = category or name
+        # 该分组下的节点类型列表
         self._node_types: list[Type[NodeBase]] = []
 
     @property
     def node_types(self) -> list[Type[NodeBase]]:
+        """获取该分组下的节点类型列表（按order排序）"""
         return sorted(self._node_types, key=lambda t: getattr(t, 'order', 0))
 
     def register(self, node_type: Type[NodeBase]):
-        """Register a node type in this group."""
+        """在该分组中注册一个节点类型"""
         if node_type not in self._node_types:
             self._node_types.append(node_type)
 
     def unregister(self, node_type: Type[NodeBase]):
-        """Remove a node type from this group."""
+        """从该分组中移除一个节点类型"""
         if node_type in self._node_types:
             self._node_types.remove(node_type)
 
     def create_node(self, node_type: Type[NodeBase]) -> NodeBase:
-        """Instantiate a node from its type."""
+        """实例化一个节点类型的节点"""
         return node_type()
 
     def to_dict(self) -> dict:
+        """序列化为字典"""
         return {
             "name": self.name,
             "description": self.description,
@@ -67,82 +73,90 @@ class NodeGroup:
 
 
 class NodeDataGroupBase:
-    """Manages all node groups and provides discovery.
-    """
+    """管理所有节点分组并提供节点发现功能。"""
 
     def __init__(self):
-        self._groups: dict[str, NodeGroup] = {}  # 组，存放左侧控制面板的大组
-        self._node_registry: dict[str, Type[NodeBase]] = {}  # 注册节点
+        # 分组字典，键为分组名称，值为 NodeGroup 对象
+        self._groups: dict[str, NodeGroup] = {}
+        # 节点注册表，键为节点类型名称，值为节点类
+        self._node_registry: dict[str, Type[NodeBase]] = {}
 
-    # -- Group management --
+    # -- 分组管理 --
 
     def add_group(self, group: NodeGroup):
-        """Add a node group."""
+        """添加一个节点分组"""
         self._groups[group.name] = group
 
     def remove_group(self, name: str):
-        """Remove a node group."""
+        """删除一个节点分组"""
         self._groups.pop(name, None)
 
     def get_group(self, name: str) -> NodeGroup | None:
-        """Get a group by name."""
+        """根据名称获取分组"""
         return self._groups.get(name)
 
     def get_all_groups(self) -> list[NodeGroup]:
-        """Get all groups sorted by order."""
+        """获取所有分组（按order排序）"""
         return sorted(self._groups.values(), key=lambda g: g.order)
 
-    # -- Node type registry --
+    # -- 节点类型注册 --
 
     def register_node(self, node_type: Type[NodeBase], group_name: str):
-        """Register a node type in a specific group."""
+        """在指定分组中注册一个节点类型"""
+        # 将节点类名注册到节点注册表
         self._node_registry[node_type.__name__] = node_type
+        # 如果分组不存在，先创建分组
         if group_name not in self._groups:
             self._groups[group_name] = NodeGroup(name=group_name)
+        # 将节点注册到分组中
         self._groups[group_name].register(node_type)
 
     def get_node_type(self, type_name: str) -> Type[NodeBase] | None:
-        """Look up a node type by name."""
+        """根据类型名称查找节点类型"""
         return self._node_registry.get(type_name)
 
     def create_node(self, type_name: str) -> NodeBase | None:
-        """Instantiate a node by type name."""
+        """根据类型名称实例化节点"""
         node_type = self.get_node_type(type_name)
         if node_type:
             return node_type()
         return None
 
     def get_all_node_types(self) -> list[Type[NodeBase]]:
-        """Get all registered node types."""
+        """获取所有已注册的节点类型"""
         return list(self._node_registry.values())
 
-    # -- Discovery --
+    # -- 发现功能 --
 
     def discover_module(self, module, group_prefix: str = ""):
-        """Discover NodeBase subclasses in a module and register them.
+        """发现模块中的 NodeBase 子类并注册它们。
 
-        Each class must have a `group` class attribute or `__group__` attribute
-        to specify which group it belongs to.
+        每个类必须有一个 `group` 类属性或 `__group__` 属性来指定所属分组。
         """
         import inspect
+        # 遍历模块中的所有成员
         for name, obj in inspect.getmembers(module, inspect.isclass):
+            # 只处理 NodeBase 的子类且不是 NodeBase 本身
             if not issubclass(obj, NodeBase) or obj is NodeBase:
                 continue
+            # 跳过抽象类
             if getattr(obj, '__abstract__', False) or inspect.isabstract(obj):
                 continue
+            # 获取分组名称（优先使用 __group__ 属性，否则使用前缀）
             group_name = getattr(obj, '__group__', None) or group_prefix
             if group_name:
                 self.register_node(obj, group_name)
 
 
 # =============================================================================
-# Standard groups
+# 标准分组
 # =============================================================================
 
 def create_standard_groups() -> NodeDataGroupBase:
-    """Create all standard node groups"""
+    """创建所有标准节点分组"""
     manager = NodeDataGroupBase()
 
+    # 定义所有标准分组
     groups = [
         NodeGroup("图像数据源", "设置输入图像", order=10000, icon="Camera"),
         NodeGroup("系统数据源", "系统自带测试图像集", order=10001, icon="Dataset"),
@@ -161,11 +175,12 @@ def create_standard_groups() -> NodeDataGroupBase:
         NodeGroup("视频处理模块", "视频分析与处理", order=11000, icon="Video"),
     ]
 
+    # 添加所有分组到管理器
     for g in groups:
         manager.add_group(g)
 
     return manager
 
 
-# Global instance
+# 全局实例
 node_data_group_manager = create_standard_groups()

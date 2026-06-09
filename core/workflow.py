@@ -1,11 +1,11 @@
-"""Workflow engine - orchestrates node graph execution.
+"""工作流引擎 - 编排节点图执行。
 
-Handles:
-  - Node graph topology (nodes + links)
-  - Topological sort for execution order
-  - Sequential and parallel execution
-  - Execution context and data flow
-  - Flow control (OK/Error/Break routing)
+处理：
+  - 节点图拓扑结构（节点 + 连线）
+  - 执行顺序的拓扑排序
+  - 顺序执行和并行执行
+  - 执行上下文和数据流
+  - 流程控制（OK/Error/Break 路由）
 """
 
 from collections import deque
@@ -22,99 +22,122 @@ from core.result_presenter import VisionMessage
 
 
 class WorkflowState(Enum):
-    """Execution state of the workflow engine."""
-    IDLE = auto()
-    RUNNING = auto()
-    PAUSED = auto()
-    STOPPED = auto()
-    COMPLETED = auto()
-    ERROR = auto()
+    """工作流引擎的执行状态"""
+    IDLE = auto()        # 空闲状态
+    RUNNING = auto()     # 运行中
+    PAUSED = auto()      # 已暂停
+    STOPPED = auto()     # 已停止
+    COMPLETED = auto()   # 已完成
+    ERROR = auto()       # 错误状态
 
     def can_start(self) -> bool:
-        """not already running."""
+        """判断是否可以启动（未在运行中）"""
         return self != WorkflowState.RUNNING
 
     def can_stop(self) -> bool:
-        """currently running."""
+        """判断是否可以停止（正在运行中）"""
         return self == WorkflowState.RUNNING
 
     def can_reset(self) -> bool:
-        """ CanReset: always available."""
+        """判断是否可以重置（始终可用）"""
         return True
 
 
 class DiagramFlowableMode(Enum):
-    """Run mode — controls execution granularity."""
+    """运行模式 — 控制执行粒度"""
     NODE = 0   # 按节点运行
     LINK = 1   # 按节点+连线运行
     PORT = 2   # 按节点+连线+端口运行
 
 
 class WorkflowEngine:
-    """Manages a node graph and executes it.
-    Each WorkflowEngine instance represents one diagram/document.
+    """管理节点图并执行它。
+    每个 WorkflowEngine 实例代表一个图表/文档。
     """
 
     def __init__(self, name: str = "新建流程"):
         import threading
+        # 工作流名称
         self.name = name
+        # 当前执行状态
         self.state: WorkflowState = WorkflowState.IDLE
+        # 节点字典：键为节点ID，值为节点对象
         self._nodes: dict[str, NodeBase] = {}
+        # 连线列表
         self._links: list[LinkData] = []
+        # 执行顺序（节点ID列表）
         self._execution_order: list[str] = []
+        # 最大并行工作线程数
         self._max_workers: int = 4
+        # 调用计数
         self._invoke_count: int = 0
+        # 结果图像源
         self.result_image_source: Any = None
+        # 流程执行模式
         self.flowable_mode: DiagramFlowableMode = DiagramFlowableMode.NODE
+        # 当前消息文本
         self.message: str = ""
+        # 历史消息列表
         self.messages: list[VisionMessage] = []
+        # 当前聚合消息
         self.current_message: VisionMessage | None = None
-        self._messages_lock = threading.Lock()  # protect messages from ThreadPoolExecutor
-        self._history_callbacks: list[Callable] = []  # PropertyChanged → UI binding
+        # 线程锁，保护消息列表的线程安全
+        self._messages_lock = threading.Lock()
+        # 历史变更回调列表（用于UI绑定）
+        self._history_callbacks: list[Callable] = []
 
-    # -- Node management --
+    # -- 节点管理 --
 
     def add_node(self, node: NodeBase) -> str:
-        """Add a node to the diagram. Returns the node's ID."""
+        """向图表中添加节点。返回节点的ID"""
+        # 设置节点的图表数据引用
         node.diagram_data = self
+        # 将节点添加到字典
         self._nodes[node.node_id] = node
+        # 发布节点添加事件
         event_system.publish(EventType.NODE_ADDED, sender=self, node=node)
+        # 发布图表变更事件
         event_system.publish(EventType.DIAGRAM_CHANGED, sender=self)
         return node.node_id
 
     def remove_node(self, node_id: str):
-        """Remove a node and all its connected links."""
+        """移除节点及其所有相关连线"""
+        # 从字典中弹出节点
         node = self._nodes.pop(node_id, None)
         if node is None:
             return
-        # Remove connected links
+        # 移除与该节点相关的所有连线
         self._links = [l for l in self._links
                       if l.from_node_id != node_id and l.to_node_id != node_id]
-        # Remove from other nodes' from/to lists
+        # 从其他节点的上下游列表中移除该节点
         for n in self._nodes.values():
             n.from_node_datas = [x for x in n.from_node_datas if x.node_id != node_id]
             n.to_node_datas = [x for x in n.to_node_datas if x.node_id != node_id]
+        # 发布节点移除事件
         event_system.publish(EventType.NODE_REMOVED, sender=self, node=node)
+        # 发布图表变更事件
         event_system.publish(EventType.DIAGRAM_CHANGED, sender=self)
 
     def get_node_by_id(self, node_id: str) -> NodeBase | None:
+        """根据ID获取节点"""
         return self._nodes.get(node_id)
 
     def get_all_nodes(self) -> list[NodeBase]:
+        """获取所有节点"""
         return list(self._nodes.values())
 
-    # ── History Messages ─
+    # ── 历史消息管理 ──
 
     def on_history_changed(self, callback: Callable):
-        """Register a callback invoked when Messages changes.
+        """注册历史消息变更时的回调函数
 
-        The callback receives no arguments — callers should read get_messages_snapshot().
-        Called from any thread; callers should marshal to their target thread as needed.
+        回调函数不接收参数 —— 调用者应根据需要调用 get_messages_snapshot()。
+        回调可能在任何线程被调用；调用者应根据需要将调用调度到目标线程。
         """
         self._history_callbacks.append(callback)
 
     def _notify_history_callbacks(self):
-        """Call all registered history change callbacks."""
+        """调用所有已注册的历史变更回调"""
         for cb in self._history_callbacks:
             try:
                 cb()
@@ -122,28 +145,33 @@ class WorkflowEngine:
                 pass
 
     def on_node_completed(self, node: VisionNodeData, state: str, time_span: str):
-        """ OnInvokedPart(IPartData) equivalent — add/update history message.
+        """ OnInvokedPart(IPartData) 的等价实现 —— 添加/更新历史消息
 
-        Decoupled from UI: WorkflowEngine owns the Messages collection,
-        ResultPanel reads from it. Each workflow has its own Messages,
-        so switching tabs isolates history.
+        与 UI 解耦：WorkflowEngine 拥有 Messages 集合，
+        ResultPanel 从中读取。每个工作流都有自己的 Messages，
+        切换标签页时历史记录自动隔离。
 
-        Thread-safe: called from ThreadPoolExecutor worker threads.
+        线程安全：从 ThreadPoolExecutor 的工作线程调用。
         """
         import time
+        # 检查是否启用输出历史记录
         if not getattr(node, 'use_invoked_part', True):
             return
 
+        # 获取源文件路径
         src_path = ""
         if hasattr(node, 'src_file_path'):
             src_path = node.src_file_path or ""
 
+        # 获取结果图像
         result_image = getattr(node, '_result_image_source', None)
 
+        # 加锁保护消息列表
         with self._messages_lock:
-            # find existing by ResultNodeData match → update (for video/camera nodes)
+            # 查找已有的消息（用于视频/摄像头节点原地更新）
             for msg in self.messages:
                 if msg.result_node_data is node:
+                    # 更新已有消息
                     msg.time_span = time_span
                     msg.message = node.message or msg.message
                     msg.state = state
@@ -154,7 +182,7 @@ class WorkflowEngine:
                     self._notify_history_callbacks()
                     return
 
-            # New entry
+            # 创建新消息条目
             msg = VisionMessage(
                 index=len(self.messages) + 1,
                 time_span=time_span,
@@ -170,11 +198,13 @@ class WorkflowEngine:
             self._notify_history_callbacks()
 
     def _log_current_message_locked(self):
-        """ LogCurrentMessage() — caller must hold _messages_lock."""
+        """ LogCurrentMessage() — 调用者必须持有 _messages_lock 锁"""
         if not self.messages:
             self.current_message = None
             return
+        # 获取最后一条消息
         last = self.messages[-1]
+        # 创建聚合消息
         self.current_message = VisionMessage(
             index=0,
             time_span=last.time_span,
@@ -187,30 +217,32 @@ class WorkflowEngine:
         )
 
     def get_messages_snapshot(self) -> list[VisionMessage]:
-        """Return a thread-safe copy of messages for UI display."""
+        """返回消息列表的线程安全副本，供 UI 显示"""
         with self._messages_lock:
             return list(self.messages)
 
     def clear_messages(self):
-        """Clear history messages."""
+        """清空历史消息"""
         with self._messages_lock:
             self.messages.clear()
             self.current_message = None
 
     def get_start_nodes(self) -> list[NodeBase]:
-        """Get root nodes (no upstream connections)."""
+        """获取根节点（没有上游连接的节点）"""
         return [n for n in self._nodes.values() if len(n.from_node_datas) == 0]
 
-    # -- Link management --
+    # -- 连线管理 --
 
     def _resolve_port(self, node: NodeBase, *, port_id: str | None = None,
                       dock: PortDock | None = None, is_output: bool | None = None):
-        """Resolve a concrete port by id first, then by dock/direction."""
+        """根据端口ID优先解析具体端口，然后根据停靠位置/方向解析"""
+        # 优先通过端口ID查找
         if port_id:
             for port in node.ports:
                 if port.port_id == port_id:
                     return port
 
+        # 否则根据停靠位置和方向查找
         for port in node.ports:
             if dock is not None and port.dock != dock:
                 continue
@@ -223,6 +255,7 @@ class WorkflowEngine:
 
     def _has_link_between(self, from_node_id: str, to_node_id: str,
                           *, exclude_link_id: str | None = None) -> bool:
+        """检查两个节点之间是否已存在连线"""
         for link in self._links:
             if exclude_link_id and link.link_id == exclude_link_id:
                 continue
@@ -237,18 +270,21 @@ class WorkflowEngine:
                  to_port_id: str | None = None,
                  link_id: str | None = None,
                  text: str = "") -> LinkData | None:
-        """Create a link between two nodes using exact ports when available."""
+        """在两个节点之间创建连线，尽可能使用精确的端口"""
+        # 获取源节点和目标节点
         from_node = self._nodes.get(from_node_id)
         to_node = self._nodes.get(to_node_id)
         if not from_node or not to_node:
             return None
 
+        # 解析源端口
         from_port = self._resolve_port(
             from_node,
             port_id=from_port_id,
             dock=from_port_dock,
             is_output=True,
         )
+        # 解析目标端口
         to_port = self._resolve_port(
             to_node,
             port_id=to_port_id,
@@ -259,6 +295,7 @@ class WorkflowEngine:
         if not from_port or not to_port:
             return None
 
+        # 检查连线是否已存在
         for existing in self._links:
             if (existing.from_node_id == from_node_id and
                     existing.from_port_id == from_port.port_id and
@@ -266,6 +303,7 @@ class WorkflowEngine:
                     existing.to_port_id == to_port.port_id):
                 return existing
 
+        # 创建新连线
         link = LinkData(
             from_node_id=from_node_id,
             from_port_id=from_port.port_id,
@@ -277,22 +315,25 @@ class WorkflowEngine:
             link.link_id = link_id
         self._links.append(link)
 
-        # Update adjacency
+        # 更新端口的连接列表
         if link not in from_port.connected_links:
             from_port.connected_links.append(link)
         if link not in to_port.connected_links:
             to_port.connected_links.append(link)
+        # 更新节点的上下游关系
         if from_node not in to_node.from_node_datas:
             to_node.from_node_datas.append(from_node)
         if to_node not in from_node.to_node_datas:
             from_node.to_node_datas.append(to_node)
 
+        # 发布事件
         event_system.publish(EventType.LINK_ADDED, sender=self, link=link)
         event_system.publish(EventType.DIAGRAM_CHANGED, sender=self)
         return link
 
     def remove_link(self, link_id: str):
-        """Remove a link by ID."""
+        """根据ID移除连线"""
+        # 查找要移除的连线
         link = None
         for l in self._links:
             if l.link_id == link_id:
@@ -301,9 +342,10 @@ class WorkflowEngine:
         if link is None:
             return
 
+        # 从列表中移除
         self._links.remove(link)
 
-        # Update port connection state
+        # 更新端口的连接状态
         from_node = self._nodes.get(link.from_node_id)
         to_node = self._nodes.get(link.to_node_id)
         if from_node:
@@ -315,7 +357,7 @@ class WorkflowEngine:
             if to_port and link in to_port.connected_links:
                 to_port.connected_links.remove(link)
 
-        # Update adjacency only when there is no remaining link between the nodes
+        # 只有当两个节点之间没有其他连线时才移除上下游关系
         if to_node and from_node:
             if (from_node in to_node.from_node_datas and
                     not self._has_link_between(link.from_node_id, link.to_node_id, exclude_link_id=link.link_id)):
@@ -324,20 +366,23 @@ class WorkflowEngine:
                     not self._has_link_between(link.from_node_id, link.to_node_id, exclude_link_id=link.link_id)):
                 from_node.to_node_datas.remove(to_node)
 
+        # 发布事件
         event_system.publish(EventType.LINK_REMOVED, sender=self, link=link)
         event_system.publish(EventType.DIAGRAM_CHANGED, sender=self)
 
     def get_all_links(self) -> list[LinkData]:
+        """获取所有连线"""
         return list(self._links)
 
-    # -- Topological sort --
+    # -- 拓扑排序 --
 
     def topological_sort(self) -> list[str]:
-        """Sort nodes in execution order (Kahn's algorithm).
+        """对节点进行执行顺序排序（Kahn算法）
 
-        Nodes with no inputs go first. Parallel branches are detected.
-        Returns list of node IDs in execution order.
+        没有输入的节点排在前面。能够检测并行分支。
+        返回按执行顺序排列的节点ID列表。
         """
+        # 初始化入度和邻接表
         in_degree: dict[str, int] = {}
         adj: dict[str, list[str]] = {}
 
@@ -345,14 +390,17 @@ class WorkflowEngine:
             in_degree[node_id] = 0
             adj[node_id] = []
 
+        # 构建邻接表
         for link in self._links:
             if link.to_node_id in in_degree:
                 in_degree[link.to_node_id] += 1
                 adj.setdefault(link.from_node_id, []).append(link.to_node_id)
 
+        # 找出所有入度为0的节点
         queue = deque([nid for nid, deg in in_degree.items() if deg == 0])
         result = []
 
+        # Kahn算法
         while queue:
             current = queue.popleft()
             result.append(current)
@@ -364,24 +412,24 @@ class WorkflowEngine:
         self._execution_order = result
         return result
 
-    # -- Execution --
+    # -- 执行 --
 
     def can_start(self) -> bool:
-        """ CanStart: state can start AND there are flowable nodes."""
+        """判断是否可以启动：状态允许启动且有可执行节点"""
         return self.state.can_start() and len(self._nodes) > 0
 
     def can_stop(self) -> bool:
-        """ CanStop: state == Running."""
+        """判断是否可以停止：状态为运行中"""
         return self.state.can_stop()
 
     def can_reset(self) -> bool:
-        """ CanReset: always available."""
+        """判断是否可以重置：始终可用"""
         return self.state.can_reset()
 
     def get_start_node_data(self) -> NodeBase | None:
-        """Find the start node (no upstream connections, has output ports).
+        """查找起始节点（无上游连接且有输出端口的节点）
 
-         GetStartNodeDatas() → TryGetStartNodeData<T>().
+        对应 GetStartNodeDatas() → TryGetStartNodeData<T>()
         """
         starts = [n for n in self._nodes.values()
                   if len(n.from_node_datas) == 0
@@ -389,16 +437,16 @@ class WorkflowEngine:
         return starts[0] if starts else None
 
     def start(self) -> FlowableResult:
-        """Execute workflow (StartCommand).
+        """执行工作流（StartCommand）
 
-        "运行全部" (run_all_images) is handled by WorkflowRunner.start_run_all()
-        which iterates SrcFilePaths, updates src_file_path before each iteration,
-        and publishes FILE_ITERATION_NEXT events for the UI. UseAutoSwitch affects
-        only the thumbnail panel refresh (FlowResourcePanel.refresh_selection()),
-        not the actual file switching — src_file_path is always updated.
+        "运行全部" (run_all_images) 由 WorkflowRunner.start_run_all() 处理，
+        它会遍历 SrcFilePaths，在每次迭代前更新 src_file_path，
+        并为 UI 发布 FILE_ITERATION_NEXT 事件。UseAutoSwitch 只影响
+        缩略图面板刷新（FlowResourcePanel.refresh_selection()），
+        不影响实际的文件切换 —— src_file_path 始终被更新。
 
         StartCommand → await this.Start() → InvokeState → Wait → node.Start()
-        Python: guards → get_start_node → execute() on caller's thread.
+        Python：守卫检查 → 获取起始节点 → 在当前线程上执行
         """
         if not self.can_start():
             return FlowableResult.error(message="流程已在运行中")
@@ -407,34 +455,37 @@ class WorkflowEngine:
         return self.execute()
 
     def execute(self) -> FlowableResult:
-        """Execute the entire workflow.
+        """执行整个工作流
 
-        Runs nodes in topological order. Handles parallel branches using ThreadPoolExecutor.
-        Returns the result from the last node.
+        按拓扑顺序运行节点。使用 ThreadPoolExecutor 处理并行分支。
+        返回最后一个节点的执行结果。
         """
         if self.state == WorkflowState.RUNNING:
             return FlowableResult.error(message="流程已在运行中")
 
+        # 设置运行状态
         self.state = WorkflowState.RUNNING
         self._invoke_count = 0
         event_system.publish(EventType.WORKFLOW_STARTED, sender=self)
 
+        # 获取拓扑排序结果
         order = self.topological_sort()
         if not order:
             self.state = WorkflowState.COMPLETED
             return FlowableResult.ok(message="空流程")
 
-        # Group parallel nodes by level
+        # 按层级分组并行节点
         levels = self._group_by_levels(order)
 
         last_result = FlowableResult.ok()
         try:
             for level in levels:
+                # 检查是否已停止
                 if self.state == WorkflowState.STOPPED:
                     break
 
                 if len(level) == 1:
-                    # Sequential single node
+                    # 单节点顺序执行
                     node = self._nodes.get(level[0])
                     if node is None:
                         continue
@@ -446,7 +497,7 @@ class WorkflowEngine:
                         event_system.publish(EventType.WORKFLOW_ERROR, sender=self, result=last_result)
                         return last_result
                 else:
-                    # Parallel group
+                    # 并行执行一组节点
                     results = self._execute_parallel(level)
                     for r in results:
                         if r.is_error:
@@ -455,10 +506,12 @@ class WorkflowEngine:
                             event_system.publish(EventType.WORKFLOW_ERROR, sender=self, result=r)
                             return r
 
+            # 处理停止状态
             if self.state == WorkflowState.STOPPED:
                 event_system.publish(EventType.WORKFLOW_STOPPED, sender=self)
                 return FlowableResult.ok(message="流程已停止")
 
+            # 执行完成
             self.state = WorkflowState.COMPLETED
             event_system.publish(EventType.WORKFLOW_COMPLETED, sender=self, result=last_result)
             return last_result
@@ -470,16 +523,15 @@ class WorkflowEngine:
             return result
 
     def reset(self):
-        """Reset workflow state to IDLE for re-execution.
+        """将工作流状态重置为 IDLE 以便重新执行
 
-        Resets state without clearing nodes/links. Used between continuous
-        execution iterations and by the reset command.
+        重置状态但不清除节点/连线。用于连续执行迭代之间以及重置命令。
         """
         self.state = WorkflowState.IDLE
         self._invoke_count = 0
 
     def execute_step(self, node_id: str) -> FlowableResult:
-        """Execute a single node (for single-step debugging)."""
+        """执行单个节点（用于单步调试）"""
         node = self._nodes.get(node_id)
         if node is None:
             return FlowableResult.error(message=f"节点不存在: {node_id}")
@@ -491,23 +543,22 @@ class WorkflowEngine:
         return self._execute_node(node)
 
     def stop(self):
-        """Stop execution.
+        """停止执行
 
-        Sets workflow to STOPPED state. The execute() loop checks
-        this flag before processing each level and breaks out.
+        将工作流设置为 STOPPED 状态。execute() 循环会在处理每个层级前检查此标志并跳出。
         """
         self.state = WorkflowState.STOPPED
         event_system.publish(EventType.WORKFLOW_STOPPED, sender=self)
 
     def _execute_node(self, node: NodeBase) -> FlowableResult:
-        """Execute a single node + surrounding links/ports based on mode.
+        """执行单个节点及其周围的连线/端口（基于模式）
 
-        recursive chain:  Node → Port → Link → Port → Node
-        Python (topo-sort):  execute node, then invoke links/ports per mode.
+        递归链：Node → Port → Link → Port → Node
+        Python（拓扑排序）：执行节点，然后根据模式调用连线和端口
         """
         self._invoke_count += 1
 
-        # ── Link/Port mode: execute incoming links ──
+        # ── 连线/端口模式：执行传入的连线 ──
         previors = None
         if self.flowable_mode in (DiagramFlowableMode.LINK, DiagramFlowableMode.PORT):
             for link in self._links:
@@ -520,13 +571,13 @@ class WorkflowEngine:
                     previors = link
                     break
 
-        # ── Port mode: execute incoming ports ──
+        # ── 端口模式：执行传入的端口 ──
         if self.flowable_mode == DiagramFlowableMode.PORT:
             for port in node.ports:
                 if port.is_input and port.connected_links:
                     port.invoke(previors=previors, diagram=self)
 
-        # ── Execute the node itself ──
+        # ── 执行节点本身 ──
         if isinstance(node, VisionNodeData):
             result = node.invoke(previors, self)
             # invoke_milliseconds_delay 不再在此处 sleep，帧率由
@@ -534,7 +585,7 @@ class WorkflowEngine:
         else:
             result = FlowableResult.ok()
 
-        # ── Port mode: execute outgoing ports ──
+        # ── 端口模式：执行传出的端口 ──
         if self.flowable_mode == DiagramFlowableMode.PORT:
             for port in node.ports:
                 if port.is_output and port.connected_links:
@@ -543,15 +594,17 @@ class WorkflowEngine:
         return result
 
     def _execute_parallel(self, node_ids: list[str]) -> list[FlowableResult]:
-        """Execute a group of nodes in parallel."""
+        """并行执行一组节点"""
         results: list[FlowableResult] = []
         with ThreadPoolExecutor(max_workers=min(self._max_workers, len(node_ids))) as executor:
             futures = {}
+            # 提交所有任务
             for nid in node_ids:
                 node = self._nodes.get(nid)
                 if node:
                     futures[executor.submit(self._execute_node, node)] = nid
 
+            # 收集结果
             for future in as_completed(futures):
                 try:
                     result = future.result()
@@ -561,15 +614,14 @@ class WorkflowEngine:
         return results
 
     def _group_by_levels(self, topo_order: list[str]) -> list[list[str]]:
-        """Group topologically sorted nodes into execution levels.
+        """将拓扑排序后的节点按执行层级分组
 
-        Parallel nodes (those with no dependencies between them at the same level)
-        are grouped together for parallel execution.
+        并行节点（在同一层级且彼此无依赖关系）被分在同一组以便并行执行。
         """
         if not topo_order:
             return []
 
-        # Simple approach: nodes with invoke_mode=PARALLEL and same in-degree go together
+        # 计算每个节点的入度
         in_degree: dict[str, int] = {}
         for node_id in topo_order:
             deg = 0
@@ -578,6 +630,7 @@ class WorkflowEngine:
                     deg += 1
             in_degree[node_id] = deg
 
+        # 按入度分组
         levels: list[list[str]] = []
         current_level: list[str] = []
         current_degree = -1
@@ -597,10 +650,10 @@ class WorkflowEngine:
 
         return levels
 
-    # -- Serialization --
+    # -- 序列化 --
 
     def to_dict(self) -> dict:
-        """Serialize the entire workflow to a dict."""
+        """将整个工作流序列化为字典"""
         return {
             "name": self.name,
             "nodes": [n.to_dict() for n in self._nodes.values()],
@@ -608,17 +661,17 @@ class WorkflowEngine:
         }
 
     def from_dict(self, data: dict, node_factory: Callable[[str], NodeBase | None] | None = None):
-        """Load a workflow from a dict.
+        """从字典加载工作流
 
-        Args:
-            data: Serialized workflow dict.
-            node_factory: Function(type_name) -> NodeBase for deserializing nodes.
+        参数：
+            data: 序列化的工作流字典
+            node_factory: 用于反序列化节点的函数 (type_name) -> NodeBase
         """
         self.name = data.get("name", "新建流程")
         self._nodes.clear()
         self._links.clear()
 
-        # Deserialize nodes
+        # 反序列化节点
         node_map: dict[str, NodeBase] = {}
         for node_data in data.get("nodes", []):
             type_name = node_data.get("type", "")
@@ -628,6 +681,7 @@ class WorkflowEngine:
                 node = None
             if node is None:
                 continue
+            # 恢复节点状态
             if hasattr(node, "restore_from_dict"):
                 node.restore_from_dict(node_data)
             else:
@@ -636,12 +690,12 @@ class WorkflowEngine:
             node_map[node._id] = node
             self._nodes[node._id] = node
 
-        # Deserialize links
+        # 反序列化连线
         for link_data in data.get("links", []):
             link = LinkData.from_dict(link_data)
             self._links.append(link)
 
-            # Rebuild adjacency
+            # 重建邻接关系
             to_node = self._nodes.get(link.to_node_id)
             from_node = self._nodes.get(link.from_node_id)
             if to_node and from_node:
@@ -657,7 +711,7 @@ class WorkflowEngine:
                     from_node.to_node_datas.append(to_node)
 
     def clear(self):
-        """Remove all nodes and links."""
+        """移除所有节点和连线"""
         self._nodes.clear()
         self._links.clear()
         self._execution_order.clear()
@@ -665,7 +719,7 @@ class WorkflowEngine:
         event_system.publish(EventType.DIAGRAM_CHANGED, sender=self)
 
     def dispose(self):
-        """Clean up all resources."""
+        """清理所有资源"""
         self.clear()
         for node in list(self._nodes.values()):
             node.dispose()
