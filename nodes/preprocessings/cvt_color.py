@@ -38,7 +38,10 @@ class CvtColor(OpenCVNodeDataBase):
     # 节点所属分组（用于UI分类）
     __group__ = "图像预处理模块"
     # 色彩转换模式属性
-    color_code = Property("BGR2GRAY", name="色彩转换模式", group=PropertyGroupNames.RUN_PARAMETERS)
+    color_code = Property("BGR2GRAY", name="色彩转换模式", group=PropertyGroupNames.RUN_PARAMETERS,
+                          editor="choices", choices=["BGR2GRAY", "BGR2HSV", "HSV2BGR", "BGR2LAB",
+                                                     "LAB2BGR", "BGR2YUV", "YUV2BGR", "BGR2RGB", "RGB2BGR",
+                                                     "BGR2YCrCb", "YCrCb2BGR", "BGR2HLS", "HLS2BGR"])
     # 目标通道数属性
     dst_cn = Property(0, name="目标通道数", group=PropertyGroupNames.RUN_PARAMETERS)
 
@@ -68,7 +71,10 @@ class CvtColor(OpenCVNodeDataBase):
         # 获取色彩转换代码（默认使用BGR2GRAY）
         code = _COLOR_CODES.get(self.color_code, cv2.COLOR_BGR2GRAY)
         # 执行色彩空间转换
-        result = cv2.cvtColor(mat, code, dstCn=self.dst_cn)
+        try:
+            result = cv2.cvtColor(mat, code, dstCn=self.dst_cn)
+        except cv2.error as e:
+            return self.error(None, f"色彩转换失败: {e}")
         # 返回成功结果
         return self.ok(result)
 
