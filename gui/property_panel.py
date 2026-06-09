@@ -273,11 +273,8 @@ def _create_color_editor(parent, prop_name, prop_desc, current_value):
                 hex_val = result.get("hex", initial)
                 # 更新预览
                 _update_preview(hex_val)
-                # 写回节点属性（持久化取色结果）
+                # 写回节点属性（持久化取色结果，对应WPF: ImageColorPickerPresenter.Color = picked）
                 parent._set_property_value(prop_name, hex_val)
-                # 触发单步重执行，立即刷新画面
-                if node is not None and hasattr(node, 'update_invoke_current'):
-                    node.update_invoke_current()
                 return
         except Exception:
             pass
@@ -292,9 +289,6 @@ def _create_color_editor(parent, prop_name, prop_desc, current_value):
             _update_preview(hex_val)
             # 写回节点属性
             parent._set_property_value(prop_name, hex_val)
-            node = getattr(parent, '_current_node', None)
-            if node is not None and hasattr(node, 'update_invoke_current'):
-                node.update_invoke_current()
 
     # 连接按钮点击信号
     btn.clicked.connect(_pick)
