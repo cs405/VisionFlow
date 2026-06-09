@@ -1,211 +1,318 @@
-"""ILinkDrawer —  ILinkDrawer / BrokenLinkDrawer / BezierLinkDrawer / LineLinkDrawer 1:1 port.
+"""ILinkDrawer — ILinkDrawer / BrokenLinkDrawer / BezierLinkDrawer / LineLinkDrawer 1:1 移植。
 
-Strategy pattern for computing link geometry from start/end points and port docks.
-Decoupled from EdgeItem — replaceable per Diagram
+从起点/终点和端口停靠位置计算连线几何的策略模式。
+与 EdgeItem 解耦 — 每个 Diagram 可替换
 """
 
 import math
+
 from PyQt5.QtCore import QPointF, QLineF
 from PyQt5.QtGui import QPainterPath, QPolygonF
+
 from core.node_base import PortDock
 
+# 箭头大小常量（像素）
 ARROW_SIZE = 8.0
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# ILinkDrawer
+# ILinkDrawer（连线绘制器接口）
 # ═══════════════════════════════════════════════════════════════════════════
 
 class ILinkDrawer:
-    """Abstract link geometry strategy."""
+    """抽象的连线几何策略接口。"""
 
     def draw_path(self, start: QPointF, end: QPointF,
                   from_dock: PortDock = PortDock.BOTTOM,
                   to_dock: PortDock = PortDock.TOP) -> QPainterPath:
+        """绘制从起点到终点的路径
+
+        参数：
+            start: 起点坐标
+            end: 终点坐标
+            from_dock: 源端口的停靠位置（上/下/左/右）
+            to_dock: 目标端口的停靠位置（上/下/左/右）
+
+        返回：
+            绘制好的 QPainterPath 对象
+        """
+        # 抽象方法，子类必须实现
         raise NotImplementedError
 
     def arrow(self, start: QPointF, end: QPointF) -> QPolygonF:
-        """Arrowhead at end point
+        """在终点处绘制箭头
 
-        Returns an empty polygon for degenerate (near-zero-length) inputs.
+        对于退化的（长度接近零）输入返回空多边形。
         """
+        # 计算从起点到终点的方向向量
         dx = end.x() - start.x()
         dy = end.y() - start.y()
+        # 计算起点到终点的欧几里得距离
         length = math.sqrt(dx * dx + dy * dy)
+        # 如果距离小于0.5像素（几乎重合），不绘制箭头
         if length < 0.5:
+            # 返回空多边形
             return QPolygonF()
+        # 归一化方向向量（长度为1）
         dx, dy = dx / length, dy / length
+        # 箭头大小
         s = ARROW_SIZE
+        # 返回箭头多边形（三角形形状）
         return QPolygonF([
+            # 箭头尖端（终点位置）
             QPointF(end.x(), end.y()),
-            QPointF(end.x() - dx * s + dy * s * 0.5,
-                     end.y() - dy * s - dx * s * 0.5),
-            QPointF(end.x() - dx * s - dy * s * 0.5,
-                     end.y() - dy * s + dx * s * 0.5),
+            # 左侧翼：从终点倒退 s 距离，再侧向偏移 dy*s*0.5
+            QPointF(end.x() - dx * s + dy * s * 0.5, end.y() - dy * s - dx * s * 0.5),
+            # 右侧翼：从终点倒退 s 距离，再反向侧向偏移
+            QPointF(end.x() - dx * s - dy * s * 0.5, end.y() - dy * s + dx * s * 0.5),
         ])
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Port.ChangedPoint
+# Port.ChangedPoint（端口偏移点计算）
 # ═══════════════════════════════════════════════════════════════════════════
 
 def changed_point(pos: QPointF, dock: PortDock, span: float) -> QPointF:
-    """Offset a point along its dock direction by span
+    """沿端口的停靠方向偏移指定距离
 
-    This is how computes the "inner point" that the broken line starts
-    from before bending. The direction depends on which side of the node
-    the port is on.
+    这是计算折线在弯曲之前开始的"内点"的方法。
+    偏移方向取决于端口所在节点的一侧。
+
+    参数：
+        pos: 原始位置
+        dock: 端口停靠方向
+        span: 偏移距离
+
+    返回：
+        偏移后的坐标
     """
+    # 如果端口停靠在底部
     if dock == PortDock.BOTTOM:
+        # Y坐标向下偏移（增加）
         return QPointF(pos.x(), pos.y() + span)
+    # 如果端口停靠在顶部
     if dock == PortDock.TOP:
+        # Y坐标向上偏移（减少）
         return QPointF(pos.x(), pos.y() - span)
+    # 如果端口停靠在右侧
     if dock == PortDock.RIGHT:
+        # X坐标向右偏移（增加）
         return QPointF(pos.x() + span, pos.y())
+    # 如果端口停靠在左侧
     if dock == PortDock.LEFT:
+        # X坐标向左偏移（减少）
         return QPointF(pos.x() - span, pos.y())
+    # 未知的停靠位置，返回原位置
     return pos
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# LineLinkDrawer
+# LineLinkDrawer（直线连线绘制器）
 # ═══════════════════════════════════════════════════════════════════════════
 
 class LineLinkDrawer(ILinkDrawer):
-    """Straight line."""
+    """直线连线绘制器。"""
 
     def draw_path(self, start, end, from_dock=PortDock.BOTTOM, to_dock=PortDock.TOP):
+        """绘制从起点到终点的直线"""
+        # 创建一个新的路径对象
         path = QPainterPath()
+        # 将画笔移动到起点
         path.moveTo(start)
+        # 从起点画直线到终点
         path.lineTo(end)
+        # 返回路径
         return path
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# BezierLinkDrawer
+# BezierLinkDrawer（贝塞尔曲线连线绘制器）
 # ═══════════════════════════════════════════════════════════════════════════
 
 class BezierLinkDrawer(ILinkDrawer):
-    """Cubic Bezier with port-dock-aware control points"""
+    """带端口停靠感知控制点的三次贝塞尔曲线连线绘制器"""
 
     def __init__(self, span: float = 50.0):
+        """初始化贝塞尔曲线绘制器
+
+        参数：
+            span: 控制点偏移距离（控制曲线的弯曲程度）
+        """
+        # 保存控制点偏移距离
         self.span = span
 
     def draw_path(self, start, end, from_dock=PortDock.BOTTOM, to_dock=PortDock.TOP):
+        """绘制贝塞尔曲线路径"""
+        # 计算起点侧的控制点（从起点沿端口方向偏移span距离）
         ctrl1 = changed_point(start, from_dock, self.span)
+        # 计算终点侧的控制点（从终点沿端口反方向偏移span距离）
         ctrl2 = changed_point(end, to_dock, self.span)
+        # 计算起点和终点的中点X坐标
         mx = start.x() + (end.x() - start.x()) / 2.0
+        # 计算起点和终点的中点Y坐标
         my = start.y() + (end.y() - start.y()) / 2.0
+        # 创建中点坐标
         mid = QPointF(mx, my)
+        # 创建新的路径对象
         path = QPainterPath()
+        # 将画笔移动到起点
         path.moveTo(start)
+        # 绘制三次贝塞尔曲线：起点 → 控制点1 → 中点 → 控制点2 → 终点
         path.cubicTo(ctrl1, mid, ctrl2, end)
+        # 返回路径
         return path
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# BrokenLinkDrawer (DEFAULT)
+# BrokenLinkDrawer（折线连线绘制器，默认）
 # ═══════════════════════════════════════════════════════════════════════════
 
 class BrokenLinkDrawer(ILinkDrawer):
-    """Orthogonal link routing.
+    """正交连线路由（折线/直角线）。
 
-    Algorithm:
-      1. Compute inner1/2 via Port.ChangedPoint(start/end, InnerSpan)
-      2. Test two crossing candidates: cross1(inner1.x, inner2.y) and cross2(inner2.x, inner1.y)
-      3. Check if each crossing lies on the segment from start->inner1 or end->inner2
-         (if so, skip that inner point for a cleaner route)
-      4. If both crossings work, choose the one with fewer bends
-      5. If neither works, fall back to midline routing
+    算法：
+      1. 通过 Port.ChangedPoint(start/end, InnerSpan) 计算 inner1/inner2
+      2. 测试两种交叉候选路径：cross1(inner1.x, inner2.y) 和 cross2(inner2.x, inner1.y)
+      3. 检查每个交叉点是否位于 start→inner1 或 end→inner2 线段上
+         （如果是，跳过该内点以获得更干净的路线）
+      4. 如果两种交叉都有效，选择折弯数较少的
+      5. 如果都不有效，回退到中线路由
     """
 
     def __init__(self, inner_span: float = 30.0):
+        """初始化折线绘制器
+
+        参数：
+            inner_span: 内点偏移距离
+        """
+        # 保存内点偏移距离
         self.inner_span = inner_span
 
     def _on_segment(self, p1: QPointF, p2: QPointF, q: QPointF) -> bool:
-        """ OnSegment — is point Q on line segment P1-P2?"""
-        # Cross-product check: (Q-P1) × (P2-P1) == 0 means collinear
+        """ OnSegment — 判断点 Q 是否在线段 P1-P2 上"""
+        # 计算叉积：(Q-P1) × (P2-P1)
+        # 叉积为0表示向量共线
         cross = (q.x() - p1.x()) * (p2.y() - p1.y()) - \
                 (p2.x() - p1.x()) * (q.y() - p1.y())
+        # 如果叉积的绝对值大于0.001，说明不共线，Q不在线段上
         if abs(cross) > 0.001:
             return False
-        # Bounding-box check
+        # 边界框检查：Q的X坐标必须在P1和P2的X坐标之间
         return (min(p1.x(), p2.x()) - 0.001 <= q.x() <= max(p1.x(), p2.x()) + 0.001 and
+                # Q的Y坐标必须在P1和P2的Y坐标之间
                 min(p1.y(), p2.y()) - 0.001 <= q.y() <= max(p1.y(), p2.y()) + 0.001)
 
     def _bend_count(self, points: list) -> int:
-        """ GetBrokenCount — count direction changes in polyline."""
+        """ GetBrokenCount — 计算折线中的方向变化次数（弯折数）"""
+        # 初始化弯折数为0
         bends = 0
+        # 从第三个点开始遍历（需要前两个点才能判断方向变化）
         for i in range(2, len(points)):
+            # 获取前两个点和当前点
             p1, p2, c = points[i - 2], points[i - 1], points[i]
-            # If c is NOT on the line from p1 to p2, this is a bend
+            # 如果当前点 C 不在从 P1 到 P2 的直线上
             if not self._on_segment(p1, c, p2):
+                # 这是一个弯折，计数加1
                 bends += 1
+        # 返回弯折总数
         return bends
 
     def _center(self, points: list) -> QPointF:
-        """ GetCenter — find the center of the polyline for label placement."""
+        """ GetCenter — 找到折线的中心点（用于标签放置）"""
+        # 如果点列表为空，返回原点
         if not points:
             return QPointF()
-        # All vertical
+        # 检查是否所有点的X坐标相同（垂直线）
         if all(abs(p.x() - points[0].x()) < 0.01 for p in points):
+            # 收集所有Y坐标
             ys = [p.y() for p in points]
+            # 返回垂直线中心点
             return QPointF(points[0].x(), (min(ys) + max(ys)) / 2)
-        # All horizontal
+        # 检查是否所有点的Y坐标相同（水平线）
         if all(abs(p.y() - points[0].y()) < 0.01 for p in points):
+            # 收集所有X坐标
             xs = [p.x() for p in points]
+            # 返回水平线中心点
             return QPointF((min(xs) + max(xs)) / 2, points[0].y())
+        # 如果点数大于2
         if len(points) > 2:
+            # 返回第二个点和第三个点的中点（折线拐点附近）
             return QPointF(points[2].x() / 2 + points[1].x() / 2,
                            points[2].y() / 2 + points[1].y() / 2)
+        # 默认返回最后一个点
         return points[-1] if points else QPointF()
 
     def _build_polyline(self, pts: list) -> QPainterPath:
-        """Build a QPainterPath from point list."""
+        """从点列表构建 QPainterPath"""
+        # 创建新的路径对象
         path = QPainterPath()
+        # 如果点列表为空，返回空路径
         if not pts:
             return path
+        # 将画笔移动到第一个点
         path.moveTo(pts[0])
+        # 遍历剩余的点
         for p in pts[1:]:
+            # 从上一个点画直线到当前点
             path.lineTo(p)
+        # 返回路径
         return path
 
     def draw_path(self, start, end, from_dock=PortDock.BOTTOM, to_dock=PortDock.TOP):
-        """ BrokenLinkDrawer.DrawPath — full orthogonal routing algorithm."""
+        """ BrokenLinkDrawer.DrawPath — 完整的正交路由算法"""
+        # 计算起点侧的内点（从起点沿端口方向偏移inner_span距离）
         inner1 = changed_point(start, from_dock, self.inner_span)
+        # 计算终点侧的内点（从终点沿端口反方向偏移inner_span距离）
         inner2 = changed_point(end, to_dock, self.inner_span)
 
-        # Two possible crossing configurations
-        cross1 = QPointF(inner1.x(), inner2.y())   # vertical first, then horizontal
-        cross2 = QPointF(inner2.x(), inner1.y())   # horizontal first, then vertical
+        # 第一种交叉配置：先垂直后水平（连接 inner1.x 和 inner2.y）
+        cross1 = QPointF(inner1.x(), inner2.y())
+        # 第二种交叉配置：先水平后垂直（连接 inner2.x 和 inner1.y）
+        cross2 = QPointF(inner2.x(), inner1.y())
 
+        # 检查第一种配置是否有效（交叉点不在起点/内点1的延长线上，且不在终点/内点2的延长线上）
         is_cross1 = (not self._on_segment(inner1, cross1, start) and
                      not self._on_segment(inner2, cross1, end))
+        # 检查第二种配置是否有效
         is_cross2 = (not self._on_segment(inner1, cross2, start) and
                      not self._on_segment(inner2, cross2, end))
 
+        # 初始化点列表
         points: list[QPointF] = []
 
+        # 情况1：只有第一种配置有效
         if is_cross1 and not is_cross2:
+            # 添加起点
             points.append(start)
+            # 如果交叉点不在起点到内点1的线段上，添加内点1
             if not self._on_segment(start, inner1, cross1):
                 points.append(inner1)
+            # 添加交叉点
             points.append(cross1)
+            # 如果交叉点不在终点到内点2的线段上，添加内点2
             if not self._on_segment(end, inner2, cross1):
                 points.append(inner2)
+            # 添加终点
             points.append(end)
 
+        # 情况2：只有第二种配置有效
         elif not is_cross1 and is_cross2:
+            # 添加起点
             points.append(start)
+            # 如果交叉点不在起点到内点1的线段上，添加内点1
             if not self._on_segment(start, inner1, cross2):
                 points.append(inner1)
+            # 添加交叉点
             points.append(cross2)
+            # 如果交叉点不在终点到内点2的线段上，添加内点2
             if not self._on_segment(end, inner2, cross2):
                 points.append(inner2)
+            # 添加终点
             points.append(end)
 
+        # 情况3：两种配置都有效
         elif is_cross1 and is_cross2:
-            # Both work — choose the one with fewer bends
+            # 构建第一条路径（使用cross1）
             pts1 = [start]
             if not self._on_segment(start, inner1, cross1):
                 pts1.append(inner1)
@@ -214,6 +321,7 @@ class BrokenLinkDrawer(ILinkDrawer):
                 pts1.append(inner2)
             pts1.append(end)
 
+            # 构建第二条路径（使用cross2）
             pts2 = [start]
             if not self._on_segment(start, inner1, cross2):
                 pts2.append(inner1)
@@ -222,39 +330,67 @@ class BrokenLinkDrawer(ILinkDrawer):
                 pts2.append(inner2)
             pts2.append(end)
 
+            # 选择弯折数较少的路径
             if self._bend_count(pts1) > self._bend_count(pts2):
                 points = pts2
             else:
                 points = pts1
+
         else:
-            # Neither cross works — fallback to midline routing
+            # 情况4：两种交叉都无效 —— 回退到中线路由
+            # 计算水平中线的Y坐标（内点1和内点2的Y坐标平均值）
             line_y = (inner1.y() + inner2.y()) / 2
+            # 水平中线起点（内点1的X坐标，中线Y坐标）
             ly_start = QPointF(inner1.x(), line_y)
+            # 水平中线终点（内点2的X坐标，中线Y坐标）
             ly_end = QPointF(inner2.x(), line_y)
+            # 计算垂直中线的X坐标（内点1和内点2的X坐标平均值）
             line_x = (inner1.x() + inner2.x()) / 2
+            # 垂直中线起点（中线X坐标，内点1的Y坐标）
             lx_start = QPointF(line_x, inner1.y())
+            # 垂直中线终点（中线X坐标，内点2的Y坐标）
             lx_end = QPointF(line_x, inner2.y())
 
+            # 检查水平中线路由是否有效
             is_linex = (not self._on_segment(inner1, ly_start, start) and
                         not self._on_segment(inner2, ly_end, end))
 
             if is_linex:
+                # 使用水平中线路由
+                # 将起点添加到点列表中
                 points.append(start)
+                # 判断起点到内点1的线段上是否包含水平中线起点（ly_start）
                 if not self._on_segment(start, inner1, ly_start):
+                    # 如果不包含，将内点1添加到点列表中（需要先走到内点1）
                     points.append(inner1)
+                # 将水平中线起点添加到点列表中
                 points.append(ly_start)
+                # 将水平中线终点添加到点列表中
                 points.append(ly_end)
+                # 判断终点到内点2的线段上是否包含水平中线终点（ly_end）
                 if not self._on_segment(end, inner2, ly_end):
+                    # 如果不包含，将内点2添加到点列表中（需要从内点2走到终点）
                     points.append(inner2)
+                # 将终点添加到点列表中
                 points.append(end)
             else:
+                # 使用垂直中线路由
+                # 将起点添加到点列表中
                 points.append(start)
+                # 判断起点到内点1的线段上是否包含垂直中线起点（lx_start）
                 if not self._on_segment(start, inner1, lx_start):
+                    # 如果不包含，将内点1添加到点列表中（需要先走到内点1）
                     points.append(inner1)
+                # 将垂直中线起点添加到点列表中
                 points.append(lx_start)
+                # 将垂直中线终点添加到点列表中
                 points.append(lx_end)
+                # 判断终点到内点2的线段上是否包含垂直中线终点（lx_end）
                 if not self._on_segment(end, inner2, lx_end):
+                    # 如果不包含，将内点2添加到点列表中（需要从内点2走到终点）
                     points.append(inner2)
+                # 将终点添加到点列表中
                 points.append(end)
 
+        # 从点列表构建并返回路径
         return self._build_polyline(points)
