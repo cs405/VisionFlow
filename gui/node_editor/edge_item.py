@@ -6,7 +6,8 @@
 import math
 
 from PyQt5.QtWidgets import (QGraphicsObject, QGraphicsSceneMouseEvent,
-                              QStyleOptionGraphicsItem, QWidget, QGraphicsTextItem)
+                              QStyleOptionGraphicsItem, QWidget, QGraphicsTextItem,
+                              QGraphicsView)
 from PyQt5.QtCore import Qt, QPointF, QRectF, pyqtSignal
 from PyQt5.QtGui import (QPen, QBrush, QColor, QPainterPath, QPainter,
                           QPolygonF, QFont, QPainterPathStroker)
@@ -240,8 +241,8 @@ class EdgeItem(QGraphicsObject):
             else:
                 # 使用绘制器的draw_path方法绘制路径
                 self._path = self._drawer.draw_path(start, end, from_dock, to_dock)
-                # 获取绘制器的箭头多边形
-                self._arrow_poly = self._drawer.arrow(start, end)
+                # 基于路径末端切线计算箭头方向，避免折线/曲线出现箭头朝向偏斜
+                self._arrow_poly = self._arrow_from_path(self._path, start, end)
         except Exception:
             # 发生异常时退化为直线
             self._path = QPainterPath()
@@ -261,6 +262,84 @@ class EdgeItem(QGraphicsObject):
 
         # 通知图形项几何形状即将改变
         self.prepareGeometryChange()
+
+    def _arrow_from_path(self, path: QPainterPath, start: QPointF, end: QPointF) -> QPolygonF:
+        """按路径末端切线方向生成箭头。"""
+        arrow_size = self._adaptive_arrow_size()
+        tip = self._target_tip(end)
+
+        # 退化路径回退到原逻辑
+        if path.isEmpty():
+            return self._build_arrow(start, tip, arrow_size)
+
+        path_tip = path.pointAtPercent(1.0)
+        # 从路径末端向前采样，找到第一个与末端有足够距离的点作为方向参考
+        for t in (0.99, 0.97, 0.95, 0.90, 0.80):
+            ref = path.pointAtPercent(t)
+            dx = path_tip.x() - ref.x()
+            dy = path_tip.y() - ref.y()
+            if dx * dx + dy * dy > 0.25:
+                return self._build_arrow(ref, tip, arrow_size)
+
+        # 路径过短时使用端点向量兜底
+        return self._build_arrow(start, tip, arrow_size)
+
+    def _target_tip(self, fallback_end: QPointF) -> QPointF:
+        """返回箭头尖端坐标：优先吸附到目标 Socket 中心。"""
+        if self.to_socket is not None:
+            try:
+                return self.to_socket.get_center_scene_pos()
+            except Exception:
+                pass
+        return fallback_end
+
+    def _adaptive_arrow_size(self) -> float:
+        """根据视图缩放做轻微箭头尺寸自适应。"""
+        scale = self._view_scale()
+        if scale <= 0:
+            return ARROW_SIZE
+
+        # 轻微自适应：缩放大时略小，缩放小时略大，避免视觉抖动
+        factor = (1.0 / scale) ** 0.18
+        factor = max(0.86, min(1.18, factor))
+        return ARROW_SIZE * factor
+
+    def _view_scale(self) -> float:
+        """读取当前视图主缩放（scene 无视图时返回 1.0）。"""
+        s = self.scene()
+        if s is None:
+            return 1.0
+        views = s.views()
+        if not views:
+            return 1.0
+
+        v = views[0]
+        if not isinstance(v, QGraphicsView):
+            return 1.0
+
+        tr = v.transform()
+        sx = math.hypot(tr.m11(), tr.m21())
+        sy = math.hypot(tr.m22(), tr.m12())
+        scale = (sx + sy) * 0.5
+        return scale if scale > 1e-6 else 1.0
+
+    def _build_arrow(self, start: QPointF, tip: QPointF, size: float) -> QPolygonF:
+        """按起止方向和给定尺寸生成箭头三角形。"""
+        dx = tip.x() - start.x()
+        dy = tip.y() - start.y()
+        length = math.hypot(dx, dy)
+        if length < 0.5:
+            return QPolygonF()
+
+        ux, uy = dx / length, dy / length
+        half_base = size * 0.5
+        return QPolygonF([
+            QPointF(tip.x(), tip.y()),
+            QPointF(tip.x() - ux * size + uy * half_base,
+                    tip.y() - uy * size - ux * half_base),
+            QPointF(tip.x() - ux * size - uy * half_base,
+                    tip.y() - uy * size + ux * half_base),
+        ])
 
     def update_path(self):
         """更新路径并触发重绘"""
