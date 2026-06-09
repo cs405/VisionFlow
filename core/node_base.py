@@ -891,7 +891,7 @@ class VisionNodeData(DemoNodeDataBase):
         self.message = result.message
 
         # 更新结果图像源
-        if self.use_result_image_part:
+        if self.use_result_image_source:
             self._update_result_image_source()
 
         # 创建结果展示器（如果尚未创建）
