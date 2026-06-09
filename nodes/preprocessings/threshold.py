@@ -27,7 +27,11 @@ class Threshold(OpenCVNodeDataBase):
     # 最大值属性（二值化时设置的最大值）
     maxval = Property(255.0, name="最大值", group=PropertyGroupNames.RUN_PARAMETERS)
     # 阈值类型属性
-    threshold_type = Property("Binary", name="阈值类型", group=PropertyGroupNames.RUN_PARAMETERS)
+    threshold_type = Property("Binary",
+                              name="阈值类型",
+                              group=PropertyGroupNames.RUN_PARAMETERS,
+                              editor="choices",
+                              choices=["Binary", "BinaryInv", "Trunc", "ToZero", "ToZeroInv", "Otsu", "Triangle"])
 
     def __init__(self):
         """初始化阈值化节点"""
