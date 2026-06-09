@@ -13,7 +13,7 @@ class Flip(OpenCVNodeDataBase):
     __group__ = "图像预处理模块"
     # 翻转模式属性
     # 0: 垂直翻转（绕X轴）\n1: 水平翻转（绕Y轴）\n-1: 同时翻转（绕X轴和Y轴）
-    flip_code = Property(0, name="翻转模式", group=PropertyGroupNames.RUN_PARAMETERS)
+    flip_code = Property(0, name="翻转角度", group=PropertyGroupNames.RUN_PARAMETERS)
 
     def __init__(self):
         """初始化翻转节点"""

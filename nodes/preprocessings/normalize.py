@@ -16,7 +16,8 @@ class Normalize(OpenCVNodeDataBase):
     # Beta属性（目标范围的上限）
     beta = Property(0.0, name="Beta", group=PropertyGroupNames.RUN_PARAMETERS)
     # 归一化类型属性
-    norm_type = Property("MinMax", name="归一化类型", group=PropertyGroupNames.RUN_PARAMETERS)
+    norm_type = Property("MinMax", name="归一化类型", group=PropertyGroupNames.RUN_PARAMETERS,
+                         editor="choices", choices=["MinMax", "L1", "L2", "Inf"])
 
     def __init__(self):
         """初始化归一化节点"""
