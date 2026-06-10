@@ -26,15 +26,29 @@ class MserFeatureDetector(FeatureBase):
         mat, gray = self._get_gray(from_node)
         if mat is None:
             return self.error(None, "无输入图像")
-        mser = cv2.MSER_create(_delta=self.delta, _min_area=self.min_area, _max_area=self.max_area,
-                                _max_variation=self.max_variation, _min_diversity=self.min_diversity,
-                                _max_evolution=self.max_evolution, _area_threshold=self.area_threshold,
-                                _min_margin=self.min_margin, _edge_blur_size=self.edge_blur_size)
+        # 大图缩放到 480 宽加速 MSER
+        h, w = gray.shape[:2]
+        scale = 1.0
+        if max(w, h) > 480:
+            scale = 480.0 / max(w, h)
+            gray = cv2.resize(gray, (int(w * scale), int(h * scale)))
+        mser = cv2.MSER_create()
+        mser.setDelta(self.delta)
+        mser.setMinArea(self.min_area)
+        mser.setMaxArea(self.max_area)
+        mser.setMaxVariation(self.max_variation)
+        mser.setMinDiversity(self.min_diversity)
+        mser.setMaxEvolution(self.max_evolution)
+        mser.setAreaThreshold(self.area_threshold)
+        mser.setMinMargin(self.min_margin)
+        mser.setEdgeBlurSize(self.edge_blur_size)
         contours, _ = mser.detectRegions(gray)
         out = mat.copy() if len(mat.shape) == 3 else cv2.cvtColor(mat, cv2.COLOR_GRAY2BGR)
+        # 用多边形绘制代替逐点画圈（WPF 画圈但 C# 比 Python 快得多）
+        if scale != 1.0:
+            contours = [(pts / scale).astype(np.int32) for pts in contours]
         for pts in contours:
-            color = (np.random.randint(0, 255), np.random.randint(0, 255), np.random.randint(0, 255))
-            for pt in pts:
-                cv2.circle(out, (int(pt[0][0]), int(pt[0][1])), 1, color, -1)
+            cv2.polylines(out, [pts.reshape(-1, 1, 2)], True,
+                         (np.random.randint(0, 255), np.random.randint(0, 255), np.random.randint(0, 255)), 1)
         self.feature_count = len(contours)
         return self.ok(out, f"{self.feature_count} 个MSER区域")
