@@ -1,4 +1,4 @@
-"""模板匹配模块基类层 — 对应 WPF H.VisionMaster 的 Base64MatchingNodeData + OpenCV 基类。
+"""模板匹配模块基类层
 
 提供:
   - ITemplateMatchingGroupableNode 标记接口 (分组发现)
@@ -31,17 +31,16 @@ if TYPE_CHECKING:
 class ITemplateMatchingGroupableNode:
     """标记接口：实现此接口的节点自动归入 '模板匹配模块' 分组。
 
-    对应 WPF ITemplateMatchingGroupableNodeData。
     """
     pass
 
 
 # =============================================================================
-# MatcherType — 匹配器类型 (对应 WPF MatcherType 枚举)
+# MatcherType — 匹配器类型
 # =============================================================================
 
 class MatcherType(Enum):
-    """特征匹配器类型 — 对应 WPF MatcherType。"""
+    """特征匹配器类型"""
     BFMATCHER = "bf"
     FLANN_BASED = "flann"
 
@@ -57,15 +56,11 @@ class OpenCVTemplateMatchingNodeBase(Base64MatchingNodeData, OpenCVNodeDataBase,
     将 Base64MatchingNodeData + OpenCVNodeDataBase 的双继承合并为单一入口，
     提供公共的 _update_result_image_source 和 is_valid。
     同时实现 ITemplateMatchingGroupableNode 标记接口。
-
-    对应 WPF:
-      - Base64MatchingNodeData<T> (模板存储 + 裁剪 UI + 结果参数)
-      - OpenCVBase64MatchingNodeDataBase (Mat 验证 + 图像转换)
     """
 
     __group__ = "模板匹配模块"
 
-    # 模板图片 — 触发属性面板的 crop editor (对应 WPF CropImagePropertyPresenter)
+    # 模板图片 — 触发属性面板的 crop editor
     template_image = Property("", name="模板图片", group=PropertyGroupNames.RUN_PARAMETERS,
                               editor="crop", description="从上游图像中裁剪模板区域用于匹配",
                               order=1000)

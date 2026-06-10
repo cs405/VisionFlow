@@ -1,4 +1,4 @@
-"""MSER 特征检测 — 对应 WPF MserFeatureDetector : FeatureOpenCVNodeDataBase"""
+"""MSER 特征检测"""
 
 import cv2
 import numpy as np
@@ -44,7 +44,7 @@ class MserFeatureDetector(FeatureBase):
         mser.setEdgeBlurSize(self.edge_blur_size)
         contours, _ = mser.detectRegions(gray)
         out = mat.copy() if len(mat.shape) == 3 else cv2.cvtColor(mat, cv2.COLOR_GRAY2BGR)
-        # 用多边形绘制代替逐点画圈（WPF 画圈但 C# 比 Python 快得多）
+        # 用多边形绘制代替逐点画圈
         if scale != 1.0:
             contours = [(pts / scale).astype(np.int32) for pts in contours]
         for pts in contours:

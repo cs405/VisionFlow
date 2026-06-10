@@ -49,7 +49,7 @@ class EventType(Enum):
     PROJECT_SAVED = auto()         # 项目保存
     PROJECT_CHANGED = auto()       # 项目变更
 
-    # 文件迭代事件（对应 WPF 的"运行全部"/"显示全部"）
+    # 文件迭代事件
     FILE_ITERATION_NEXT = auto()       # 在运行全部循环中，每个文件处理前触发
     FILE_ITERATION_COMPLETED = auto()  # 整个运行全部循环完成时触发
 

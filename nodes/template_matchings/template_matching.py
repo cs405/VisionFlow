@@ -1,4 +1,4 @@
-"""模板匹配节点 — 对应 WPF TemplateBase64MatchingNodeData。
+"""模板匹配节点
 
 使用 cv2.matchTemplate 进行模板匹配，支持多种匹配方法。
 合并了原 BestMatchBase64TemplateMatchingNode（仅多了可配置阈值）。
@@ -18,7 +18,7 @@ from nodes.template_matchings.template_base import OpenCVTemplateMatchingNodeBas
 if TYPE_CHECKING:
     from core.workflow import WorkflowEngine
 
-# 匹配方法映射 — 对应 WPF TemplateMatchModes 枚举
+# 匹配方法映射
 MATCH_MODES = {
     "SQDIFF": cv2.TM_SQDIFF,
     "SQDIFF_NORMED": cv2.TM_SQDIFF_NORMED,
@@ -30,12 +30,12 @@ MATCH_MODES = {
 
 
 class TemplateMatchingNode(OpenCVTemplateMatchingNodeBase):
-    """使用 cv2.matchTemplate 进行模板匹配 — 对应 WPF TemplateBase64MatchingNodeData。
+    """使用 cv2.matchTemplate 进行模板匹配
 
     支持 6 种匹配方法，可配置置信度阈值。
     """
 
-    # ── 运行参数 (对应 WPF TemplateMatchModes) ──
+    # ── 运行参数 ──
     match_mode = Property("CCoeffNormed", name="匹配方法", group=PropertyGroupNames.RUN_PARAMETERS,
                           editor="choices",
                           choices=list(MATCH_MODES.keys()))

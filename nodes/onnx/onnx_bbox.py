@@ -1,4 +1,4 @@
-"""ONNX 目标检测 — 对应 WPF ObjDetectOnnxNodeDataBase + ObjDetectOnnxNodeData"""
+"""ONNX 目标检测"""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 
 class OnnxBboxNode(OnnxNodeDataBase):
-    """目标检测 — 对应 WPF ObjDetectOnnxNodeData。输出形状: [batch_size, num_boxes, (class_probs + bbox_coords)]"""
+    """目标检测, 输出形状: [batch_size, num_boxes, (class_probs + bbox_coords)]"""
 
     label_path = Property("", name="标签路径", group=PropertyGroupNames.RUN_PARAMETERS)
     conf_threshold = Property(0.25, name="置信度阈值", group=PropertyGroupNames.RUN_PARAMETERS, min_val=0.0, max_val=1.0, step=0.05)

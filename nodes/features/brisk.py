@@ -1,4 +1,4 @@
-"""BRISK 特征检测 — 对应 WPF BriskFeatureDetector : FeatureOpenCVNodeDataBase"""
+"""BRISK 特征检测"""
 
 import cv2
 import numpy as np
@@ -22,7 +22,7 @@ class BriskFeatureDetector(FeatureBase):
             return self.error(None, "无输入图像")
         brisk = cv2.BRISK_create(thresh=self.threshold, octaves=self.octaves, patternScale=self.pattern_scale)
         kp = brisk.detect(gray, None)
-        # WPF: 每个关键点画圆圈+交叉线
+        # 每个关键点画圆圈+交叉线
         out = mat.copy() if len(mat.shape) == 3 else cv2.cvtColor(mat, cv2.COLOR_GRAY2BGR)
         if kp:
             for kpt in kp:

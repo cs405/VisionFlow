@@ -1,4 +1,4 @@
-"""人类语义分割 — 对应 WPF HumanSemSegOnnxNodeData"""
+"""人类语义分割"""
 
 import os
 from nodes.onnx.onnx_seg import OnnxSegNode

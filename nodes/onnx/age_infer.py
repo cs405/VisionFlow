@@ -1,4 +1,4 @@
-"""年龄推测 — 对应 WPF AgeInferOnnxNodeData"""
+"""年龄推测"""
 
 import os
 from core.node_base import Property, PropertyGroupNames

@@ -1,4 +1,4 @@
-"""ONNX 检测辅助函数 — 对应 WPF OnnxExtension 中的 Draw/NMS/Label 方法"""
+"""ONNX 检测辅助函数"""
 
 import os
 
@@ -10,7 +10,7 @@ from nodes.onnx.defect_box import DefectBox
 
 def draw_detect_boxes(image: np.ndarray, boxes: list[DefectBox],
                       color: tuple = (0, 255, 0), thickness: int = 2) -> np.ndarray:
-    """在图像上绘制检测框 — 对应 WPF DrawDetectBoxes。"""
+    """在图像上绘制检测框"""
     for db in boxes:
         x, y, w, h = int(db.box[0]), int(db.box[1]), int(db.box[2]), int(db.box[3])
         cv2.rectangle(image, (x, y), (x + w, y + h), color, thickness)
@@ -21,7 +21,7 @@ def draw_detect_labels(image: np.ndarray, boxes: list[DefectBox],
                        class_names: list[str] = None, use_score: bool = True,
                        color: tuple = (0, 255, 0),
                        label_color: tuple = (255, 255, 255)) -> list[tuple[DefectBox, str, float]]:
-    """绘制检测框标签并返回标签元组 — 对应 WPF DrawDetectBoxLabels。"""
+    """绘制检测框标签并返回标签元组"""
     results: list[tuple[DefectBox, str, float]] = []
     class_names = class_names or []
     for db in boxes:
@@ -44,7 +44,7 @@ def draw_detect_labels(image: np.ndarray, boxes: list[DefectBox],
 
 def apply_nms(boxes: list[DefectBox], conf_threshold: float = 0.25,
               nms_threshold: float = 0.45) -> list[DefectBox]:
-    """对检测框应用 NMS — 对应 WPF ToNMSBoxes。"""
+    """对检测框应用 NMS"""
     if not boxes:
         return []
     filtered = [b for b in boxes if b.score >= conf_threshold]
@@ -59,7 +59,7 @@ def apply_nms(boxes: list[DefectBox], conf_threshold: float = 0.25,
 
 
 def read_labels(label_path: str) -> list[str]:
-    """读取标签文件或解析内联文本 — 对应 WPF GetClassNames。"""
+    """读取标签文件或解析内联文本"""
     if not label_path:
         return []
     if os.path.isfile(label_path):

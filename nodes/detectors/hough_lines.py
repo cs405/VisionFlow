@@ -46,7 +46,7 @@ class HoughLines(OpenCVNodeDataBase, IDetectorGroupableNode):
         out = mat.copy() if len(mat.shape) == 3 else cv2.cvtColor(mat, cv2.COLOR_GRAY2BGR)
         count = 0
         if lines is not None:
-            for line in lines[:10]:  # WPF: limit to 10
+            for line in lines[:10]:  # limit to 10
                 rho, theta = line[0]
                 a, b = np.cos(theta), np.sin(theta)
                 x0, y0 = a * rho, b * rho

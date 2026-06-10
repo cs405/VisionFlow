@@ -1,4 +1,4 @@
-"""图像拼接 — 对应 WPF Stitching。将源节点图像和上游图像拼接为一张大图。"""
+"""图像拼接将源节点图像和上游图像拼接为一张大图。"""
 
 import cv2
 import numpy as np

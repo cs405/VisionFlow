@@ -1,4 +1,4 @@
-"""Homography 单应性变换 — 对应 WPF 相关功能"""
+"""Homography 单应性变换"""
 
 import cv2
 import numpy as np

@@ -76,7 +76,7 @@ class ImagePickLabel(QLabel):
 
 
 class ImagePickDialog(QDialog):
-    """从图像取色的模态对话框 — 对应 WPF ImageColorPickerBoxPresenter。
+    """从图像取色的模态对话框
 
     显示节点的输入图像，用户点击目标区域即可提取该像素的 RGB 颜色。
     """
@@ -124,7 +124,7 @@ class ColorPickerDialog(QDialog):
         self.resize(420, 320)
         # 保存图像查看器引用
         self._viewer = viewer
-        # 保存静态取色图像（对应WPF ImageColorPickerPresenter.ImageSource）
+        # 保存静态取色图像
         self._picker_image = picker_image
         # 更新中标志（防止循环更新）
         self._updating = False

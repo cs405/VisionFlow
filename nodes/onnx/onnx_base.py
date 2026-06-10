@@ -1,4 +1,4 @@
-"""ONNX 模型节点基类 — 对应 WPF OnnxNodeDataBase"""
+"""ONNX 模型节点基类"""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 
 class OnnxNodeDataBase(OpenCVNodeDataBase, IOpenCVDnnNode):
-    """ONNX 模型节点基类 — 对应 WPF OnnxNodeDataBase : OpenCVNodeDataBase, IOpenCVDnnNodeData。
+    """ONNX 模型节点基类
 
     提供: 模型路径、输入尺寸、归一化参数、输出张量解析、模型验证、Blob 创建。
     """

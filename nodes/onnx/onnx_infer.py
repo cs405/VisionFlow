@@ -1,4 +1,4 @@
-"""ONNX 数值推理 — 对应 WPF InferOnnxNodeDataBase + InferOnnxNodeData"""
+"""ONNX 数值推理"""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 
 class OnnxInferNode(OnnxNodeDataBase):
-    """数值推理 — 对应 WPF InferOnnxNodeData。输出形状: [batch_size, num_values]"""
+    """数值推理, 输出形状: [batch_size, num_values]"""
 
     value_result = Property("", name="推测结果", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)
 

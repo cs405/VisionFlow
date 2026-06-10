@@ -1,4 +1,4 @@
-"""平面细分 — 对应 WPF Subdiv2D。支持 Voronoi 图和 Delaunay 三角剖分。"""
+"""平面细分支持 Voronoi 图和 Delaunay 三角剖分。"""
 
 import cv2
 import numpy as np

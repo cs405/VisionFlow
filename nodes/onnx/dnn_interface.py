@@ -1,4 +1,4 @@
-"""IOpenCVDnnNode — 分组发现接口 (对应 WPF IOpenCVDnnNodeData)"""
+"""IOpenCVDnnNode — 分组发现接口"""
 
 
 class IOpenCVDnnNode:

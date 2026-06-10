@@ -1,5 +1,4 @@
-"""HSV 色相 Blob 匹配节点 — 对应 WPF HSVInRangeRenderBlobMatchingNodeData : RenderBlobs。
-
+"""HSV 色相 Blob 匹配节点 
 取色方式与 nodes/takeoffs/HSVInRange 一致：
   吸管取色 → BGR→HSV 转换 → 容差范围计算 HSV 上下限 → inRange 过滤。
 在此基础上增加轮廓检测与绘制（Blob 分析）。
@@ -21,7 +20,7 @@ if TYPE_CHECKING:
 
 
 class HSVBlobMatchingNode(OpenCVNodeDataBase, ITemplateMatchingGroupableNode):
-    """HSV 色相 Blob 匹配 — 对应 WPF HSVInRangeRenderBlobMatchingNodeData。
+    """HSV 色相 Blob 匹配 
 
     取色机制与 takeoffs/HSVInRange 相同：
       - pick_color: 吸管取色（hex 色值）
@@ -70,7 +69,7 @@ class HSVBlobMatchingNode(OpenCVNodeDataBase, ITemplateMatchingGroupableNode):
         """根据取色和容差计算 HSV 上下限。
 
         1. 取色 BGR → OpenCV HSV
-        2. OpenCV 尺度 (0-179, 0-255, 0-255) → WPF 尺度 (0-360, 0-100, 0-100)
+        2. OpenCV 尺度 (0-179, 0-255, 0-255)
         3. Lower = 中心 - 全容差, Upper = 中心 + 半容差
         4. 转回 OpenCV 尺度
         """
@@ -78,22 +77,22 @@ class HSVBlobMatchingNode(OpenCVNodeDataBase, ITemplateMatchingGroupableNode):
         hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)[0, 0]
         h, s, v = int(hsv[0]), int(hsv[1]), int(hsv[2])
 
-        # OpenCV → WPF 尺度
-        h_wpf = h * 2              # [0,179] → [0,360]
-        s_wpf = s / 2.55           # [0,255] → [0,100]
-        v_wpf = v / 2.55
+        # OpenCV
+        h_f = h * 2              # [0,179] → [0,360]
+        s_f = s / 2.55           # [0,255] → [0,100]
+        v_f = v / 2.55
 
         hr, sr, vr = self.h_range, self.s_range, self.v_range
 
         # Lower: 全容差
-        l_h_min = max(0, h_wpf - hr)
-        l_s_min = max(0, s_wpf - sr)
-        l_v_min = max(0, v_wpf - vr)
+        l_h_min = max(0, h_f - hr)
+        l_s_min = max(0, s_f - sr)
+        l_v_min = max(0, v_f - vr)
 
         # Upper: 半容差
-        u_h_max = min(360, h_wpf + hr / 2)
-        u_s_max = min(100, s_wpf + sr / 2)
-        u_v_max = min(100, v_wpf + vr / 2)
+        u_h_max = min(360, h_f + hr / 2)
+        u_s_max = min(100, s_f + sr / 2)
+        u_v_max = min(100, v_f + vr / 2)
 
         lower = np.array([l_h_min / 2, l_s_min * 2.55, l_v_min * 2.55], dtype=np.uint8)
         upper = np.array([u_h_max / 2, u_s_max * 2.55, u_v_max * 2.55], dtype=np.uint8)

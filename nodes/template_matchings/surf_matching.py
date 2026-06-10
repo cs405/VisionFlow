@@ -1,4 +1,4 @@
-"""SURF 特征匹配 — 对应 WPF SurfBase64FeatureMatchingNodeData"""
+"""SURF 特征匹配 """
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""NG输出 — 对应 WPF NGOutputNodeData。返回 ERROR 状态。"""
+"""NG输出返回 ERROR 状态。"""
 
 from core.data_packet import FlowableResult
 from nodes.outputs.output_base import OutputBase

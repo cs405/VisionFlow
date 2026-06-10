@@ -1,4 +1,4 @@
-"""STAR 特征检测 — 对应 WPF StarFeatureDetector : FeatureOpenCVNodeDataBase"""
+"""STAR 特征检测 """
 
 import cv2
 from core.node_base import Property, PropertyGroupNames

@@ -37,7 +37,7 @@ class RenderBlobs(OpenCVNodeDataBase, IDetectorGroupableNode):
         gray = cv2.cvtColor(mat, cv2.COLOR_BGR2GRAY) if len(mat.shape) == 3 else mat
         _, binary = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)
 
-        # 连通组件分析 (对应 WPF ConnectedComponentsEx)
+        # 连通组件分析
         num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
             binary, connectivity=self.connectivity)
 

@@ -1,4 +1,4 @@
-"""特征检测器基类 — 对应 WPF FeatureOpenCVNodeDataBase"""
+"""特征检测器基类"""
 
 import cv2
 from core.node_base import OpenCVNodeDataBase, Property, PropertyGroupNames
@@ -19,7 +19,7 @@ class FeatureBase(OpenCVNodeDataBase):
         return mat, gray
 
     def _draw_keypoints(self, mat, keypoints, color=(0, 255, 0)):
-        """标准 rich keypoints 绘制 — 对应 WPF DrawKeypoints + DrawRichKeypoints"""
+        """标准 rich keypoints 绘制"""
         out = mat.copy() if len(mat.shape) == 3 else cv2.cvtColor(mat, cv2.COLOR_GRAY2BGR)
         cv2.drawKeypoints(out, keypoints, out, color, cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
         return out

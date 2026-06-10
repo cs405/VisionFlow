@@ -1,4 +1,4 @@
-"""OK输出 — 对应 WPF OKOutputNodeData"""
+"""OK输出 """
 
 from nodes.outputs.output_base import OutputBase
 

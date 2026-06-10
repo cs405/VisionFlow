@@ -19,7 +19,7 @@ class Hist(OpenCVNodeDataBase):
         gray = cv2.cvtColor(mat, cv2.COLOR_BGR2GRAY) if len(mat.shape) == 3 else mat
         bins = max(1, min(self.hist_size, 512))
         hist = cv2.calcHist([gray], [0], None, [bins], [0, 256])
-        # WPF: 白色背景 + 柱状图
+        # 白色背景 + 柱状图
         w_img, h_img = bins, 200
         hist_img = np.ones((h_img, w_img, 3), dtype=np.uint8) * 255
         cv2.normalize(hist, hist, 0, h_img, cv2.NORM_MINMAX)

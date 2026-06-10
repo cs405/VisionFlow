@@ -1,7 +1,6 @@
-"""ORB 特征匹配节点 — 对应 WPF BestMatchBase64TemplateMatchingNodeData。
-
+"""ORB 特征匹配节点
 使用 ORB 检测 + BFMatcher + RANSAC Homography 进行图像匹配。
-与 WPF 实现一致：检测特征点 → 暴力匹配 → Homography 变换 → 绘制多边形。
+检测特征点 → 暴力匹配 → Homography 变换 → 绘制多边形。
 """
 
 from __future__ import annotations
@@ -20,7 +19,7 @@ if TYPE_CHECKING:
 
 
 class OrbFeatureMatchingNode(OpenCVTemplateMatchingNodeBase):
-    """ORB 特征匹配 + Homography — 对应 WPF BestMatchBase64TemplateMatchingNodeData。
+    """ORB 特征匹配 + Homography
 
     使用 ORB 检测特征点，BFMatcher 暴力匹配，取最近的 N 个匹配点，
     通过 RANSAC 计算 Homography 单应矩阵，绘制匹配多边形。
@@ -63,7 +62,7 @@ class OrbFeatureMatchingNode(OpenCVTemplateMatchingNodeBase):
         if des1 is None or des2 is None or len(des1) == 0 or len(des2) == 0:
             return self.ok(mat, "无法提取特征点")
 
-        # BFMatcher 暴力匹配 — 对应 WPF BFMatcher(NormTypes.Hamming, crossCheck: true)
+        # BFMatcher 暴力匹配
         bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
         matches = bf.match(des1, des2)
         good = sorted(matches, key=lambda x: x.distance)[:self.good_match_count]
@@ -71,7 +70,7 @@ class OrbFeatureMatchingNode(OpenCVTemplateMatchingNodeBase):
         if len(good) < 4:
             return self.ok(mat, f"匹配点不足 ({len(good)} < 4)，无法计算 Homography")
 
-        # Homography — 对应 WPF Cv2.FindHomography(srcPts, dstPts, Ransac, 5)
+        # Homography
         src_pts = np.float32([kp1[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
         dst_pts = np.float32([kp2[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
         homography, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC,

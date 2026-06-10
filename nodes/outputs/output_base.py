@@ -1,4 +1,4 @@
-"""输出节点基类 — 透传图像。通知节点显示 Qt 消息框 (对应 WPF IocMessage.Notify)。"""
+"""输出节点基类 — 透传图像。通知节点显示 Qt 消息框"""
 
 from PyQt5.QtWidgets import QMessageBox
 from core.node_base import OpenCVNodeDataBase
@@ -21,7 +21,7 @@ class OutputBase(OpenCVNodeDataBase):
 
 
 def _show_msgbox(icon: QMessageBox.Icon, title: str, text: str):
-    """显示 Qt 消息框 — 对应 WPF IocMessage.Notify.ShowXXX"""
+    """显示 Qt 消息框"""
     msg = QMessageBox()
     msg.setIcon(icon)
     msg.setWindowTitle(title)

@@ -1,4 +1,4 @@
-"""行人检测 — 对应 WPF Hog : OpenCVDetectorNodeDataBase (HOGDescriptor + DefaultPeopleDetector)"""
+"""行人检测 """
 
 import cv2
 from core.node_base import OpenCVNodeDataBase, Property, PropertyGroupNames
@@ -6,7 +6,7 @@ from core.data_packet import FlowableResult
 
 
 class Hog(OpenCVNodeDataBase):
-    """行人检测 — 对应 WPF Hog。使用 HOG + SVM 默认行人检测器。"""
+    """行人检测使用 HOG + SVM 默认行人检测器。"""
 
     __group__ = "其他模块"
 

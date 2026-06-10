@@ -1,4 +1,4 @@
-"""SIFT 特征匹配 — 对应 WPF SiftBase64FeatureMatchingNodeData"""
+"""SIFT 特征匹配"""
 
 from __future__ import annotations
 

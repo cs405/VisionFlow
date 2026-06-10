@@ -26,14 +26,14 @@ class HSVInRange(OpenCVNodeDataBase):
         bgr = self._hex_to_bgr_pixel()
         hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)[0, 0]
         h, s, v = int(hsv[0]), int(hsv[1]), int(hsv[2])
-        h_wpf, s_wpf, v_wpf = h * 2, s / 2.55, v / 2.55
+        h_f, s_f, v_f = h * 2, s / 2.55, v / 2.55
         hr, sr, vr = self.h_range, self.s_range, self.v_range
-        l_h_min = max(0, h_wpf - hr)
-        l_s_min = max(0, s_wpf - sr)
-        l_v_min = max(0, v_wpf - vr)
-        u_h_max = min(360, h_wpf + hr / 2)
-        u_s_max = min(100, s_wpf + sr / 2)
-        u_v_max = min(100, v_wpf + vr / 2)
+        l_h_min = max(0, h_f - hr)
+        l_s_min = max(0, s_f - sr)
+        l_v_min = max(0, v_f - vr)
+        u_h_max = min(360, h_f + hr / 2)
+        u_s_max = min(100, s_f + sr / 2)
+        u_v_max = min(100, v_f + vr / 2)
         lower = np.array([l_h_min / 2, l_s_min * 2.55, l_v_min * 2.55], dtype=np.uint8)
         upper = np.array([u_h_max / 2, u_s_max * 2.55, u_v_max * 2.55], dtype=np.uint8)
         return lower, upper

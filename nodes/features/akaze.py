@@ -1,4 +1,4 @@
-"""AKAZE 特征检测 — 对应 WPF AKazeFeatureDetector : FeatureOpenCVNodeDataBase"""
+"""AKAZE 特征检测"""
 
 import cv2
 from core.node_base import Property, PropertyGroupNames

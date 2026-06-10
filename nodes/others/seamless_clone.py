@@ -1,4 +1,4 @@
-"""无缝融合 — 对应 WPF SeamlessClone : SeamlessCloneBase。支持三种融合方式。"""
+"""无缝融合支持三种融合方式。"""
 
 import cv2
 import numpy as np
@@ -9,7 +9,7 @@ from core.data_packet import FlowableResult
 class SeamlessClone(OpenCVNodeDataBase):
     """无缝融合 — 将源节点图像（前景）无缝贴到上游图像（背景）上。
 
-    WPF: 上游 from.Mat = 背景(dst)，前景(src) 从文件加载或使用源节点图像。
+    上游 from.Mat = 背景(dst)，前景(src) 从文件加载或使用源节点图像。
     """
 
     __group__ = "其他模块"
@@ -23,11 +23,11 @@ class SeamlessClone(OpenCVNodeDataBase):
         self.name = "无缝融合"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        # 背景 = 上游节点图像 (WPF: from.Mat)
+        # 背景 = 上游节点图像
         bg = self.get_input_mat(from_node.mat if from_node else None)
         if bg is None:
             return self.error(None, "无输入图像（上游=背景）")
-        # 前景 = 源节点图像 (WPF: srcImageNodeData.Mat 或文件)
+        # 前景 = 源节点图像
         if src is None or src.mat is None:
             return self.ok(bg, "未连接数据源（源节点=前景），输出原背景")
         fg = src.mat

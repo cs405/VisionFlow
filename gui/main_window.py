@@ -3275,7 +3275,7 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
-        # WPF: if (UseAutoSwitch) SrcFilePath = item — 刷新缩略图面板
+        # if (UseAutoSwitch) SrcFilePath = item — 刷新缩略图面板
         # SrcFilePath 本身总是在事件前由 WorkflowRunner 更新。
         # 这里仅在 auto_switch 开启时刷新 UI 缩略图条。
         if auto_switch and self._resource_panel.isVisible():

@@ -1,4 +1,4 @@
-"""性别分类 — 对应 WPF GenderClsOnnxNodeData"""
+"""性别分类"""
 
 import os
 from nodes.onnx.onnx_cls import OnnxClsNode

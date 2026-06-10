@@ -324,7 +324,7 @@ def _create_color_editor(parent, prop_name, prop_desc, current_value):
 
 @register_editor("crop")
 def _create_crop_editor(parent, prop_name, prop_desc, current_value):
-    """模板裁剪控件 — 对应 WPF CropImagePropertyPresenter。
+    """模板裁剪控件
 
     提供「裁剪模板」按钮打开 CropDialog，以及「删除」按钮清空模板。
     裁剪源图优先级: 上游节点 mat > diagram 起始节点 mat > 空白图。
@@ -352,7 +352,7 @@ def _create_crop_editor(parent, prop_name, prop_desc, current_value):
     )
 
     def _get_source_image():
-        """获取裁剪源图 — 对应 WPF CropImagePresenter 从上游取 ResultImageSource。"""
+        """获取裁剪源图"""
         parent_node = getattr(parent, '_current_node', None)
         if parent_node is None:
             return np.zeros((480, 640, 3), dtype=np.uint8)

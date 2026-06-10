@@ -2,7 +2,7 @@ import cv2
 from core.node_base import OpenCVNodeDataBase, Property, PropertyGroupNames
 from core.data_packet import FlowableResult
 
-# WPF HaarType 枚举映射到 OpenCV haarcascades 文件
+# HaarType 枚举映射到 OpenCV haarcascades 文件
 _HAAR_TYPES = {
     "正脸": "haarcascade_frontalface_default.xml",
     "侧脸": "haarcascade_profileface.xml",

@@ -1,4 +1,4 @@
-"""FAST 特征检测 — 对应 WPF FastFeatureDetector : FeatureOpenCVNodeDataBase"""
+"""FAST 特征检测"""
 
 import cv2
 import numpy as np
@@ -21,7 +21,7 @@ class FastFeatureDetector(FeatureBase):
             return self.error(None, "无输入图像")
         fast = cv2.FastFeatureDetector_create(threshold=self.threshold, nonmaxSuppression=self.nonmax_suppression)
         kp = fast.detect(gray, None)
-        # WPF: 每个关键点画彩色圆点
+        # 每个关键点画彩色圆点
         out = mat.copy() if len(mat.shape) == 3 else cv2.cvtColor(mat, cv2.COLOR_GRAY2BGR)
         if kp:
             for kpt in kp:

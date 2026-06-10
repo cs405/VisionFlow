@@ -764,7 +764,6 @@ class FlowResourcePanel(QWidget):
     def _step_left(self):
         """单步切换到上一个文件 — "上一张"
 
-        WPF: ISrcFilesNodeData.MoveNext() 扩展方法（反向方向）。
         调用 node.move_prev()，然后更新缩略图选中状态和头部。
         """
         # 获取当前绑定的节点

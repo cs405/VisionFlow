@@ -1,4 +1,4 @@
-"""ONNX 语义分割 — 对应 WPF SemSegOnnxNodeDataBase + SemSegOnnxNodeData"""
+"""ONNX 语义分割"""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 class OnnxSegNode(OnnxNodeDataBase):
-    """语义分割 — 对应 WPF SemSegOnnxNodeData。输出形状: [batch_size, num_classes, height, width]"""
+    """语义分割, 输出形状: [batch_size, num_classes, height, width]"""
 
     alpha = Property(0.5, name="混合透明度", group=PropertyGroupNames.DISPLAY_PARAMETERS, min_val=0.0, max_val=1.0, step=0.05)
     output_mask_index = Property("", name="显示掩码索引", group=PropertyGroupNames.DISPLAY_PARAMETERS)

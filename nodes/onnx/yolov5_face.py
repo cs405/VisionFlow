@@ -1,4 +1,4 @@
-"""YOLOv5 人脸检测 — 对应 WPF Yolov5FaceOnnxNodeData"""
+"""YOLOv5 人脸检测"""
 
 import os
 from nodes.onnx.onnx_bbox import OnnxBboxNode

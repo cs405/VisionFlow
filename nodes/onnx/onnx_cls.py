@@ -1,4 +1,4 @@
-"""ONNX 图像分类 — 对应 WPF ClsOnnxNodeDataBase + ClsOnnxNodeData"""
+"""ONNX 图像分类"""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 class OnnxClsNode(OnnxNodeDataBase):
-    """图像分类 — 对应 WPF ClsOnnxNodeData。输出形状: [batch_size, num_classes]"""
+    """图像分类, 输出形状: [batch_size, num_classes]"""
 
     label_path = Property("", name="标签路径/数值", group=PropertyGroupNames.RUN_PARAMETERS)
     class_name_result = Property("", name="分类结果", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)

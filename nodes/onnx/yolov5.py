@@ -1,4 +1,4 @@
-"""YOLOv5 目标检测 — 对应 WPF Yolov5OnnxNodeData"""
+"""YOLOv5 目标检测"""
 
 import os
 from nodes.onnx.onnx_bbox import OnnxBboxNode

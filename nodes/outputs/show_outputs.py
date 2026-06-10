@@ -1,4 +1,4 @@
-"""通知输出节点 — 对应 WPF ShowInfo/Success/Warn/Error/Fatal/Dialog。显示 Qt 消息框。"""
+"""通知输出节点 — ShowInfo/Success/Warn/Error/Fatal/Dialog。显示 Qt 消息框。"""
 
 from PyQt5.QtWidgets import QMessageBox
 from core.node_base import Property, PropertyGroupNames
@@ -52,7 +52,7 @@ class ShowFatalOutputNode(OutputBase):
 
 
 class ShowDialogOutputNode(OutputBase):
-    """对话框 — 对应 WPF ShowDialogNotifyMessageOutputNodeData。取消时中断流程。"""
+    """对话框, 取消时中断流程。"""
     message = Property("是否继续运行流程", name="提示消息", group=PropertyGroupNames.RUN_PARAMETERS)
     title = Property("提示", name="对话框标题", group=PropertyGroupNames.RUN_PARAMETERS)
     def __init__(self): super().__init__(); self.name = "弹窗提示"
