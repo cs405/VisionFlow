@@ -14,7 +14,8 @@ class _MorphBase(OpenCVNodeDataBase):
     # 迭代次数属性
     iterations = Property(1, name="迭代次数", group=PropertyGroupNames.RUN_PARAMETERS)
     # 卷积核形状属性（RECT矩形、ELLIPSE椭圆形、CROSS十字形）
-    kernel_shape = Property("RECT", name="卷积核形状", group=PropertyGroupNames.RUN_PARAMETERS)
+    kernel_shape = Property("RECT", name="卷积核形状", group=PropertyGroupNames.RUN_PARAMETERS,
+                            editor="choices", choices=["RECT", "ELLIPSE", "CROSS"])
 
     # 形态学操作类型（子类需要设置）
     _morph_op: int = cv2.MORPH_DILATE
