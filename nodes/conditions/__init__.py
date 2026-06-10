@@ -1,1 +1,2 @@
-from nodes.conditions.condition_nodes import OpenCVConditionNode, PixelThresholdConditionNode
+from nodes.conditions.condition_branch import OpenCVConditionNode
+from nodes.conditions.pixel_threshold import PixelThresholdConditionNode
