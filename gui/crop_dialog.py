@@ -15,7 +15,7 @@ from PyQt5.QtWidgets import (
     QDialogButtonBox, QWidget, QFormLayout, QSpinBox, QTextEdit,
     QMessageBox, QComboBox,
 )
-from PyQt5.QtGui import QPixmap, QImage
+from PyQt5.QtGui import QPixmap, QImage, QColor
 
 from gui.image_viewer import ImageViewer
 
@@ -296,7 +296,7 @@ class CropDialog(QDialog):
         # 清除更新标志
         self._updating = False
         # 更新查看器的ROI矩形
-        self.viewer.set_roi_rect((x, y, w, h))
+        self.viewer.set_roi_rect((x, y, w, h), color=QColor(255, 0, 0))
         # 更新裁剪结果
         self._update_crop()
 
@@ -397,7 +397,7 @@ class CropDialog(QDialog):
         if self._updating:
             return
         # 更新查看器的ROI矩形
-        self.viewer.set_roi_rect(self.get_rect())
+        self.viewer.set_roi_rect(self.get_rect(), color=QColor(255, 0, 0))
         # 更新裁剪结果
         self._update_crop()
 

@@ -481,9 +481,8 @@ class ImageViewer(QGraphicsView):
             # 如果ROI拾取项不存在
             if self._roi_pick_item is None:
                 # 创建虚线画笔
-                pen = QPen(QColor(0, 120, 212), 2)
-                pen.setStyle(Qt.DashLine)
-                # 添加矩形项
+                pen = QPen(QColor(255, 50, 50), 2)
+                pen.setCosmetic(True)
                 self._roi_pick_item = self._scene.addRect(QRectF(), pen)
                 # 设置Z序
                 self._roi_pick_item.setZValue(50)
@@ -746,7 +745,7 @@ class ImageViewer(QGraphicsView):
 
     def set_roi_rect(self, rect: tuple[int, int, int, int] | None,
                      label: str = "ROI",
-                     color: QColor = QColor(0, 120, 212)):
+                     color: QColor = QColor(255, 50, 50)):
         """设置ROI矩形
 
         参数：
@@ -767,10 +766,9 @@ class ImageViewer(QGraphicsView):
         if w <= 0 or h <= 0:
             return
 
-        # 创建画笔
-        pen = QPen(color, 2)
-        pen.setStyle(Qt.DashLine)
-        # 添加矩形项
+        # 实线加粗 cosmectic pen (不随缩放变细)
+        pen = QPen(color, 5)
+        pen.setCosmetic(True)
         item = self._scene.addRect(x, y, w, h, pen)
         item.setZValue(40)
         # 添加到列表
