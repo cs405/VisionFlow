@@ -60,8 +60,6 @@ class Yolov5OnnxNode(OnnxBboxNode):
         self.conf_threshold = 0.25
         self.nms_threshold = 0.45
         self.blob_scale_factor = 255.0
-        self.box_coordinate_mode = "center_size"
-        self.box_geometry_type = "center_size"
 
 
 # =============================================================================
@@ -125,9 +123,12 @@ class AgeInferOnnxNode(OnnxInferNode):
 
         err = self._validate_model()
         if err:
-            return err
+            return self.ok(mat, f"[模型未加载] {err.message}")
 
         forwards = self._forward(mat)
+        if not forwards:
+            if self._last_forward_error:
+                return self.ok(mat, f"[推理失败] {self._last_forward_error[:120]}")
         values: list[float] = []
         for forward in forwards:
             for i in range(forward.shape[1] if forward.ndim > 1 else forward.shape[0]):

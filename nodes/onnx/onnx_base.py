@@ -207,6 +207,7 @@ class OnnxNodeDataBase(OpenCVNodeDataBase, IOpenCVDnnNode):
     def __init__(self):
         super().__init__()
         self._net: cv2.dnn.Net | None = None
+        self._last_forward_error: str = ""
         self.name = self.__class__.__name__
 
     # ── 模型验证 (对应 WPF BeforeInvokeAsync) ──
@@ -284,18 +285,24 @@ class OnnxNodeDataBase(OpenCVNodeDataBase, IOpenCVDnnNode):
         """执行模型前向推理，返回所有输出层的结果。
 
         对应 WPF CreateForwards: 获取所有 unconnected output layers。
+        模型未加载或推理失败时返回空列表。
         """
         net = self._get_net()
         if net is None:
-            raise ValueError("模型未加载")
+            return []
         blob = self._to_input_blob(mat)
         net.setInput(blob)
-        # 获取所有输出层名称并分别 forward
         try:
             output_names = net.getUnconnectedOutLayersNames()
             return [net.forward(name) for name in output_names]
         except Exception:
+            pass
+        # fallback: 单输出模型或 named forward 失败时尝试无参 forward
+        try:
             return [net.forward()]
+        except Exception as e:
+            self._last_forward_error = str(e)
+            return []
 
     # ── 生命周期 ──
 

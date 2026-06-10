@@ -22,11 +22,6 @@ from nodes.onnx.onnx_nodes import (
     OnnxBboxNode,
     OnnxSegNode,
     OnnxInferNode,
-    # 向后兼容别名
-    OnnxClassification,
-    OnnxObjectDetection,
-    OnnxSemanticSegmentation,
-    OnnxInference,
 )
 from nodes.onnx.custom_onnx import (
     Yolov5OnnxNode,

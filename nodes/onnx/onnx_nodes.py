@@ -72,9 +72,12 @@ class OnnxClsNode(OnnxNodeDataBase):
 
         err = self._validate_model()
         if err:
-            return err
+            return self.ok(mat, f"[模型未加载] {err.message}")
 
         forwards = self._forward(mat)
+        if not forwards:
+            if self._last_forward_error:
+                return self.ok(mat, f"[推理失败] {self._last_forward_error[:120]}")
         class_names = read_labels(self.label_path)
 
         # 遍历所有输出层 (对应 Classification 扩展方法)
@@ -165,17 +168,26 @@ class OnnxBboxNode(OnnxNodeDataBase):
 
         err = self._validate_model()
         if err:
-            return err
+            return self.ok(mat, f"[模型未加载] {err.message}")
 
         img_h, img_w = mat.shape[:2]
         max_len = max(img_w, img_h)
         factor = max_len / float(self.input_width)
 
-        # 解析坐标系和几何类型
-        coord_mode = BoxCoordinateMode(self.box_coordinate_mode)
-        geom_type = BoxGeometryType(self.box_geometry_type)
+        # 解析坐标系和几何类型（容错）
+        try:
+            coord_mode = BoxCoordinateMode(self.box_coordinate_mode)
+        except ValueError:
+            coord_mode = BoxCoordinateMode.ABSOLUTE_PIXELS
+        try:
+            geom_type = BoxGeometryType(self.box_geometry_type)
+        except ValueError:
+            geom_type = BoxGeometryType.CENTER_WITH_SIZE
 
         forwards = self._forward(mat)
+        if not forwards:
+            if self._last_forward_error:
+                return self.ok(mat, f"[推理失败] {self._last_forward_error[:120]}")
         class_names = read_labels(self.label_path)
 
         all_boxes: list[DefectBox] = []
@@ -204,7 +216,7 @@ class OnnxBboxNode(OnnxNodeDataBase):
                 bw = float(output_data[i, 2])
                 bh = float(output_data[i, 3])
 
-                # 确定类别
+                # 确定类别 — 对应 WPF ToDefectBoxs 中的 classId 解析
                 class_id = 0
                 if output_data.shape[1] > 5:
                     class_scores = output_data[i, 5:]
@@ -213,7 +225,7 @@ class OnnxBboxNode(OnnxNodeDataBase):
                         class_conf = float(np.max(class_scores))
                         if class_conf < self.conf_threshold:
                             continue
-                        conf = class_conf
+                # WPF: Score = confidence (原始置信度), 不覆写为 class_conf
 
                 # 坐标转换
                 rect = self._convert_box(x, y, bw, bh, coord_mode, geom_type, factor)
@@ -296,10 +308,13 @@ class OnnxSegNode(OnnxNodeDataBase):
 
         err = self._validate_model()
         if err:
-            return err
+            return self.ok(mat, f"[模型未加载] {err.message}")
 
         img_h, img_w = mat.shape[:2]
         forwards = self._forward(mat)
+        if not forwards:
+            if self._last_forward_error:
+                return self.ok(mat, f"[推理失败] {self._last_forward_error[:120]}")
 
         # 解析要显示的掩码索引
         mask_indices: list[int] = []
@@ -359,9 +374,12 @@ class OnnxInferNode(OnnxNodeDataBase):
 
         err = self._validate_model()
         if err:
-            return err
+            return self.ok(mat, f"[模型未加载] {err.message}")
 
         forwards = self._forward(mat)
+        if not forwards:
+            if self._last_forward_error:
+                return self.ok(mat, f"[推理失败] {self._last_forward_error[:120]}")
 
         all_values: list[float] = []
         for forward in forwards:
@@ -375,24 +393,3 @@ class OnnxInferNode(OnnxNodeDataBase):
 
         self.value_result = "，".join(f"{v:.4f}" for v in all_values)
         return self.ok(mat, f"推测结果: {self.value_result}" if all_values else "无结果")
-
-
-# =============================================================================
-# 向后兼容 — 保留旧类名作为子类，使注册表中的 __name__ 正确
-# =============================================================================
-
-class OnnxClassification(OnnxClsNode):
-    """[兼容] 旧名称，等同于 OnnxClsNode"""
-    pass
-
-class OnnxObjectDetection(OnnxBboxNode):
-    """[兼容] 旧名称，等同于 OnnxBboxNode"""
-    pass
-
-class OnnxSemanticSegmentation(OnnxSegNode):
-    """[兼容] 旧名称，等同于 OnnxSegNode"""
-    pass
-
-class OnnxInference(OnnxInferNode):
-    """[兼容] 旧名称，等同于 OnnxInferNode"""
-    pass
