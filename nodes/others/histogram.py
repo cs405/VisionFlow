@@ -17,11 +17,17 @@ class Hist(OpenCVNodeDataBase):
         if mat is None:
             return self.error(None, "无输入图像")
         gray = cv2.cvtColor(mat, cv2.COLOR_BGR2GRAY) if len(mat.shape) == 3 else mat
-        hist = cv2.calcHist([gray], [0], None, [self.hist_size], [0, 256])
-        hist_img = np.zeros((256, 256, 3), dtype=np.uint8)
-        cv2.normalize(hist, hist, 0, 256, cv2.NORM_MINMAX)
-        for i in range(1, 256):
-            cv2.line(hist_img, (i-1, 255 - int(hist[i-1])), (i, 255 - int(hist[i])), (0, 255, 0), 1)
+        bins = max(1, min(self.hist_size, 512))
+        hist = cv2.calcHist([gray], [0], None, [bins], [0, 256])
+        # WPF: 白色背景 + 柱状图
+        w_img, h_img = bins, 200
+        hist_img = np.ones((h_img, w_img, 3), dtype=np.uint8) * 255
+        cv2.normalize(hist, hist, 0, h_img, cv2.NORM_MINMAX)
+        bin_w = max(1, w_img // bins)
+        for i in range(bins):
+            x = i * bin_w
+            bar_h = int(hist[i])
+            cv2.rectangle(hist_img, (x, h_img - bar_h), (x + bin_w - 1, h_img), (100, 100, 100), -1)
         return self.ok(hist_img, "直方图计算完成")
 
     def _update_result_image_source(self):

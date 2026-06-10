@@ -9,4 +9,4 @@ from nodes.others.svm import SVM
 from nodes.others.warp_affine import WarpAffineTransform
 from nodes.others.warp_perspective import WarpPerspectiveTransform
 from nodes.others.dnn_superres import DnnSuperres
-from nodes.others.yolov3 import Yolov3
+
