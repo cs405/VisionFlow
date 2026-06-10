@@ -1,12 +1,5 @@
 """App 层 ONNX 节点 — 为特定模型预配置的具象化节点。
 
-对应 WPF H.App.VisionMaster.OpenCV/NodeDatas/:
-  - Yolov5OnnxNode     → Yolov5OnnxNodeData     (ObjDetectOnnxNodeDataBase)
-  - Yolov5FaceOnnxNode → Yolov5FaceOnnxNodeData  (ObjDetectOnnxNodeDataBase)
-  - AgeInferOnnxNode   → AgeInferOnnxNodeData    (InferOnnxNodeDataBase)
-  - GenderClsOnnxNode  → GenderClsOnnxNodeData   (ClsOnnxNodeDataBase)
-  - HumanSemSegOnnxNode → HumanSemSegOnnxNodeData (SemSegOnnxNodeDataBase)
-
 每个节点只重写 __init__/load_default，预置模型路径和参数。
 所有模型文件位于 assets/models/ 下。
 """
@@ -37,11 +30,11 @@ def _model_path(filename: str) -> str:
 
 
 # =============================================================================
-# Yolov5OnnxNode — YOLOv5 目标检测 (对应 WPF Yolov5OnnxNodeData)
+# Yolov5OnnxNode — YOLOv5 目标检测
 # =============================================================================
 
 class Yolov5OnnxNode(OnnxBboxNode):
-    """YOLOv5 ONNX 目标检测 — 对应 WPF Yolov5OnnxNodeData : ObjDetectOnnxNodeDataBase。
+    """YOLOv5 ONNX 目标检测
 
     模型: yolov5s.onnx, 标签: lable.txt
     输出: [1, 25200, 85]  → num_boxes, (class_probs + bbox_coords)
@@ -63,11 +56,11 @@ class Yolov5OnnxNode(OnnxBboxNode):
 
 
 # =============================================================================
-# Yolov5FaceOnnxNode — YOLOv5 人脸检测 (对应 WPF Yolov5FaceOnnxNodeData)
+# Yolov5FaceOnnxNode — YOLOv5 人脸检测
 # =============================================================================
 
 class Yolov5FaceOnnxNode(OnnxBboxNode):
-    """YOLOv5 人脸检测 — 对应 WPF Yolov5FaceOnnxNodeData : ObjDetectOnnxNodeDataBase。
+    """YOLOv5 人脸检测
 
     模型: yolov5s-face.onnx, 标签: 内联 "Face"
     """
@@ -88,11 +81,11 @@ class Yolov5FaceOnnxNode(OnnxBboxNode):
 
 
 # =============================================================================
-# AgeInferOnnxNode — 年龄推测 (对应 WPF AgeInferOnnxNodeData)
+# AgeInferOnnxNode — 年龄推测
 # =============================================================================
 
 class AgeInferOnnxNode(OnnxInferNode):
-    """年龄推测 — 对应 WPF AgeInferOnnxNodeData : InferOnnxNodeDataBase。
+    """年龄推测
 
     模型: age_efficientnet_b2.onnx
     使用 EfficientNet-B2，带 ImageNet 标准归一化参数。
@@ -145,13 +138,13 @@ class AgeInferOnnxNode(OnnxInferNode):
 
 
 # =============================================================================
-# GenderClsOnnxNode — 性别分类 (对应 WPF GenderClsOnnxNodeData)
+# GenderClsOnnxNode
 # =============================================================================
 
 class GenderClsOnnxNode(OnnxClsNode):
-    """性别分类 — 对应 WPF GenderClsOnnxNodeData : ClsOnnxNodeDataBase。
+    """性别分类
 
-    模型: gender_efficientnet_b2.onnx, 标签: Female, Male
+    模型: gender_efficientnet_b2.onnx, 标签: Male, Female
     """
 
     def __init__(self):
@@ -167,11 +160,11 @@ class GenderClsOnnxNode(OnnxClsNode):
 
 
 # =============================================================================
-# HumanSemSegOnnxNode — 人类语义分割 (对应 WPF HumanSemSegOnnxNodeData)
+# HumanSemSegOnnxNode — 人类语义分割
 # =============================================================================
 
 class HumanSemSegOnnxNode(OnnxSegNode):
-    """人类语义分割 — 对应 WPF HumanSemSegOnnxNodeData : SemSegOnnxNodeDataBase。
+    """人类语义分割
 
     模型: human_segmentation_pphumanseg_2023mar.onnx
     输出: [1, 2, 192, 192]  → 2类掩码 (背景, 人像)

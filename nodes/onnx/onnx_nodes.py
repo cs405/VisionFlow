@@ -1,4 +1,4 @@
-"""ONNX 通用节点层 — 对应 WPF H.NodeDatas.Onnx.OpenCV.NodeDatas
+"""ONNX 通用节点层
 
 四类通用节点 (所有逻辑在基类, 这里只是具象化的入口):
   - OnnxClsNode:       图像分类 (对应 ClsOnnxNodeData → ClsOnnxNodeDataBase)
@@ -32,16 +32,16 @@ if TYPE_CHECKING:
 
 
 # =============================================================================
-# OnnxClsNode — 图像分类 (对应 WPF ClsOnnxNodeDataBase + ClsOnnxNodeData)
+# OnnxClsNode — 图像分类
 # =============================================================================
 
 class OnnxClsNode(OnnxNodeDataBase):
-    """使用 ONNX 模型的图像分类节点 — 对应 WPF ClsOnnxNodeData。
+    """使用 ONNX 模型的图像分类节点
 
     输出形状: [batch_size, num_classes]
     """
 
-    # ── 标签路径 (对应 WPF LabelPath) ──
+    # ── 标签路径 ──
     label_path = Property("", name="标签路径/数值", group=PropertyGroupNames.RUN_PARAMETERS,
                           description="标签文件路径或逗号分隔的类名文本，如 'cat,dog,bird'")
 
@@ -107,11 +107,11 @@ class OnnxClsNode(OnnxNodeDataBase):
 
 
 # =============================================================================
-# OnnxBboxNode — 目标检测 (对应 WPF ObjDetectOnnxNodeDataBase + ObjDetectOnnxNodeData)
+# OnnxBboxNode — 目标检测
 # =============================================================================
 
 class OnnxBboxNode(OnnxNodeDataBase):
-    """使用 ONNX 模型的目标检测节点 — 对应 WPF ObjDetectOnnxNodeData。
+    """使用 ONNX 模型的目标检测节点
 
     输出形状: [batch_size, num_boxes, (class_probs + bbox_coords)]
     """
@@ -120,13 +120,13 @@ class OnnxBboxNode(OnnxNodeDataBase):
     label_path = Property("", name="标签路径", group=PropertyGroupNames.RUN_PARAMETERS,
                           description="标签文件路径或逗号分隔的类名")
 
-    # ── 检测参数 (对应 WPF Threshold, NmsThreshold) ──
+    # ── 检测参数 ──
     conf_threshold = Property(0.25, name="置信度阈值", group=PropertyGroupNames.RUN_PARAMETERS,
                               description="低于此值的框会被过滤", min_val=0.0, max_val=1.0, step=0.05)
     nms_threshold = Property(0.45, name="NMS重叠阈值", group=PropertyGroupNames.RUN_PARAMETERS,
                              description="IoU 大于此值的框会被抑制", min_val=0.0, max_val=1.0, step=0.05)
 
-    # ── 坐标系与几何类型 (对应 WPF BoxCoordinateMode, BoxGeometryType) ──
+    # ── 坐标系与几何类型 ──
     box_coordinate_mode = Property("absolute", name="坐标系模式",
                                    group=PropertyGroupNames.RUN_PARAMETERS,
                                    editor="choices", choices=["absolute", "normalized"])
@@ -216,7 +216,7 @@ class OnnxBboxNode(OnnxNodeDataBase):
                 bw = float(output_data[i, 2])
                 bh = float(output_data[i, 3])
 
-                # 确定类别 — 对应 WPF ToDefectBoxs 中的 classId 解析
+                # 确定类别
                 class_id = 0
                 if output_data.shape[1] > 5:
                     class_scores = output_data[i, 5:]
@@ -225,7 +225,7 @@ class OnnxBboxNode(OnnxNodeDataBase):
                         class_conf = float(np.max(class_scores))
                         if class_conf < self.conf_threshold:
                             continue
-                # WPF: Score = confidence (原始置信度), 不覆写为 class_conf
+                # Score = confidence (原始置信度), 不覆写为 class_conf
 
                 # 坐标转换
                 rect = self._convert_box(x, y, bw, bh, coord_mode, geom_type, factor)
@@ -255,7 +255,7 @@ class OnnxBboxNode(OnnxNodeDataBase):
     def _convert_box(self, x: float, y: float, bw: float, bh: float,
                      coord_mode: BoxCoordinateMode, geom_type: BoxGeometryType,
                      factor: float) -> tuple[float, float, float, float]:
-        """将模型输出的框坐标转换为 (x, y, w, h) 格式 — 对应 WPF DefectBoxes 中的 convertToRect。"""
+        """将模型输出的框坐标转换为 (x, y, w, h) 格式 — 对应 convertToRect。"""
         v1, v2, v3, v4 = x * factor, y * factor, bw * factor, bh * factor
 
         if coord_mode == BoxCoordinateMode.NORMALIZED_RATIO:
@@ -278,11 +278,11 @@ class OnnxBboxNode(OnnxNodeDataBase):
 
 
 # =============================================================================
-# OnnxSegNode — 语义分割 (对应 WPF SemSegOnnxNodeDataBase + SemSegOnnxNodeData)
+# OnnxSegNode — 语义分割
 # =============================================================================
 
 class OnnxSegNode(OnnxNodeDataBase):
-    """使用 ONNX 模型的语义分割节点 — 对应 WPF SemSegOnnxNodeData。
+    """使用 ONNX 模型的语义分割节点
 
     输出形状: [batch_size, num_classes, height, width]
     """
@@ -345,11 +345,11 @@ class OnnxSegNode(OnnxNodeDataBase):
 
 
 # =============================================================================
-# OnnxInferNode — 数值推理 (对应 WPF InferOnnxNodeDataBase + InferOnnxNodeData)
+# OnnxInferNode — 数值推理
 # =============================================================================
 
 class OnnxInferNode(OnnxNodeDataBase):
-    """使用 ONNX 模型的数值推理节点 — 对应 WPF InferOnnxNodeData。
+    """使用 ONNX 模型的数值推理节点
 
     输出形状: [batch_size, num_values]
     适用于年龄推测、回归等输出为数值的任务。
