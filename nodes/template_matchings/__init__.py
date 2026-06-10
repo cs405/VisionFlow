@@ -4,3 +4,5 @@ from nodes.template_matchings.sift_matching import SiftFeatureMatchingNode, Sift
 from nodes.template_matchings.surf_matching import SurfFeatureMatchingNode, SurfBase64FeatureMatchingNode
 from nodes.template_matchings.orb_matching import OrbFeatureMatchingNode
 from nodes.template_matchings.hsv_blob import HSVBlobMatchingNode, HSVInRangeRenderBlobMatchingNode
+from nodes.template_matchings.shape_match import ShapeTemplateMatchingNode
+
