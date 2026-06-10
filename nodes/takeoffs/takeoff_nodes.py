@@ -15,18 +15,18 @@ class HSVInRange(OpenCVNodeDataBase):
     """
     # 节点所属分组（用于UI分类）
     __group__ = "图像分割提取模块"
-    # 取色属性（hex格式，默认绿色 RGB:0,128,0 — 与WPF-VisionMaster一致）
+    # 取色属性（hex格式，默认绿色 RGB:0,128,0）
     pick_color = Property("#008000", name="取色", group=PropertyGroupNames.RUN_PARAMETERS,
                           editor="color", description="吸管工具取色，确定HSV提取的中心颜色")
-    # 色相容差范围（对应WPF hRange，默认35，范围0-85）
+    # 色相容差范围（默认35，范围0-85）
     h_range = Property(35, name="色相范围(H)", group=PropertyGroupNames.RUN_PARAMETERS,
                        min_val=0, max_val=85,
                        description="以取色点为中心的色相容差，值越大匹配的色相范围越宽")
-    # 饱和度容差范围（对应WPF sRange，默认30，范围0-255）
+    # 饱和度容差范围（默认30，范围0-255）
     s_range = Property(30, name="饱和度范围(S)", group=PropertyGroupNames.RUN_PARAMETERS,
                        min_val=0, max_val=255,
                        description="以取色点为中心的饱和度容差，值越大匹配的饱和度范围越宽")
-    # 明度容差范围（对应WPF vRange，默认30，范围0-255）
+    # 明度容差范围（默认30，范围0-255）
     v_range = Property(30, name="明度范围(V)", group=PropertyGroupNames.RUN_PARAMETERS,
                        min_val=0, max_val=255,
                        description="以取色点为中心的明度容差，值越大匹配的明度范围越宽")
@@ -49,9 +49,8 @@ class HSVInRange(OpenCVNodeDataBase):
     def _get_hsv_range(self) -> tuple[np.ndarray, np.ndarray]:
         """根据取色和容差参数计算 HSV 上下限
 
-        参考 WPF-VisionMaster OpenvCVExtension.GetHSVRange:
         1. 将取色 BGR 像素转为 OpenCV HSV
-        2. 从 OpenCV 尺度(0-179,0-255,0-255)转到 WPF 内部尺度(0-360,0-100,0-100)
+        2. 从 OpenCV 尺度(0-179,0-255,0-255)转到(0-360,0-100,0-100)
         3. Lower 用全容差、Upper 用半容差
         4. 转回 OpenCV 尺度生成 inRange 所需的 lower/upper 数组
         """
@@ -59,9 +58,9 @@ class HSVInRange(OpenCVNodeDataBase):
         hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)[0, 0]
         h, s, v = int(hsv[0]), int(hsv[1]), int(hsv[2])
 
-        # 转到 WPF 内部尺度
-        h_wpf = h * 2              # OpenCV[0,179] → WPF[0,360]
-        s_wpf = s / 2.55           # OpenCV[0,255] → WPF[0,100]
+        # 尺度
+        h_wpf = h * 2              # OpenCV[0,179] -> [0,360]
+        s_wpf = s / 2.55           # OpenCV[0,255] -> [0,100]
         v_wpf = v / 2.55
 
         hr, sr, vr = self.h_range, self.s_range, self.v_range
@@ -97,7 +96,7 @@ class HSVInRange(OpenCVNodeDataBase):
         # 如果输入图像为空，返回错误结果
         if mat is None:
             return self.error(None, "无输入图像")
-        # 保存输入图像副本供吸管取色使用（对应WPF: ImageColorPickerPresenter.ImageSource = from.Mat.ToImageSource()）
+        # 保存输入图像副本供吸管取色使用
         self._picker_mat = mat.copy()
         # 根据取色和容差计算 HSV 范围
         lower, upper = self._get_hsv_range()
