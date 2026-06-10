@@ -66,7 +66,7 @@ class SiftFeatureMatchingNode(OpenCVTemplateMatchingNodeBase):
 
         template = self._require_template(mat)
         if template is None:
-            return self.error(mat, "未设置模板图片")
+            return self.ok(mat, "未设置模板图片，输出原图")
 
         # 转灰度
         gray1 = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY) if template.ndim == 3 else template
@@ -156,7 +156,7 @@ class SurfFeatureMatchingNode(OpenCVTemplateMatchingNodeBase):
 
         template = self._require_template(mat)
         if template is None:
-            return self.error(mat, "未设置模板图片")
+            return self.ok(mat, "未设置模板图片，输出原图")
 
         gray1 = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY) if template.ndim == 3 else template
         gray2 = cv2.cvtColor(mat, cv2.COLOR_BGR2GRAY) if mat.ndim == 3 else mat

@@ -85,8 +85,8 @@ class OpenCVTemplateMatchingNodeBase(Base64MatchingNodeData, OpenCVNodeDataBase,
     def _require_template(self, mat: np.ndarray) -> np.ndarray | None:
         """获取模板图像，如果未设置则返回 None。
 
-        调用方应检查返回值，为 None 时返回 self.error(mat, "未设置模板图片")。
-        始终使用 mat（输入图像）作为错误结果的值，避免黑屏。
+        调用方应检查返回值，为 None 时返回 self.ok(mat, "未设置模板图片，输出原图")。
+        始终使用 mat（输入图像）作为结果的值，保证画面流畅。
         """
         template = self.get_template_image()
         if template is None:

@@ -54,7 +54,7 @@ class TemplateMatchingNode(OpenCVTemplateMatchingNodeBase):
 
         template = self._require_template(mat)
         if template is None:
-            return self.error(mat, "未设置模板图片")
+            return self.ok(mat, "未设置模板图片，输出原图")
 
         method = MATCH_MODES.get(self.match_mode, cv2.TM_CCOEFF_NORMED)
         result = cv2.matchTemplate(mat, template, method)

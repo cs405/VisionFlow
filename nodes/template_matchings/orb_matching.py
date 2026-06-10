@@ -53,7 +53,7 @@ class OrbFeatureMatchingNode(OpenCVTemplateMatchingNodeBase):
 
         template = self._require_template(mat)
         if template is None:
-            return self.error(mat, "未设置模板图片")
+            return self.ok(mat, "未设置模板图片，输出原图")
 
         # ORB 检测
         orb = cv2.ORB_create(nfeatures=self.n_features)
