@@ -458,6 +458,7 @@ class WorkflowEngine:
         """执行整个工作流
 
         按拓扑顺序运行节点。使用 ThreadPoolExecutor 处理并行分支。
+        支持节点级端口路由（get_flowable_output_links）实现条件分支。
         返回最后一个节点的执行结果。
         """
         if self.state == WorkflowState.RUNNING:
@@ -477,6 +478,9 @@ class WorkflowEngine:
         # 按层级分组并行节点
         levels = self._group_by_levels(order)
 
+        # 被条件分支禁用端口排除的下游节点集合
+        _disabled_node_ids: set[str] = set()
+
         last_result = FlowableResult.ok()
         try:
             for level in levels:
@@ -484,9 +488,15 @@ class WorkflowEngine:
                 if self.state == WorkflowState.STOPPED:
                     break
 
-                if len(level) == 1:
+                # 构建本层要执行的节点列表（排除被条件端口禁用的节点）
+                executable = [nid for nid in level if nid not in _disabled_node_ids]
+
+                if len(executable) == 0:
+                    continue
+
+                if len(executable) == 1:
                     # 单节点顺序执行
-                    node = self._nodes.get(level[0])
+                    node = self._nodes.get(executable[0])
                     if node is None:
                         continue
                     last_result = self._execute_node(node)
@@ -496,9 +506,11 @@ class WorkflowEngine:
                         self.state = WorkflowState.ERROR
                         event_system.publish(EventType.WORKFLOW_ERROR, sender=self, result=last_result)
                         return last_result
+                    # 条件端口路由：收集非活动端口的下游节点，将其标记为禁用
+                    self._apply_port_routing(node, _disabled_node_ids)
                 else:
                     # 并行执行一组节点
-                    results = self._execute_parallel(level)
+                    results = self._execute_parallel(executable)
                     for r in results:
                         if r.is_error:
                             last_result = r
@@ -541,6 +553,44 @@ class WorkflowEngine:
             return FlowableResult.ok(node.mat)
 
         return self._execute_node(node)
+
+    def _apply_port_routing(self, node: NodeBase, disabled: set[str]):
+        """根据节点的活动输出端口，禁用非活动端口下游的所有节点。
+
+        只 yield 匹配条件的端口，
+        不匹配的端口及其下游链路被跳过。
+
+        参数：
+            node: 当前已执行的节点
+            disabled: 要追加禁用节点ID的集合
+        """
+        # 获取所有连接到该节点输出的连线
+        all_outgoing = [l for l in self._links if l.from_node_id == node.node_id
+                       and any(p.is_output and p.port_id == l.from_port_id for p in node.ports)]
+        if not all_outgoing:
+            return
+
+        # 获取活动的输出连线
+        if hasattr(node, 'get_flowable_output_links'):
+            active = node.get_flowable_output_links(self)
+        else:
+            active = all_outgoing
+
+        active_link_ids = {l.link_id for l in active}
+
+        # 递归禁用非活动端口下游的所有节点
+        for link in all_outgoing:
+            if link.link_id not in active_link_ids:
+                self._disable_downstream(link.to_node_id, disabled)
+
+    def _disable_downstream(self, node_id: str, disabled: set[str]):
+        """递归禁用节点及其所有下游节点"""
+        if node_id in disabled:
+            return
+        disabled.add(node_id)
+        for link in self._links:
+            if link.from_node_id == node_id:
+                self._disable_downstream(link.to_node_id, disabled)
 
     def stop(self):
         """停止执行

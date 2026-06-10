@@ -273,7 +273,7 @@ def _create_color_editor(parent, prop_name, prop_desc, current_value):
                 hex_val = result.get("hex", initial)
                 # 更新预览
                 _update_preview(hex_val)
-                # 写回节点属性（持久化取色结果，对应WPF: ImageColorPickerPresenter.Color = picked）
+                # 写回节点属性（持久化取色结果）
                 parent._set_property_value(prop_name, hex_val)
                 return
         except Exception:
@@ -1420,49 +1420,27 @@ class PropertyPanel(QWidget):
     # ── 条件控件 ──────────────────────────────────────────────
 
     def _clone_conditions(self, conditions: list[VisionPropertyCondition]) -> list[VisionPropertyCondition]:
-        """深拷贝条件列表
-
-        参数：
-            conditions: 条件列表
-
-        返回：
-            拷贝后的条件列表
-        """
-        return [VisionPropertyCondition.from_dict(condition.to_dict()) for condition in conditions]
+        return [VisionPropertyCondition.from_dict(c.to_dict()) for c in conditions]
 
     def _create_condition_widget(self) -> QWidget:
-        """创建条件控件
-
-        返回：
-            条件控件
-        """
-        # 获取当前节点
+        """创建条件控件 — 显示 ConditionsPrensenter 的分支摘要。"""
         node = self._current_node
-        # 如果不是条件节点，返回None
         if not isinstance(node, ConditionNodeData):
             return None
 
-        # 创建容器
         container = QWidget()
-        # 创建垂直布局
         layout = QVBoxLayout(container)
-        # 设置边距为0
         layout.setContentsMargins(0, 0, 0, 0)
-        # 设置间距为4
         layout.setSpacing(4)
 
-        # 顶部水平布局
         top = QHBoxLayout()
         top.setContentsMargins(0, 0, 0, 0)
         top.setSpacing(4)
 
-        # 数量标签
         count_label = QLabel()
         count_label.setStyleSheet("color: #aaa; font-size: 12px;")
-        # 添加到布局，拉伸因子为1
         top.addWidget(count_label, 1)
 
-        # 编辑按钮
         edit_btn = QPushButton("编辑条件...")
         edit_btn.setFixedHeight(28)
         edit_btn.setStyleSheet(
@@ -1470,54 +1448,45 @@ class PropertyPanel(QWidget):
             "border-radius: 3px; padding: 4px 14px; font-size: 12px; }"
             "QPushButton:hover { background: #4a4a4a; }"
         )
-        # 添加到布局
         top.addWidget(edit_btn)
 
-        # 摘要标签
         summary = QLabel()
-        # 允许换行
         summary.setWordWrap(True)
-        # 设置样式
         summary.setStyleSheet("color: #aaa; font-size: 12px;")
-
-        # 添加到布局
         layout.addLayout(top)
         layout.addWidget(summary)
 
         def refresh_state():
-            """刷新状态"""
-            # 更新数量标签
-            count_label.setText(f"已配置 {len(node.conditions)} 条条件")
-            if node.conditions:
-                # 更新摘要文本（最多显示3条）
-                summary.setText("\n".join(
-                    f"• {condition.display_text()}" for condition in node.conditions[:3]))
+            presenter = node.conditions_presenter
+            n_branches = len(presenter.branches)
+            count_label.setText(f"已配置 {n_branches} 个条件分支")
+            if presenter.branches:
+                lines = []
+                for b in presenter.branches[:3]:
+                    conds_summary = ", ".join(
+                        c.display_text() for c in b.conditions
+                    ) if b.conditions else "(无条件)"
+                    out_id = b.selected_output_node_id or "默认"
+                    lines.append(f"• [{b.condition_operate.name}] {conds_summary} → {out_id}")
+                summary.setText("\n".join(lines))
             else:
-                summary.setText("尚未配置条件规则")
+                summary.setText("尚未配置条件分支")
 
         def edit_conditions():
-            """编辑条件"""
-            # 保存旧值深拷贝
-            old_value = self._clone_conditions(node.conditions)
-            # 打开条件编辑器
-            conditions = ConditionEditorDialog.edit_conditions(node, parent=self)
-            # 如果取消，返回
-            if conditions is None:
+            # 保存旧值（兼容旧接口）
+            presenter = node.conditions_presenter
+            old_presenter_data = presenter.to_dict()
+            result = ConditionEditorDialog.edit_conditions(node, parent=self)
+            if result is None:
+                # 用户取消，恢复旧状态
+                node._conditions_presenter = type(presenter).from_dict(old_presenter_data)
                 return
-            # 更新条件列表
-            node.conditions = conditions
-            # 发出属性变化信号
-            self.property_changed.emit("conditions", old_value, self._clone_conditions(node.conditions))
-            # 刷新状态
+            self.property_changed.emit("conditions_presenter", old_presenter_data, presenter.to_dict())
             refresh_state()
 
-        # 连接按钮点击信号
         edit_btn.clicked.connect(edit_conditions)
-        # 刷新状态
         refresh_state()
-        # 保存到控件字典
         self._property_widgets["conditions"] = container
-        # 返回容器
         return container
 
     # ── 辅助方法 ───────────────────────────────────────────────────────

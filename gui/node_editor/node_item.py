@@ -223,10 +223,15 @@ class NodeItem(QGraphicsObject):
         if isinstance(nd, SrcFilesVisionNodeData):
             # 如果是源文件节点，返回源节点模板
             return NodeTemplate.SOURCE
-        # 判断是否为条件节点类型
-        if isinstance(nd, ConditionNodeData):
-            # 如果是条件节点，返回条件节点模板（菱形样式）
-            return NodeTemplate.CONDITION
+        # 判断节点是否显式声明模板类型（支持字符串如 "condition" 或 NodeTemplate 枚举值）
+        declared = getattr(nd, '__template__', None)
+        if declared is not None:
+            if isinstance(declared, NodeTemplate):
+                return declared
+            try:
+                return NodeTemplate(declared)
+            except ValueError:
+                pass
         # 获取节点类名并转换为小写
         cls_name = nd.__class__.__name__.lower()
         # 判断类名是否以"show"开头或包含"output"

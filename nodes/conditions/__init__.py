@@ -1,1 +1,1 @@
-from nodes.conditions.condition_nodes import OpenCVConditionNode, PixelThresholdConditionNode, WaitAllParallelNodeData
+from nodes.conditions.condition_nodes import OpenCVConditionNode, PixelThresholdConditionNode

@@ -131,8 +131,9 @@ class SocketItem(QGraphicsObject):
                 self._pen.setStyle(Qt.DashLine)
             # 画刷：表面输入背景色（从主题获取）
             self._brush = QBrush(theme_manager.color("bg_surface_input"))
-        # 设置工具提示文本
-        self.setToolTip(f"{self.port.dock.name} — {dt.label}")
+        # 设置工具提示文本（含端口名称，用于区分条件分支的自定义端口）
+        port_label = f"{self.port.name} — " if self.port.name else ""
+        self.setToolTip(f"{port_label}{self.port.dock.name} — {dt.label}")
         # 触发重绘
         self.update()
 
