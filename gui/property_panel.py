@@ -263,9 +263,23 @@ def _create_color_editor(parent, prop_name, prop_desc, current_value):
             else:
                 # 默认白色
                 r, g, b = 255, 255, 255
-            # 获取节点保存的输入图像，供吸管取色使用
+            # 获取吸管取色源图: 节点 _picker_mat → 上游节点 mat → diagram 中任意 mat
             node = getattr(parent, '_current_node', None)
             picker_img = getattr(node, '_picker_mat', None) if node is not None else None
+            if picker_img is None and node is not None:
+                for n in getattr(node, 'from_node_datas', []):
+                    m = getattr(n, 'mat', None)
+                    if m is not None:
+                        picker_img = m
+                        break
+            if picker_img is None and node is not None:
+                d = getattr(node, 'diagram_data', None)
+                if d and hasattr(d, 'get_all_nodes'):
+                    for n in d.get_all_nodes():
+                        m = getattr(n, 'mat', None)
+                        if m is not None:
+                            picker_img = m
+                            break
             # 打开颜色选择器
             result = ColorPickerDialog.get_color(rgb=(r, g, b), picker_image=picker_img, parent=parent)
             if result:
@@ -310,84 +324,104 @@ def _create_color_editor(parent, prop_name, prop_desc, current_value):
 
 @register_editor("crop")
 def _create_crop_editor(parent, prop_name, prop_desc, current_value):
-    """模板裁剪按钮，打开 CropDialog 并设置 Base64 结果
+    """模板裁剪控件 — 对应 WPF CropImagePropertyPresenter。
 
-    参数：
-        parent: 父对象
-        prop_name: 属性名称
-        prop_desc: 属性描述符
-        current_value: 当前值
-
-    返回：
-        (容器控件, 按钮) 元组
+    提供「裁剪模板」按钮打开 CropDialog，以及「删除」按钮清空模板。
+    裁剪源图优先级: 上游节点 mat > diagram 起始节点 mat > 空白图。
     """
-    # 创建容器控件
+    import numpy as np
+
     container = QWidget(parent)
-    # 创建水平布局
     layout = QHBoxLayout(container)
-    # 设置布局边距为0
     layout.setContentsMargins(0, 0, 0, 0)
-    # 设置布局间距为4像素
     layout.setSpacing(4)
 
-    # 创建预览标签
     preview = QLabel("(未设置)")
-    # 设置样式
     preview.setStyleSheet("color: #999; font-size: 11px;")
 
-    # 创建裁剪按钮
-    btn = QPushButton("裁剪模板...")
-    # 设置固定高度24像素
-    btn.setFixedHeight(24)
+    crop_btn = QPushButton("裁剪模板...")
+    crop_btn.setFixedHeight(24)
+
+    delete_btn = QPushButton("✕")
+    delete_btn.setFixedSize(24, 24)
+    delete_btn.setToolTip("清空模板")
+    delete_btn.setStyleSheet(
+        "QPushButton { background: #5a1a1a; color: #ff6666; border: 1px solid #833;"
+        "border-radius: 2px; font-size: 12px; }"
+        "QPushButton:hover { background: #7a2a2a; }"
+    )
+
+    def _get_source_image():
+        """获取裁剪源图 — 对应 WPF CropImagePresenter 从上游取 ResultImageSource。"""
+        parent_node = getattr(parent, '_current_node', None)
+        if parent_node is None:
+            return np.zeros((480, 640, 3), dtype=np.uint8)
+
+        # 1. 上游节点的 mat（最优先 — 用户已运行过上游）
+        for n in getattr(parent_node, 'from_node_datas', []):
+            if hasattr(n, 'mat') and n.mat is not None:
+                return n.mat
+
+        # 2. diagram 中的起始节点
+        diagram = getattr(parent_node, 'diagram_data', None)
+        if diagram and hasattr(diagram, 'get_all_nodes'):
+            for n in diagram.get_all_nodes():
+                if hasattr(n, 'mat') and n.mat is not None:
+                    return n.mat
+                r = getattr(n, 'result_image_source', None)
+                if r is not None and isinstance(r, np.ndarray):
+                    return r
+
+        # 3. 上一个运行结果图像
+        r = getattr(parent_node, 'result_image_source', None)
+        if r is not None and isinstance(r, np.ndarray):
+            return r
+
+        return np.zeros((480, 640, 3), dtype=np.uint8)
+
+    def _refresh_preview():
+        """更新预览标签显示当前模板状态。"""
+        parent_node = getattr(parent, '_current_node', None)
+        if parent_node and hasattr(parent_node, 'base64_string') and parent_node.base64_string:
+            tmpl = parent_node.get_template_image()
+            if tmpl is not None:
+                h, w = tmpl.shape[:2]
+                b64_len = len(parent_node.base64_string)
+                preview.setText(f"✓ 模板: {w}x{h} px ({b64_len} chars)")
+                return
+        preview.setText("(未设置)")
 
     def _crop():
-        """打开裁剪对话框"""
-        # 尝试从节点或其上游获取源图像
-        import numpy as np
-        from PyQt5.QtWidgets import QApplication
-        # 图像变量
-        image = None
-        # 获取父对象的当前节点
-        parent_node = getattr(parent, '_current_node', None)
-        # 如果节点存在
-        if parent_node:
-            # 如果节点有mat属性且不为空
-            if hasattr(parent_node, 'mat') and parent_node.mat is not None:
-                image = parent_node.mat
-            # 如果节点有get_template_image方法
-            elif hasattr(parent_node, 'get_template_image'):
-                image = parent_node.get_template_image()
-        # 如果图像为空
-        if image is None:
-            # 创建空白占位图像
-            image = np.zeros((480, 640, 3), dtype=np.uint8)
-
-        # 打开裁剪对话框
+        image = _get_source_image()
         result = CropDialog.crop_image(image, parent=parent)
-        # 如果成功且包含base64
         if result and result.get("base64"):
-            # 获取base64字符串
-            b64 = result["base64"]
-            # 更新预览文本
-            preview.setText(f"✓ {result['rect'][2]}x{result['rect'][3]} px, {len(b64)} chars")
-            # 在节点上设置base64值
+            parent_node = getattr(parent, '_current_node', None)
             if parent_node and hasattr(parent_node, 'base64_string'):
-                parent_node.base64_string = b64
-                # 从裁剪图像设置模板
+                parent_node.base64_string = result["base64"]
                 parent_node.set_template_from_image(result["image"])
+            _refresh_preview()
 
-    # 连接按钮点击信号
-    btn.clicked.connect(_crop)
+    def _delete():
+        parent_node = getattr(parent, '_current_node', None)
+        if parent_node and hasattr(parent_node, 'base64_string'):
+            parent_node.base64_string = ""
+            # 清除缓存的属性值
+            if hasattr(parent_node, '_base64_string'):
+                parent_node._base64_string = ""
+        _refresh_preview()
 
-    # 添加控件到布局
+    crop_btn.clicked.connect(_crop)
+    delete_btn.clicked.connect(_delete)
+
     layout.addWidget(preview)
-    layout.addWidget(btn)
-    # 如果是只读属性
+    layout.addWidget(crop_btn)
+    layout.addWidget(delete_btn)
     if prop_desc.readonly:
-        # 禁用按钮
-        btn.setEnabled(False)
-    # 返回容器和按钮
-    return container, btn
+        crop_btn.setEnabled(False)
+        delete_btn.setEnabled(False)
+
+    _refresh_preview()
+    return container, crop_btn
 
 @register_editor("file_collection")
 def _create_file_collection_editor(parent, prop_name, prop_desc, current_value):
