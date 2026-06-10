@@ -36,8 +36,6 @@ class OrbFeatureMatchingNode(OpenCVTemplateMatchingNodeBase):
     ransac_threshold = Property(5.0, name="RANSAC阈值", group=PropertyGroupNames.RUN_PARAMETERS,
                                 description="RANSAC 重投影误差阈值（像素）",
                                 min_val=1.0, max_val=20.0, step=0.5)
-    draw_matches = Property(True, name="绘制匹配线", group=PropertyGroupNames.DISPLAY_PARAMETERS)
-
     # ── 结果参数 ──
     match_count = Property(0, name="总匹配数", group=PropertyGroupNames.RESULT_PARAMETERS,
                            readonly=True)
@@ -63,7 +61,7 @@ class OrbFeatureMatchingNode(OpenCVTemplateMatchingNodeBase):
         if des1 is None or des2 is None or len(des1) == 0 or len(des2) == 0:
             return self.ok(mat, "无法提取特征点")
 
-        # BFMatcher 暴力匹配
+        # BFMatcher 暴力匹配 — 对应 WPF BFMatcher(NormTypes.Hamming, crossCheck: true)
         bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
         matches = bf.match(des1, des2)
         good = sorted(matches, key=lambda x: x.distance)[:self.good_match_count]
@@ -71,23 +69,21 @@ class OrbFeatureMatchingNode(OpenCVTemplateMatchingNodeBase):
         if len(good) < 4:
             return self.ok(mat, f"匹配点不足 ({len(good)} < 4)，无法计算 Homography")
 
-        # Homography
+        # Homography — 对应 WPF Cv2.FindHomography(srcPts, dstPts, Ransac, 5)
         src_pts = np.float32([kp1[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
         dst_pts = np.float32([kp2[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
         homography, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC,
                                                self.ransac_threshold)
 
-        h, w = template.shape[:2]
-        corners = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
-
         out = mat.copy()
         if homography is not None:
+            h, w = template.shape[:2]
+            corners = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
             transformed = cv2.perspectiveTransform(corners, homography)
-            cv2.polylines(out, [np.int32(transformed)], True, (0, 255, 0), 2)
-
-        if self.draw_matches:
-            out = cv2.drawMatches(template, kp1, out, kp2, good, None,
-                                  flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
+            pts = np.int32(transformed)
+            # 绘制标准绑定矩形（取变换后四个角点的包围盒）
+            x, y, rw, rh = cv2.boundingRect(pts)
+            cv2.rectangle(out, (x, y), (x + rw, y + rh), (0, 255, 0), 2)
 
         self.match_count = len(matches)
         self.matching_count_result = len(good)
