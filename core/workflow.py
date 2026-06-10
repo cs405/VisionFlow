@@ -506,17 +506,25 @@ class WorkflowEngine:
                         self.state = WorkflowState.ERROR
                         event_system.publish(EventType.WORKFLOW_ERROR, sender=self, result=last_result)
                         return last_result
-                    # 条件端口路由：收集非活动端口的下游节点，将其标记为禁用
                     self._apply_port_routing(node, _disabled_node_ids)
                 else:
                     # 并行执行一组节点
                     results = self._execute_parallel(executable)
+                    has_error = False
                     for r in results:
                         if r.is_error:
                             last_result = r
-                            self.state = WorkflowState.ERROR
-                            event_system.publish(EventType.WORKFLOW_ERROR, sender=self, result=r)
-                            return r
+                            has_error = True
+                    if has_error:
+                        self.state = WorkflowState.ERROR
+                        event_system.publish(EventType.WORKFLOW_ERROR, sender=self, result=last_result)
+                        return last_result
+                    # 条件端口路由：并行执行后，对每个节点应用端口路由
+                    for nid in executable:
+                        if nid not in _disabled_node_ids:
+                            node = self._nodes.get(nid)
+                            if node:
+                                self._apply_port_routing(node, _disabled_node_ids)
 
             # 处理停止状态
             if self.state == WorkflowState.STOPPED:
@@ -664,39 +672,40 @@ class WorkflowEngine:
         return results
 
     def _group_by_levels(self, topo_order: list[str]) -> list[list[str]]:
-        """将拓扑排序后的节点按执行层级分组
+        """将拓扑排序后的节点按执行层级分组。
 
-        并行节点（在同一层级且彼此无依赖关系）被分在同一组以便并行执行。
+        使用 BFS 距离确保下游节点始终在后续层级，
+        条件分支等依赖端口路由的节点才能正常工作。
         """
         if not topo_order:
             return []
 
-        # 计算每个节点的入度
-        in_degree: dict[str, int] = {}
-        for node_id in topo_order:
-            deg = 0
+        # 按拓扑顺序计算每个节点的层级 = max(所有前驱节点层级) + 1
+        node_level: dict[str, int] = {}
+        for nid in topo_order:
+            max_pred_level = -1
             for link in self._links:
-                if link.to_node_id == node_id:
-                    deg += 1
-            in_degree[node_id] = deg
+                if link.to_node_id == nid:
+                    pred_level = node_level.get(link.from_node_id, -1)
+                    if pred_level > max_pred_level:
+                        max_pred_level = pred_level
+            node_level[nid] = max_pred_level + 1
 
-        # 按入度分组
+        # 按层级分组（组内保持拓扑顺序）
         levels: list[list[str]] = []
-        current_level: list[str] = []
-        current_degree = -1
-
-        for node_id in topo_order:
-            deg = in_degree.get(node_id, 0)
-            if deg != current_degree:
-                if current_level:
-                    levels.append(current_level)
-                current_level = [node_id]
-                current_degree = deg
+        cur_level: list[str] = []
+        cur_lev = 0
+        for nid in topo_order:
+            lev = node_level[nid]
+            if lev != cur_lev:
+                if cur_level:
+                    levels.append(cur_level)
+                cur_level = [nid]
+                cur_lev = lev
             else:
-                current_level.append(node_id)
-
-        if current_level:
-            levels.append(current_level)
+                cur_level.append(nid)
+        if cur_level:
+            levels.append(cur_level)
 
         return levels
 
