@@ -165,7 +165,19 @@ class SeamlessCloneBackground(OpenCVNodeDataBase):
     # 节点所属分组（用于UI分类）
     __group__ = "图像分割提取模块"
     # 融合方式属性
-    clone_type = Property("NORMAL_CLONE", name="融合方式", group=PropertyGroupNames.RUN_PARAMETERS)
+    # NORMAL_CLONE - 直接贴图，保持原色
+    # 前景：红色玫瑰，背景：草地
+    # 结果：红色玫瑰贴在草地上
+
+    # MIXED_CLONE - 纹理融合
+    # 前景：红色玫瑰，背景：草地
+    # 结果：玫瑰形状，但带有草地质感的玫瑰
+
+    # MONOCHROME_TRANSFER - 颜色适配
+    # 前景：红色玫瑰，背景：草地
+    # 结果：玫瑰形状，但变成绿色调的玫瑰
+    clone_type = Property("NORMAL_CLONE", name="融合方式", group=PropertyGroupNames.RUN_PARAMETERS,
+                          editor="choices", choices=["NORMAL_CLONE", "MIXED_CLONE", "MONOCHROME_TRANSFER"])
     # 中心点X坐标属性
     center_x = Property(0, name="中心X", group=PropertyGroupNames.RUN_PARAMETERS)
     # 中心点Y坐标属性
@@ -203,14 +215,35 @@ class SeamlessCloneBackground(OpenCVNodeDataBase):
             "MIXED_CLONE": cv2.MIXED_CLONE,             # 混合克隆
             "MONOCHROME_TRANSFER": cv2.MONOCHROME_TRANSFER  # 单色转移
         }
+        # 本地副本，避免修改上游节点的mat
+        fg = mat
+        bg = src.mat
+        # 如果前景和背景通道数不一致，统一转为3通道BGR
+        if len(fg.shape) != len(bg.shape) or fg.shape[2] != bg.shape[2]:
+            if len(fg.shape) == 2:
+                fg = cv2.cvtColor(fg, cv2.COLOR_GRAY2BGR)
+            if len(bg.shape) == 2:
+                bg = cv2.cvtColor(bg, cv2.COLOR_GRAY2BGR)
         # 创建全白掩膜（与前景图像相同尺寸）
-        mask = np.ones(mat.shape[:2], dtype=np.uint8) * 255
-        # 计算融合中心点（如果未指定，使用图像中心）
-        cx = self.center_x or mat.shape[1] // 2
-        cy = self.center_y or mat.shape[0] // 2
-        # 执行无缝融合
-        result = cv2.seamlessClone(mat, src.mat, mask, (cx, cy),
-                                    clone_map.get(self.clone_type, cv2.NORMAL_CLONE))
+        mask = np.ones(fg.shape[:2], dtype=np.uint8) * 255
+        # 计算融合中心点：0=自动居中，非0=指定坐标（裁剪到前景能完整放入背景的范围）
+        bg_h, bg_w = bg.shape[:2]
+        fg_h, fg_w = fg.shape[:2]
+        if self.center_x:
+            # 前景左右各占 fg_w//2 和 (fg_w-1)//2 像素，确保不超出背景边界
+            cx = max(fg_w // 2, min(bg_w - (fg_w - 1) // 2 - 1, int(self.center_x)))
+        else:
+            cx = bg_w // 2
+        if self.center_y:
+            cy = max(fg_h // 2, min(bg_h - (fg_h - 1) // 2 - 1, int(self.center_y)))
+        else:
+            cy = bg_h // 2
+        # 执行无缝融合，异常时回退前景原图保证连续执行不中断
+        try:
+            result = cv2.seamlessClone(fg, bg, mask, (cx, cy),
+                                        clone_map.get(self.clone_type, cv2.NORMAL_CLONE))
+        except cv2.error as e:
+            return self.ok(mat, message=f"无缝融合失败(已回退原图): {e}")
         # 返回成功结果
         return self.ok(result)
 
