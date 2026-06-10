@@ -24,6 +24,8 @@ class HoughLinesP(OpenCVNodeDataBase, IDetectorGroupableNode):
     theta = Property(180.0, name="角度分辨率", group=PropertyGroupNames.RUN_PARAMETERS)
     threshold = Property(50, name="投票阈值", group=PropertyGroupNames.RUN_PARAMETERS)
     min_line_length = Property(50.0, name="最小线段长度", group=PropertyGroupNames.RUN_PARAMETERS)
+    max_line_length = Property(-1.0, name="最大线段长度", group=PropertyGroupNames.RUN_PARAMETERS,
+                               description="-1 = 不限制")
     max_line_gap = Property(10.0, name="最大允许间隙", group=PropertyGroupNames.RUN_PARAMETERS)
     target_angle = Property(-1.0, name="目标角度", group=PropertyGroupNames.RUN_PARAMETERS,
                             description="-1=不过滤，只保留角度在 [目标±容差] 内的线段")
@@ -49,6 +51,11 @@ class HoughLinesP(OpenCVNodeDataBase, IDetectorGroupableNode):
         if lines is not None:
             for line in lines:
                 x1, y1, x2, y2 = line[0]
+                # 最大长度过滤
+                if self.max_line_length > 0:
+                    length = np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+                    if length > self.max_line_length:
+                        continue
                 # 角度过滤
                 if self.target_angle > 0:
                     angle = np.degrees(np.arctan2(y2 - y1, x2 - x1))

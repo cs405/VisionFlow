@@ -104,10 +104,17 @@ class BlobDetector(OpenCVNodeDataBase, IDetectorGroupableNode):
         params = self._build_params()
         detector = cv2.SimpleBlobDetector_create(params)
         keypoints = detector.detect(mat)
-        out = cv2.drawKeypoints(mat, keypoints, None, (0, 255, 0),
-                                cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+        # 超过 500 个关键点时用简绘避免卡死
+        if len(keypoints) > 500:
+            out = cv2.drawKeypoints(mat, keypoints, None, (0, 255, 0),
+                                    cv2.DRAW_MATCHES_FLAGS_DEFAULT)
+            msg = f"检测到 {len(keypoints)} 个Blob (过多，已简化绘制)"
+        else:
+            out = cv2.drawKeypoints(mat, keypoints, None, (0, 255, 0),
+                                    cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+            msg = f"检测到 {len(keypoints)} 个Blob"
         self.blob_count = len(keypoints)
-        return self.ok(out, f"检测到 {len(keypoints)} 个Blob")
+        return self.ok(out, msg)
 
     def _update_result_image_source(self):
         self._result_image_source = self._mat
