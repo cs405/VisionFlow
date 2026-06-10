@@ -1,4 +1,5 @@
-from core.events import EventType
+"""OK输出 — 对应 WPF OKOutputNodeData"""
+
 from nodes.outputs.output_base import OutputBase
 
 
@@ -9,7 +10,3 @@ class OKOutputNode(OutputBase):
 
     def _get_message(self) -> str:
         return "OK"
-
-    @property
-    def _event_type(self) -> EventType:
-        return EventType.MESSAGE_SUCCESS

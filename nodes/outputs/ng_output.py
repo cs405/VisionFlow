@@ -1,4 +1,6 @@
-from core.events import EventType
+"""NG输出 — 对应 WPF NGOutputNodeData。返回 ERROR 状态。"""
+
+from core.data_packet import FlowableResult
 from nodes.outputs.output_base import OutputBase
 
 
@@ -7,9 +9,6 @@ class NGOutputNode(OutputBase):
         super().__init__()
         self.name = "NG输出"
 
-    def _get_message(self) -> str:
-        return "NG"
-
-    @property
-    def _event_type(self) -> EventType:
-        return EventType.MESSAGE_ERROR
+    def invoke_core(self, src, from_node, diagram) -> FlowableResult:
+        mat = self.get_input_mat(from_node.mat if from_node else None)
+        return self.error(mat, "NG")
