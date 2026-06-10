@@ -1809,7 +1809,7 @@ class VisionPropertyCondition:
 # WaitAllParallelNodeData - 并行执行同步屏障
 # =============================================================================
 
-class WaitAllParallelNodeData(VisionNodeData):
+class WaitAllParallelNodeData(ConditionNodeData, VisionNodeData):
     """等待所有并行上游节点完成后才继续执行的同步屏障节点。
 
     作为同步屏障：统计来自并行分支的调用次数，
@@ -1820,6 +1820,7 @@ class WaitAllParallelNodeData(VisionNodeData):
 
     def __init__(self):
         super().__init__()
+        ConditionNodeData.__init__(self)
         # 节点显示名称
         self.name = "并行等待"
         # 已完成的并行分支计数

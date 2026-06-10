@@ -44,7 +44,7 @@ class OpenCVConditionNode(ConditionNodeData, OpenCVNodeDataBase):
         self._result_image_source = self._mat
 
 
-class PixelThresholdConditionNode(OpenCVNodeDataBase):
+class PixelThresholdConditionNode(ConditionNodeData, OpenCVNodeDataBase):
     """基于像素数量高于/低于阈值的条件节点"""
     # 节点所属分组（用于UI分类）
     __group__ = "逻辑模块"
@@ -59,6 +59,10 @@ class PixelThresholdConditionNode(OpenCVNodeDataBase):
         """初始化像素阈值条件节点"""
         # 调用父类构造函数
         super().__init__()
+        # 调用父类ConditionNodeData的构造函数
+        ConditionNodeData.__init__(self)
+        # 调用父类OpenCVNodeDataBase的构造函数
+        OpenCVNodeDataBase.__init__(self)
         # 设置节点显示名称
         self.name = "像素阈值条件"
         # 匹配的像素数量，初始为0
