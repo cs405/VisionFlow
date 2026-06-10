@@ -1603,14 +1603,17 @@ class Base64MatchingNodeData(VisionNodeData):
         return cv2.imdecode(arr, cv2.IMREAD_COLOR)
 
     def to_dict(self) -> dict:
-        """序列化节点为字典"""
         data = super().to_dict()
         data["base64_string"] = self._base64_string
         return data
 
+    def restore_from_dict(self, data: dict) -> "Base64MatchingNodeData":
+        super().restore_from_dict(data)
+        self._base64_string = data.get("base64_string", "")
+        return self
+
     @classmethod
     def from_dict(cls, data: dict) -> "Base64MatchingNodeData":
-        """从字典反序列化节点"""
         node = super().from_dict(data)
         node._base64_string = data.get("base64_string", "")
         return node
