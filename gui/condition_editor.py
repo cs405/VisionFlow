@@ -41,26 +41,50 @@ class ConditionEditorDialog(QDialog):
         self.setWindowTitle("条件编辑器")
         self.resize(950, 460)
 
-        # 懒加载 presenter
-        presenter = node.conditions_presenter
+        # 获取图中所有节点（用于输入/输出节点选择器）
+        all_nodes: list = []
+        diagram = node.diagram_data
+        if diagram and hasattr(diagram, 'get_all_nodes'):
+            all_nodes = [n for n in diagram.get_all_nodes() if n.node_id != node.node_id]
 
-        # 上游节点选项: [(label, node_id), ...]
-        self._input_nodes: list[tuple[str, str]] = []
+        # 输入节点: 自身 + 所有上游节点 + 图中其他节点。优先级：上游=自身 > 其他
+        upstream_ids = {n.node_id for n in node.get_all_from_this_node_datas()}
+        input_seen = {node.node_id}
+        self._input_nodes: list[tuple[str, str]] = [
+            (f"自身 [{node.node_id}]", node.node_id)
+        ]
         for n in node.from_node_datas:
-            label = f"{n.name or type(n).__name__} [{n.node_id}]"
-            self._input_nodes.append((label, n.node_id))
+            if n.node_id not in input_seen:
+                input_seen.add(n.node_id)
+                label = f"{n.name or type(n).__name__} [{n.node_id}]"
+                self._input_nodes.append((label, n.node_id))
+        for n in all_nodes:
+            if n.node_id not in input_seen:
+                input_seen.add(n.node_id)
+                label = f"{n.name or type(n).__name__} [{n.node_id}]"
+                self._input_nodes.append((label, n.node_id))
 
-        # 下游节点选项
-        self._output_nodes: list[tuple[str, str]] = [("默认", "")]
+        # 输出节点: 直接下游 + 图中所有其他节点。"默认" = 不指定输出（流程走默认端口）
+        output_seen: set[str] = set()
+        self._output_nodes: list[tuple[str, str]] = [
+            ("默认（不指定输出节点，走默认端口）", "")
+        ]
         for n in node.to_node_datas:
-            label = f"{n.name or n.node_id} [{n.node_id}]"
-            self._output_nodes.append((label, n.node_id))
+            if n.node_id not in output_seen:
+                output_seen.add(n.node_id)
+                label = f"{n.name or type(n).__name__} [{n.node_id}]"
+                self._output_nodes.append((label, n.node_id))
+        for n in all_nodes:
+            if n.node_id not in output_seen:
+                output_seen.add(n.node_id)
+                label = f"{n.name or type(n).__name__} [{n.node_id}]"
+                self._output_nodes.append((label, n.node_id))
 
         # 候选属性名
         self._candidate_properties = [name for name, _ in node.get_condition_candidates()]
 
         self._setup_ui()
-        self.set_branches(presenter.branches)
+        self.set_branches(node.conditions_presenter.branches)
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
