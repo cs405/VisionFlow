@@ -42,6 +42,8 @@ class TemplateMatchingNode(OpenCVTemplateMatchingNodeBase):
     threshold = Property(0.8, name="置信度阈值", group=PropertyGroupNames.RUN_PARAMETERS,
                          description="匹配置信度 >= 此值才视为匹配成功",
                          min_val=0.0, max_val=1.0, step=0.05, decimals=2)
+    min_area = Property(100.0, name="最小面积", group=PropertyGroupNames.RUN_PARAMETERS)
+    max_area = Property(float(2**31 - 1), name="最大面积", group=PropertyGroupNames.RUN_PARAMETERS)
 
     def __init__(self):
         super().__init__()
@@ -60,8 +62,9 @@ class TemplateMatchingNode(OpenCVTemplateMatchingNodeBase):
         result = cv2.matchTemplate(mat, template, method)
         _, max_val, _, max_loc = cv2.minMaxLoc(result)
 
-        if max_val >= self.threshold:
-            h, w = template.shape[:2]
+        h, w = template.shape[:2]
+        tpl_area = h * w
+        if max_val >= self.threshold and self.min_area <= tpl_area <= self.max_area:
             out = mat.copy()
             cv2.rectangle(out, max_loc, (max_loc[0] + w, max_loc[1] + h),
                          (0, 255, 0), 2)
@@ -71,7 +74,10 @@ class TemplateMatchingNode(OpenCVTemplateMatchingNodeBase):
 
         self.matching_count_result = 0
         self.confidence = 0.0
-        return self.ok(mat, f"未匹配 (最高置信度: {max_val:.3f} < {self.threshold})")
+        msg = f"未匹配 (最高置信度: {max_val:.3f} < {self.threshold})"
+        if max_val >= self.threshold and not (self.min_area <= tpl_area <= self.max_area):
+            msg += " (面积过滤未通过)"
+        return self.ok(mat, msg)
 
 
 # 向后兼容别名

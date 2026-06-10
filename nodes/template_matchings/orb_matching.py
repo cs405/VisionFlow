@@ -36,6 +36,8 @@ class OrbFeatureMatchingNode(OpenCVTemplateMatchingNodeBase):
     ransac_threshold = Property(5.0, name="RANSAC阈值", group=PropertyGroupNames.RUN_PARAMETERS,
                                 description="RANSAC 重投影误差阈值（像素）",
                                 min_val=1.0, max_val=20.0, step=0.5)
+    min_area = Property(100.0, name="最小面积", group=PropertyGroupNames.RUN_PARAMETERS)
+    max_area = Property(float(2**31 - 1), name="最大面积", group=PropertyGroupNames.RUN_PARAMETERS)
     # ── 结果参数 ──
     match_count = Property(0, name="总匹配数", group=PropertyGroupNames.RESULT_PARAMETERS,
                            readonly=True)
@@ -76,18 +78,23 @@ class OrbFeatureMatchingNode(OpenCVTemplateMatchingNodeBase):
                                                self.ransac_threshold)
 
         out = mat.copy()
+        matched = False
         if homography is not None:
             h, w = template.shape[:2]
             corners = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
             transformed = cv2.perspectiveTransform(corners, homography)
             pts = np.int32(transformed)
-            # 绘制标准绑定矩形（取变换后四个角点的包围盒）
             x, y, rw, rh = cv2.boundingRect(pts)
-            cv2.rectangle(out, (x, y), (x + rw, y + rh), (0, 255, 0), 2)
+            area = rw * rh
+            if self.min_area <= area <= self.max_area:
+                cv2.rectangle(out, (x, y), (x + rw, y + rh), (0, 255, 0), 2)
+                matched = True
 
         self.match_count = len(matches)
         self.matching_count_result = len(good)
         inliers = int(np.sum(mask)) if mask is not None else 0
         self.confidence = inliers / max(len(good), 1) if good else 0.0
-
-        return self.ok(out, f"ORB 匹配: {len(good)}/{len(matches)} 特征点 (内点: {inliers})")
+        msg = f"ORB 匹配: {len(good)}/{len(matches)} 特征点 (内点: {inliers})"
+        if not matched and len(good) >= 4:
+            msg += " (面积过滤未通过)"
+        return self.ok(out, msg)

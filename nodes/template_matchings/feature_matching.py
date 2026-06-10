@@ -151,6 +151,10 @@ class SurfFeatureMatchingNode(OpenCVTemplateMatchingNodeBase):
                          editor="choices", choices=["L2", "L1", "HAMMING"])
     cross_check = Property(False, name="交叉检查", group=PropertyGroupNames.RUN_PARAMETERS)
 
+    # ── 面积过滤 ──
+    min_area = Property(100.0, name="最小面积", group=PropertyGroupNames.RUN_PARAMETERS)
+    max_area = Property(float(2**31 - 1), name="最大面积", group=PropertyGroupNames.RUN_PARAMETERS)
+
     # ── SURF 参数 (对应 WPF SURF 属性) ──
     hessian_threshold = Property(200.0, name="Hessian阈值", group=PropertyGroupNames.RUN_PARAMETERS,
                                  description="Hessian 行列式阈值，越大特征点越少但越稳定")
@@ -217,7 +221,7 @@ class SurfFeatureMatchingNode(OpenCVTemplateMatchingNodeBase):
             knn = flann.knnMatch(des1, des2, k=2)
             good = [m for m, n in knn if m.distance < 0.75 * n.distance]
 
-        # Homography + 绑定矩形 (与 ORB 一致)
+        # Homography + 绑定矩形 + 面积过滤
         out = mat.copy()
         matched = False
         if len(good) >= 4:
@@ -229,11 +233,17 @@ class SurfFeatureMatchingNode(OpenCVTemplateMatchingNodeBase):
                 corners = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
                 transformed = cv2.perspectiveTransform(corners, homography)
                 x, y, rw, rh = cv2.boundingRect(np.int32(transformed))
-                cv2.rectangle(out, (x, y), (x + rw, y + rh), (0, 255, 0), 2)
+                area = rw * rh
+                if self.min_area <= area <= self.max_area:
+                    cv2.rectangle(out, (x, y), (x + rw, y + rh), (0, 255, 0), 2)
+                    matched = True
 
         self.matching_count_result = len(good)
         self.confidence = len(good) / max(len(kp1), 1)
-        return self.ok(out, f"SURF匹配 {len(good)}/{len(kp1)} 个特征点")
+        msg = f"SURF匹配 {len(good)}/{len(kp1)} 个特征点"
+        if not matched and len(good) >= 4:
+            msg += " (面积过滤未通过)"
+        return self.ok(out, msg)
 
 
 # 向后兼容别名

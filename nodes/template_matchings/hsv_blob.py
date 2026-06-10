@@ -44,6 +44,10 @@ class HSVBlobMatchingNode(OpenCVNodeDataBase, ITemplateMatchingGroupableNode):
                        min_val=0, max_val=255,
                        description="以取色点为中心的明度容差")
 
+    # ── 面积过滤 ──
+    min_area = Property(100.0, name="最小面积", group=PropertyGroupNames.RUN_PARAMETERS)
+    max_area = Property(float(2**31 - 1), name="最大面积", group=PropertyGroupNames.RUN_PARAMETERS)
+
     # ── 结果参数 ──
     blob_count = Property(0, name="Blob数量", group=PropertyGroupNames.RESULT_PARAMETERS,
                           readonly=True)
@@ -110,11 +114,13 @@ class HSVBlobMatchingNode(OpenCVNodeDataBase, ITemplateMatchingGroupableNode):
         mask = cv2.inRange(hsv, lower, upper)
 
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # 面积过滤
+        filtered = [c for c in contours if self.min_area <= cv2.contourArea(c) <= self.max_area]
         out = mat.copy()
-        cv2.drawContours(out, contours, -1, (0, 255, 0), 2)
+        cv2.drawContours(out, filtered, -1, (0, 255, 0), 2)
 
-        self.blob_count = len(contours)
-        return self.ok(out, f"发现 {len(contours)} 个Blob")
+        self.blob_count = len(filtered)
+        return self.ok(out, f"发现 {len(filtered)} 个Blob")
 
     def _update_result_image_source(self):
         self._result_image_source = self._mat
