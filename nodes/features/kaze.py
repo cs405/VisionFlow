@@ -1,0 +1,15 @@
+"""KAZE 特征检测 — 对应 WPF KazeFeatureDetector"""
+
+import cv2
+from nodes.features.feature_base import FeatureBase
+
+
+class KazeFeatureDetector(FeatureBase):
+    """KAZE 特征检测"""
+
+    def __init__(self):
+        super().__init__()
+        self.name = "KAZE"
+
+    def _create_detector(self):
+        return cv2.KAZE_create()

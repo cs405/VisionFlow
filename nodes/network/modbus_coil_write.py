@@ -1,0 +1,35 @@
+"""Modbus 写入线圈 (Coil Write)"""
+
+from core.node_base import Property, PropertyGroupNames
+from core.data_packet import FlowableResult
+from nodes.network.modbus_base import ModbusBase
+
+
+class ModbusCoilWriteNode(ModbusBase):
+    """写入单个线圈"""
+
+    start_address = Property(0, name="线圈地址", group=PropertyGroupNames.RUN_PARAMETERS)
+    write_value = Property(False, name="线圈值", group=PropertyGroupNames.RUN_PARAMETERS)
+
+    def __init__(self):
+        super().__init__()
+        self.name = "Modbus写入(Coil)"
+
+    def invoke_core(self, src, from_node, diagram) -> FlowableResult:
+        mat = self.get_input_mat(from_node.mat if from_node else None)
+        try:
+            if not self._ensure_connected():
+                return self.error(mat, f"连接失败: {self.ip}:{self.port}")
+        except ImportError:
+            return self.ok(mat, "pymodbus 未安装，模拟写入")
+        try:
+            result = self._client.write_coil(
+                self.start_address, self.write_value, slave=self.slave_address)
+            if hasattr(result, 'isError') and result.isError():
+                self._mark_error()
+                return self.error(mat, "写入线圈失败")
+            self._mark_success()
+            return self.ok(mat, f"线圈写入成功: {self.write_value}")
+        except Exception as e:
+            self._mark_error(str(e)[:80])
+            return self.error(mat, str(e)[:120])

@@ -1,4 +1,4 @@
-"""HoughLines 直线识别 — 对应 WPF HoughLines"""
+"""HoughLines 直线识别"""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 class HoughLines(OpenCVNodeDataBase, IDetectorGroupableNode):
-    """直线识别 — 对应 WPF HoughLines : OpenCVDetectorNodeDataBase, IDetectorGroupableNodeData"""
+    """直线识别"""
 
     __group__ = "对象识别模块"
 

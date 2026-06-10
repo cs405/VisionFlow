@@ -1,4 +1,4 @@
-"""FindContours 轮廓识别 — 对应 WPF FindContours"""
+"""FindContours 轮廓识别 """
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 class FindContours(OpenCVNodeDataBase, IDetectorGroupableNode):
-    """轮廓识别 — 对应 WPF FindContours : OpenCVNodeDataBase, IDetectorGroupableNodeData"""
+    """轮廓识别"""
 
     __group__ = "对象识别模块"
 

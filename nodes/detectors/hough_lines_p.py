@@ -1,4 +1,4 @@
-"""HoughLinesP 线段识别 — 对应 WPF HoughLinesP"""
+"""HoughLinesP 线段识别 """
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 class HoughLinesP(OpenCVNodeDataBase, IDetectorGroupableNode):
-    """线段识别 — 对应 WPF HoughLinesP : HoughLinesPBase, IDetectorGroupableNodeData"""
+    """线段识别"""
 
     __group__ = "对象识别模块"
 
@@ -49,7 +49,7 @@ class HoughLinesP(OpenCVNodeDataBase, IDetectorGroupableNode):
         if lines is not None:
             for line in lines:
                 x1, y1, x2, y2 = line[0]
-                # 角度过滤 (对应 WPF GetTargetLines)
+                # 角度过滤
                 if self.target_angle > 0:
                     angle = np.degrees(np.arctan2(y2 - y1, x2 - x1))
                     diff = abs(((angle - self.target_angle) + 180) % 360 - 180)

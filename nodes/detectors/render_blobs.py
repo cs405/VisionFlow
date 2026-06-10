@@ -1,4 +1,4 @@
-"""RenderBlobs 连通区域识别 — 对应 WPF RenderBlobs"""
+"""RenderBlobs 连通区域识别"""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 
 class RenderBlobs(OpenCVNodeDataBase, IDetectorGroupableNode):
-    """连通区域识别 — 对应 WPF RenderBlobs : OpenCVDetectorNodeDataBase, IDetectorGroupableNodeData"""
+    """连通区域识别"""
 
     __group__ = "对象识别模块"
 

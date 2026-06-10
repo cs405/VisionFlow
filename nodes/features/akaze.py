@@ -1,0 +1,15 @@
+"""AKAZE 特征检测 — 对应 WPF AKazeFeatureDetector"""
+
+import cv2
+from nodes.features.feature_base import FeatureBase
+
+
+class AKazeFeatureDetector(FeatureBase):
+    """AKAZE 特征检测"""
+
+    def __init__(self):
+        super().__init__()
+        self.name = "AKAZE"
+
+    def _create_detector(self):
+        return cv2.AKAZE_create()

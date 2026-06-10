@@ -1,4 +1,4 @@
-"""QRCode 二维码识别 — 对应 WPF QRCode"""
+"""QRCode 二维码识别"""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 
 class QRCode(OpenCVNodeDataBase, IDetectorGroupableNode):
-    """二维码识别 — 对应 WPF QRCode : OpenCVDetectorNodeDataBase, IDetectorGroupableNodeData"""
+    """二维码识别"""
 
     __group__ = "对象识别模块"
 

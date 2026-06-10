@@ -1,1 +1,3 @@
-from nodes.takeoffs.takeoff_nodes import HSVInRange, BitwiseAnd, SeamlessCloneBackground
+from nodes.takeoffs.hsv_inrange import HSVInRange
+from nodes.takeoffs.bitwise_and import BitwiseAnd
+from nodes.takeoffs.seamless_clone_bg import SeamlessCloneBackground

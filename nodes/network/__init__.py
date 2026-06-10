@@ -1,5 +1,8 @@
-from nodes.network.modbus_nodes import (
-    ModbusState, ModbusReadNode, ModbusWriteNode,
-    ModbusCoilReadNode, ModbusDiscreteInputNode, ModbusInputRegisterNode,
-    ModbusCoilWriteNode, ModbusMultiWriteNode,
-)
+from nodes.network.modbus_base import ModbusState, ModbusBase
+from nodes.network.modbus_read import ModbusReadNode
+from nodes.network.modbus_coil_read import ModbusCoilReadNode
+from nodes.network.modbus_discrete_input import ModbusDiscreteInputNode
+from nodes.network.modbus_input_register import ModbusInputRegisterNode
+from nodes.network.modbus_write import ModbusWriteNode
+from nodes.network.modbus_coil_write import ModbusCoilWriteNode
+from nodes.network.modbus_multi_write import ModbusMultiWriteNode

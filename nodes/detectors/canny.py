@@ -1,4 +1,4 @@
-"""Canny 边缘检测 — 对应 WPF Canny"""
+"""Canny 边缘检测"""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 
 class Canny(OpenCVNodeDataBase, IDetectorGroupableNode):
-    """Canny 边缘检测 — 对应 WPF Canny : OpenCVNodeDataBase, IDetectorGroupableNodeData"""
+    """Canny 边缘检测 """
 
     __group__ = "对象识别模块"
 

@@ -1,4 +1,4 @@
-"""BlobDetector Blob 识别 — 对应 WPF BlobDetector"""
+"""BlobDetector Blob 识别"""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 
 class BlobDetector(OpenCVNodeDataBase, IDetectorGroupableNode):
-    """Blob 识别 — 对应 WPF BlobDetector : OpenCVDetectorNodeDataBase, IDetectorGroupableNodeData"""
+    """Blob 识别"""
 
     __group__ = "对象识别模块"
 
@@ -64,13 +64,13 @@ class BlobDetector(OpenCVNodeDataBase, IDetectorGroupableNode):
         self._last_blob_type = "none"
 
     def _apply_preset(self, preset_name: str):
-        """应用预设参数 — 对应 WPF RefreshData + CopyFrom。仅在形状类型切换时调用。"""
+        """应用预设参数。仅在形状类型切换时调用。"""
         if preset_name in self._PRESETS:
             for k, v in self._PRESETS[preset_name].items():
                 setattr(self, k, v)
 
     def _build_params(self) -> cv2.SimpleBlobDetector_Params:
-        """从当前属性构建 SimpleBlobDetector 参数 — 对应 WPF CopyTo。"""
+        """从当前属性构建 SimpleBlobDetector 参数"""
         if self.blob_type != self._last_blob_type and self.blob_type != "none":
             self._apply_preset(self.blob_type)
         self._last_blob_type = self.blob_type

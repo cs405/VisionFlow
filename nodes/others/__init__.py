@@ -1,5 +1,12 @@
-from nodes.others.other_nodes import (
-    HaarCascade, LbpCascade, Hist, Hog, SeamlessClone, Stitching,
-    Subdiv2D, SVM, WarpAffineTransform, WarpPerspectiveTransform,
-    DnnSuperres, Yolov3,
-)
+from nodes.others.haar_cascade import HaarCascade
+from nodes.others.lbp_cascade import LbpCascade
+from nodes.others.histogram import Hist
+from nodes.others.hog import Hog
+from nodes.others.seamless_clone import SeamlessClone
+from nodes.others.stitching import Stitching
+from nodes.others.subdiv2d import Subdiv2D
+from nodes.others.svm import SVM
+from nodes.others.warp_affine import WarpAffineTransform
+from nodes.others.warp_perspective import WarpPerspectiveTransform
+from nodes.others.dnn_superres import DnnSuperres
+from nodes.others.yolov3 import Yolov3

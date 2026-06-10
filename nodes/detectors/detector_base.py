@@ -1,4 +1,4 @@
-"""对象识别模块 — 共享接口与枚举 (对应 WPF IDetectorGroupableNodeData, DrawContourType, BlobType)"""
+"""对象识别模块 — 共享接口与枚举 """
 
 from enum import Enum
 
@@ -9,7 +9,7 @@ class IDetectorGroupableNode:
 
 
 class DrawContourType(Enum):
-    """轮廓绘制类型 — 对应 WPF DrawContourType"""
+    """轮廓绘制类型"""
     CONTOURS = "contours"
     BOUNDING_RECT = "bounding_rect"
     MIN_AREA_RECT = "min_area_rect"
@@ -18,7 +18,7 @@ class DrawContourType(Enum):
 
 
 class BlobType(Enum):
-    """Blob 预设形状类型 — 对应 WPF BlobType"""
+    """Blob 预设形状类型"""
     CIRCLE = "circle"
     OVAL = "oval"
     NONE = "none"
