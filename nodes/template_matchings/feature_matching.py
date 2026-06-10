@@ -107,14 +107,30 @@ class SiftFeatureMatchingNode(OpenCVTemplateMatchingNodeBase):
             knn = flann.knnMatch(des1, des2, k=2)
             good = [m for m, n in knn if m.distance < 0.75 * n.distance]
 
-        # 绘制
-        out = cv2.drawMatches(gray1, kp1, gray2, kp2, good, None,
-                              flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
+        # Homography + 绑定矩形 + 面积过滤 (对应 WPF MinArea / MaxArea)
+        out = mat.copy()
+        matched = False
+        if len(good) >= 4:
+            src_pts = np.float32([kp1[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
+            dst_pts = np.float32([kp2[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
+            homography, _ = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+            if homography is not None:
+                h, w = template.shape[:2]
+                corners = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
+                transformed = cv2.perspectiveTransform(corners, homography)
+                x, y, rw, rh = cv2.boundingRect(np.int32(transformed))
+                area = rw * rh
+                if self.min_area <= area <= self.max_area:
+                    cv2.rectangle(out, (x, y), (x + rw, y + rh), (0, 255, 0), 2)
+                    matched = True
 
         self.feature_count_result = len(kp1)
         self.matching_count_result = len(good)
         self.confidence = len(good) / max(len(kp1), 1)
-        return self.ok(out, f"SIFT匹配 {len(good)}/{len(kp1)} 个特征点")
+        msg = f"SIFT匹配 {len(good)}/{len(kp1)} 个特征点"
+        if not matched and len(good) >= 4:
+            msg += " (面积过滤未通过)"
+        return self.ok(out, msg)
 
 
 # =============================================================================
@@ -201,8 +217,19 @@ class SurfFeatureMatchingNode(OpenCVTemplateMatchingNodeBase):
             knn = flann.knnMatch(des1, des2, k=2)
             good = [m for m, n in knn if m.distance < 0.75 * n.distance]
 
-        out = cv2.drawMatches(gray1, kp1, gray2, kp2, good, None,
-                              flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
+        # Homography + 绑定矩形 (与 ORB 一致)
+        out = mat.copy()
+        matched = False
+        if len(good) >= 4:
+            src_pts = np.float32([kp1[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
+            dst_pts = np.float32([kp2[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
+            homography, _ = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+            if homography is not None:
+                h, w = template.shape[:2]
+                corners = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
+                transformed = cv2.perspectiveTransform(corners, homography)
+                x, y, rw, rh = cv2.boundingRect(np.int32(transformed))
+                cv2.rectangle(out, (x, y), (x + rw, y + rh), (0, 255, 0), 2)
 
         self.matching_count_result = len(good)
         self.confidence = len(good) / max(len(kp1), 1)
