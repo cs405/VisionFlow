@@ -572,42 +572,43 @@ class NodeItem(QGraphicsObject):
     # ── 左侧条绘制 ────────────────────────────────────────────────────────────
 
     def _draw_left_bar(self, painter, state_color):
-        """绘制左侧30px宽的状态条"""
-        # 检查当前状态是否需要显示状态条（运行中、已完成、错误、空闲）
+        """绘制左侧30px宽的状态条。条件节点用菱形主体裁剪bar贴合尖角，文字也跟随裁剪。"""
         bar_visible = self._state in (NodeState.RUNNING, NodeState.COMPLETED,
                                        NodeState.ERROR, NodeState.IDLE)
-        # 如果不需要显示状态条，直接返回
         if not bar_visible:
             return
 
-        # 创建左侧条矩形：从节点左边缘开始，宽度BAR_WIDTH(30px)
         bar_rect = QRectF(-self._node_w / 2, -self._node_h / 2, BAR_WIDTH, self._node_h)
-        # 创建左侧条路径
-        bar_path = QPainterPath()
-        # 添加圆角矩形（与节点主体相同的圆角半径）
-        bar_path.addRoundedRect(bar_rect, NODE_CORNER_RADIUS, NODE_CORNER_RADIUS)
 
-        # 创建裁剪路径，确保只填充左侧条区域
-        clip = QPainterPath()
-        # 添加覆盖左侧条及右侧多一点的矩形（确保圆角完整）
-        clip.addRect(-self._node_w / 2, -self._node_h / 2,
-                     BAR_WIDTH + NODE_CORNER_RADIUS, self._node_h)
-        # 用状态颜色填充裁剪路径与左侧条路径的交集
-        painter.fillPath(clip.intersected(bar_path), QBrush(state_color))
+        if self._template == NodeTemplate.CONDITION:
+            # 菱形：bar矩形与菱形主体取交集，得到贴合尖角的三角形可视区域
+            body_path = self._build_body_path(self._rect)
+            bar_path = QPainterPath()
+            bar_path.addRect(bar_rect)
+            visible_bar = body_path.intersected(bar_path)
+            painter.fillPath(visible_bar, QBrush(state_color))
+        else:
+            # 矩形：圆角bar
+            bar_path = QPainterPath()
+            bar_path.addRoundedRect(bar_rect, NODE_CORNER_RADIUS, NODE_CORNER_RADIUS)
+            clip = QPainterPath()
+            clip.addRect(-self._node_w / 2, -self._node_h / 2,
+                         BAR_WIDTH + NODE_CORNER_RADIUS, self._node_h)
+            visible_bar = clip.intersected(bar_path)
+            painter.fillPath(visible_bar, QBrush(state_color))
 
-        # 如果节点序号大于0，绘制序号
+        # 绘制序号（菱形时裁剪到可视区域，文字不会超出尖角范围）
         if self._index > 0:
-            # 创建序号字体：Segoe UI，11号，粗体
+            painter.save()
+            if self._template == NodeTemplate.CONDITION:
+                painter.setClipPath(visible_bar)
             index_font = QFont("Segoe UI", 11, QFont.Bold)
-            # 设置字体
             painter.setFont(index_font)
-            # 设置文字颜色为白色
             painter.setPen(QColor("#FFFFFF"))
-            # 计算序号显示区域（在左侧条内部，四周有2像素边距）
             num_rect = QRectF(-self._node_w / 2 + 2, -self._node_h / 2 + 2,
                               BAR_WIDTH - 4, self._node_h - 4)
-            # 绘制序号文本，居中对齐
             painter.drawText(num_rect, Qt.AlignCenter, str(self._index))
+            painter.restore()
 
     # ── 右侧内容绘制（白色背景上的图标和文字）─────────────────────────────────────
 
