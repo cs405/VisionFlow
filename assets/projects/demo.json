@@ -4,7 +4,7 @@
   "description": "",
   "author": "",
   "created_at": "2026-06-12T10:57:38.175617",
-  "modified_at": "2026-06-12T11:17:47.574244",
+  "modified_at": "2026-06-12T11:22:33.319252",
   "selected_diagram_index": 0,
   "diagrams": [
     {
@@ -73,8 +73,8 @@
               "demo_run_parameter1": "",
               "demo_result1": ""
             },
-            "pos_x": -136.0,
-            "pos_y": -320.0,
+            "pos_x": -137.0,
+            "pos_y": -319.0,
             "use_invoked_part": true,
             "roi": {
               "type": "DrawROI",

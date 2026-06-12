@@ -13,7 +13,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QDialogButtonBox, QWidget, QFormLayout, QSpinBox, QTextEdit,
-    QMessageBox, QComboBox,
+    QMessageBox, QComboBox, QInputDialog,
 )
 from PyQt5.QtGui import QPixmap, QImage, QColor
 
@@ -154,6 +154,16 @@ class CropDialog(QDialog):
         btn_row.addWidget(center_btn)
         # 添加按钮行到表单
         form.addRow("", self._wrap(btn_row))
+
+        # 保存模板按钮
+        save_btn = QPushButton("保存模板")
+        save_btn.setStyleSheet(
+            "QPushButton { background: #1a5a1a; color: #66ff66; border: 1px solid #383;"
+            "border-radius: 2px; padding: 4px 12px; }"
+            "QPushButton:hover { background: #2a7a2a; }"
+        )
+        save_btn.clicked.connect(self._save_template)
+        form.addRow("", save_btn)
 
         # 预览区域
         form.addRow("预览", self._preview_label)
@@ -434,6 +444,21 @@ class CropDialog(QDialog):
             y = (h - sz) // 2
             # 设置居中正方形矩形
             self.set_rect((x, y, sz, sz))
+
+    def _save_template(self):
+        """保存当前裁剪区域为可复用模板"""
+        if self._cropped is None:
+            QMessageBox.warning(self, "提示", "请先选择裁剪区域")
+            return
+        h, w = self._cropped.shape[:2]
+        name, ok = QInputDialog.getText(
+            self, "保存模板", "请输入模板名称:",
+        )
+        if not ok or not name.strip():
+            return
+        from gui.img_template_manager import save_img_template
+        save_img_template(name.strip(), self.get_base64(), w, h)
+        QMessageBox.information(self, "已保存", f"模板「{name.strip()}」已保存 ({w}x{h} px)")
 
     def _preview_crop(self):
         """预览裁剪结果（使用OpenCV窗口）"""

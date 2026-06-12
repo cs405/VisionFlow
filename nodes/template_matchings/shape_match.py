@@ -4,12 +4,8 @@
 支持旋转/缩放/透视变换，适合实时模板匹配场景。
 """
 
-import os as _os
-_os.environ["CUDA_VISIBLE_DEVICES"] = ""
-
 import cv2
 import numpy as np
-import torch
 
 from core.node_base import Base64MatchingNodeData, OpenCVNodeDataBase, Property, PropertyGroupNames
 from core.data_packet import FlowableResult
@@ -22,8 +18,13 @@ _global_xfeat = None
 
 
 def _get_xfeat(top_k=2048):
+    """延迟加载 XFeat 模型和 PyTorch，避免调试器 DLL 注入冲突。"""
     global _global_xfeat
     if _global_xfeat is None:
+        import os as _os
+        _os.environ["CUDA_VISIBLE_DEVICES"] = ""
+        global torch
+        import torch
         from nodes.modules.xfeat import XFeat
         _global_xfeat = XFeat(top_k=top_k).eval()
     return _global_xfeat

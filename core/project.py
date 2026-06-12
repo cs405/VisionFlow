@@ -139,6 +139,32 @@ class ProjectItem:
         # 模板存储
         self._templates: list[DiagramData] = []
 
+    @property
+    def _templates_dir(self) -> str:
+        """模板存储目录"""
+        import os as _os
+        d = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)),
+                          "workflow_templates")
+        _os.makedirs(d, exist_ok=True)
+        return d
+
+    def _persist_templates(self):
+        """将模板列表持久化到目录"""
+        import re, os as _os
+        tmpl_dir = self._templates_dir
+        for fname in _os.listdir(tmpl_dir):
+            if fname.endswith(".json"):
+                try:
+                    _os.remove(_os.path.join(tmpl_dir, fname))
+                except OSError:
+                    pass
+        for i, t in enumerate(self._templates):
+            name = re.sub(r'[\\/:*?"<>|]', '_', t.name or f"template_{i}")
+            fpath = _os.path.join(tmpl_dir, f"{i:03d}_{name}.json")
+            json_str = json.dumps(t.to_dict(), ensure_ascii=False, indent=2, default=str)
+            with open(fpath, "w", encoding="utf-8") as f:
+                f.write(json_str)
+
     # -- 图表管理 --
 
     @property
@@ -228,21 +254,20 @@ class ProjectItem:
 
     def save_diagram_as_template(self, diagram: DiagramData = None,
                                    name: str = None) -> DiagramData:
-        """将图表保存为可重用的模板"""
+        """将图表保存为可重用的模板（立即持久化）"""
         src = diagram or self.selected_diagram
         if src is None:
             raise ValueError("未选中图表")
-        # 创建模板副本
         template = src.duplicate()
         template.name = name or (src.name + " (模板)")
         self._templates.append(template)
+        self._persist_templates()
         return template
 
     def add_diagram_from_template(self, template_index: int) -> DiagramData | None:
         """从保存的模板创建新图表"""
         if 0 <= template_index < len(self._templates):
             clone = self._templates[template_index].duplicate()
-            # 清理名称中的模板标记
             clone.name = clone.name.replace(" (模板)", "").replace(" (副本)", "")
             self.diagrams.append(clone)
             self._selected_diagram_index = len(self.diagrams) - 1
@@ -268,9 +293,10 @@ class ProjectItem:
         return list(self._templates)
 
     def remove_template(self, index: int) -> bool:
-        """删除指定索引的模板"""
+        """删除指定索引的模板（立即持久化）"""
         if 0 <= index < len(self._templates):
             self._templates.pop(index)
+            self._persist_templates()
             return True
         return False
 
@@ -343,41 +369,53 @@ class ProjectService:
     # ── 模板持久化 ──
 
     @property
-    def _template_file(self) -> str:
-        """获取模板文件路径"""
-        return os.path.join(os.path.dirname(os.path.dirname(__file__)),
-                            "templates.json")
+    def _templates_dir(self) -> str:
+        """获取模板目录路径"""
+        d = os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                         "workflow_templates")
+        os.makedirs(d, exist_ok=True)
+        return d
 
     def load_templates(self) -> list[DiagramData]:
-        """从磁盘加载模板"""
+        """从 workflow_templates/ 目录加载所有模板"""
         import traceback
         templates: list[DiagramData] = []
-        # 模板文件不存在时返回空列表
-        if not os.path.exists(self._template_file):
+        tmpl_dir = self._templates_dir
+        if not os.path.isdir(tmpl_dir):
             return templates
-        with open(self._template_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
         from core.registry import node_registry
-        # 节点工厂函数
         def factory(type_name: str):
             return node_registry.create(type_name)
-        # 反序列化每个模板
-        for td in data.get("templates", []):
+        for fname in sorted(os.listdir(tmpl_dir)):
+            if not fname.endswith(".json"):
+                continue
+            fpath = os.path.join(tmpl_dir, fname)
             try:
-                templates.append(DiagramData.from_dict(td, factory))
+                with open(fpath, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                templates.append(DiagramData.from_dict(data, factory))
             except Exception:
                 traceback.print_exc()
         return templates
 
     def save_templates(self, templates: list[DiagramData]):
-        """将模板持久化到磁盘"""
-        data = {"templates": [t.to_dict() for t in templates]}
-        # 确保目录存在
-        os.makedirs(os.path.dirname(self._template_file), exist_ok=True)
-        # 写入文件
-        json_str = json.dumps(data, ensure_ascii=False, indent=2, default=str)
-        with open(self._template_file, "w", encoding="utf-8") as f:
-            f.write(json_str)
+        """将模板列表持久化到 workflow_templates/ 目录（每个模板一个文件）"""
+        import re
+        tmpl_dir = self._templates_dir
+        # 清理旧文件
+        for fname in os.listdir(tmpl_dir):
+            if fname.endswith(".json"):
+                try:
+                    os.remove(os.path.join(tmpl_dir, fname))
+                except OSError:
+                    pass
+        # 逐个保存
+        for i, t in enumerate(templates):
+            name = re.sub(r'[\\/:*?"<>|]', '_', t.name or f"template_{i}")
+            fpath = os.path.join(tmpl_dir, f"{i:03d}_{name}.json")
+            json_str = json.dumps(t.to_dict(), ensure_ascii=False, indent=2, default=str)
+            with open(fpath, "w", encoding="utf-8") as f:
+                f.write(json_str)
 
     # -- 最近项目（QSettings 持久化） --
 

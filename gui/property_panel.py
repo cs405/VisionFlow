@@ -351,6 +351,15 @@ def _create_crop_editor(parent, prop_name, prop_desc, current_value):
         "QPushButton:hover { background: #7a2a2a; }"
     )
 
+    load_btn = QPushButton("加载模板")
+    load_btn.setFixedHeight(24)
+    load_btn.setStyleSheet(
+        "QPushButton { background: #1a3a5a; color: #66bbff; border: 1px solid #358;"
+        "border-radius: 2px; padding: 0 8px; font-size: 12px; }"
+        "QPushButton:hover { background: #2a4a6a; }"
+    )
+    load_btn.setToolTip("从已保存的模板中选择一个加载")
+
     def _get_source_image():
         """获取裁剪源图"""
         parent_node = getattr(parent, '_current_node', None)
@@ -410,14 +419,26 @@ def _create_crop_editor(parent, prop_name, prop_desc, current_value):
                 parent_node._base64_string = ""
         _refresh_preview()
 
+    def _load_template():
+        from gui.img_template_manager import ImgTemplateLoadDialog
+        tmpl = ImgTemplateLoadDialog.select_template(parent=parent)
+        if tmpl and tmpl.get("base64_string"):
+            parent_node = getattr(parent, '_current_node', None)
+            if parent_node and hasattr(parent_node, 'base64_string'):
+                parent_node.base64_string = tmpl["base64_string"]
+            _refresh_preview()
+
     crop_btn.clicked.connect(_crop)
+    load_btn.clicked.connect(_load_template)
     delete_btn.clicked.connect(_delete)
 
     layout.addWidget(preview)
     layout.addWidget(crop_btn)
+    layout.addWidget(load_btn)
     layout.addWidget(delete_btn)
     if prop_desc.readonly:
         crop_btn.setEnabled(False)
+        load_btn.setEnabled(False)
         delete_btn.setEnabled(False)
 
     _refresh_preview()
