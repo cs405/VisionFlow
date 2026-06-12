@@ -626,6 +626,45 @@ def _create_image_selector_editor(parent, prop_name, prop_desc, current_value):
     return combo, combo
 
 
+@register_editor("draw_source")
+def _create_draw_source_editor(parent, prop_name, prop_desc, current_value):
+    """轮廓绘制的"指定绘制图"下拉选择器
+
+    列出当前节点所有上游节点的名称，用户可选择在哪个节点的图像上绘制轮廓框。
+    空选项 = 使用 pipeline 传递的原始图像（_original_mat）。
+    """
+    from PyQt5.QtWidgets import QComboBox
+    from core.node_base import VisionNodeData
+
+    combo = QComboBox()
+    combo.addItem("(原始图像)", "")
+    node = getattr(parent, "_current_node", None)
+    if node is not None:
+        for upstream in node.get_all_from_node_datas():
+            if upstream is node:
+                continue
+            if isinstance(upstream, VisionNodeData) and upstream.mat is not None:
+                combo.addItem(upstream.name, upstream.node_id)
+            elif hasattr(upstream, "name"):
+                combo.addItem(upstream.name, upstream.node_id)
+
+    # 恢复当前选中项
+    current_id = str(current_value) if current_value else ""
+    for i in range(combo.count()):
+        if combo.itemData(i) == current_id:
+            combo.setCurrentIndex(i)
+            break
+
+    def _on_changed(idx):
+        selected_id = combo.itemData(idx) or ""
+        prop_name_ = prop_name
+        parent._set_property_value(prop_name_, selected_id)
+
+    combo.currentIndexChanged.connect(_on_changed)
+    combo.setStyleSheet("QComboBox { background: #333337; color: #dcdcdc; border: 1px solid #3f3f46; padding: 4px 8px; }")
+    return combo, combo
+
+
 # ── 属性面板 ────────────────────────────────────────────────────────
 
 class PropertyPanel(QWidget):

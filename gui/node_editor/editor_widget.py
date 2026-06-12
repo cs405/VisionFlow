@@ -592,11 +592,13 @@ class DiagramEditorWidget(QWidget):
 
     def _on_run(self):
         """运行工作流"""
-        # 如果存在工作流
         if self._workflow:
-            # 重置所有节点的状态为空闲
+            # 重置所有节点的状态为空闲，清除上次运行遗留的状态
             for item in self.scene.get_all_node_items():
                 item.set_state(NodeState.IDLE)
+                nd = item.node_data
+                if nd and hasattr(nd, '_last_error'):
+                    del nd._last_error
             # 执行工作流
             self._workflow.execute()
 

@@ -3325,9 +3325,6 @@ class MainWindow(QMainWindow):
             self._diagram_status_strip.set_status(f"{label} · 用时: {elapsed}", "#4caf50")
             # 更新结果区状态栏
             self._side_status_strip.set_status("结果区已更新", "#4caf50")
-            # 刷新所有节点状态（作为备选，以防个别节点的信号丢失）
-            if self._diagram_editor:
-                self._diagram_editor.refresh_all_node_states()
             # 在连续执行期间保持停止按钮启用
             if getattr(self, '_continuous_mode', False):
                 self._refresh_command_states(project_service.current_project)
@@ -3363,9 +3360,6 @@ class MainWindow(QMainWindow):
             self._diagram_status_strip.set_status(f"流程图错误：{msg}", "#f44336")
             # 更新结果区状态栏
             self._side_status_strip.set_status("结果区收到错误消息", "#f44336")
-            # 刷新所有节点状态（备选）
-            if self._diagram_editor:
-                self._diagram_editor.refresh_all_node_states()
         # 如果事务停止
         elif event == "stopped":
             # 关闭连续模式

@@ -53,11 +53,13 @@ class ConditionEditorDialog(QDialog):
         self._input_nodes: list[tuple[str, str]] = [
             (f"自身 [{node.node_id}]", node.node_id)
         ]
+        # 直接上游节点（前缀 → 区分于其他节点）
         for n in node.from_node_datas:
             if n.node_id not in input_seen:
                 input_seen.add(n.node_id)
-                label = f"{n.name or type(n).__name__} [{n.node_id}]"
+                label = f"→ {n.name or type(n).__name__} [{n.node_id}]"
                 self._input_nodes.append((label, n.node_id))
+        # 其他节点（间接/无关，无前缀）
         for n in all_nodes:
             if n.node_id not in input_seen:
                 input_seen.add(n.node_id)

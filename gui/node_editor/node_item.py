@@ -390,24 +390,17 @@ class NodeItem(QGraphicsObject):
         self.update()
 
     def update_from_node(self):
-        """从节点数据更新节点状态"""
-        # 判断节点数据是否为视觉节点类型
+        """从节点数据更新节点状态（仅对本次运行已执行的节点生效）"""
         if isinstance(self.node_data, VisionNodeData):
-            # 获取节点消息，如果为空则设为空字符串
+            # 只有本轮执行过的节点才有 _last_error（由 _invoke_action 设置）
+            if not hasattr(self.node_data, '_last_error'):
+                self.update()
+                return
             msg = self.node_data.message or ""
-            # 如果节点有_last_error属性且为真（表示有错误）
-            if hasattr(self.node_data, '_last_error') and self.node_data._last_error:
-                # 设置状态为错误
+            if self.node_data._last_error or "错误" in msg or "失败" in msg or "未匹配" in msg:
                 self.set_state(NodeState.ERROR)
-            # 如果消息中包含"错误"字样
-            elif "错误" in msg:
-                # 设置状态为错误
-                self.set_state(NodeState.ERROR)
-            # 如果消息不为空（表示执行完成有输出）
             elif msg:
-                # 设置状态为已完成
                 self.set_state(NodeState.COMPLETED)
-        # 触发重绘
         self.update()
 
     # ── 边界计算 ──────────────────────────────────────────────────────────────
@@ -513,13 +506,11 @@ class NodeItem(QGraphicsObject):
 
     def _resolve_state_color(self) -> QColor:
         """左侧条的状态颜色——硬编码，与主题无关"""
-        # 如果状态为运行中
+        # 运行中 — 蓝色，与成功绿色区分
         if self._state == NodeState.RUNNING:
-            # 返回绿色
-            return QColor("#67C23A")
-        # 如果状态为已完成
+            return QColor("#409EFF")
+        # 已完成 — 绿色，只有真正运行成功才是绿色
         if self._state == NodeState.COMPLETED:
-            # 返回绿色
             return QColor("#67C23A")
         # 如果状态为错误
         if self._state == NodeState.ERROR:
@@ -542,10 +533,9 @@ class NodeItem(QGraphicsObject):
         if self._state == NodeState.ERROR:
             # 返回红色，线宽2.0
             return QColor("#DC000C"), 2.0
-        # 如果状态为运行中
+        # 运行中 — 蓝色边框
         if self._state == NodeState.RUNNING:
-            # 返回绿色，线宽2.0
-            return QColor("#67C23A"), 2.0
+            return QColor("#409EFF"), 2.0
         # 如果状态为已完成
         if self._state == NodeState.COMPLETED:
             # 返回绿色，线宽2.0
