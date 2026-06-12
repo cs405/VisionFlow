@@ -54,7 +54,7 @@ class OrbFeatureMatchingNode(OpenCVTemplateMatchingNodeBase):
 
         template = self._require_template(mat)
         if template is None:
-            return self.error(mat, "未设置模板图片，输出原图")
+            return self.error(None, "未设置模板图片，输出原图")
 
         # ORB 检测
         orb = cv2.ORB_create(nfeatures=self.n_features)
@@ -62,7 +62,7 @@ class OrbFeatureMatchingNode(OpenCVTemplateMatchingNodeBase):
         kp2, des2 = orb.detectAndCompute(mat, None)
 
         if des1 is None or des2 is None or len(des1) == 0 or len(des2) == 0:
-            return self.error(mat, "无法提取特征点")
+            return self.error(None, "无法提取特征点")
 
         # BFMatcher 暴力匹配
         bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
@@ -70,7 +70,7 @@ class OrbFeatureMatchingNode(OpenCVTemplateMatchingNodeBase):
         good = sorted(matches, key=lambda x: x.distance)[:self.good_match_count]
 
         if len(good) < 4:
-            return self.error(mat, f"匹配点不足 ({len(good)} < 4)，无法计算 Homography")
+            return self.error(None, f"匹配点不足 ({len(good)} < 4)，无法计算 Homography")
 
         # Homography
         src_pts = np.float32([kp1[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
@@ -104,4 +104,4 @@ class OrbFeatureMatchingNode(OpenCVTemplateMatchingNodeBase):
         if self.matched:
             return self.ok(out, msg)
         else:
-            return self.error(out, msg)
+            return self.error(None, msg)

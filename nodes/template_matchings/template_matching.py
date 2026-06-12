@@ -58,7 +58,7 @@ class TemplateMatchingNode(OpenCVTemplateMatchingNodeBase):
 
         template = self._require_template(mat)
         if template is None:
-            return self.error(mat, "未设置模板图片，输出原图")
+            return self.error(None, "未设置模板图片，输出原图")
 
         method = MATCH_MODES.get(self.match_mode, cv2.TM_CCOEFF_NORMED)
         result = cv2.matchTemplate(mat, template, method)
@@ -84,7 +84,7 @@ class TemplateMatchingNode(OpenCVTemplateMatchingNodeBase):
         msg = f"错误: 未匹配 (最高置信度: {max_val:.3f} < {self.threshold})"
         if max_val >= self.threshold and not (self.min_area <= tpl_area <= self.max_area):
             msg += " (面积过滤未通过)"
-        return self.error(mat, msg)
+        return self.error(None, msg)
 
 
 # 向后兼容别名

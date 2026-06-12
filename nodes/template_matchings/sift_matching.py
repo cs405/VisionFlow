@@ -42,7 +42,7 @@ class SiftFeatureMatchingNode(OpenCVTemplateMatchingNodeBase):
             return self.error(None, "无输入图像")
         template = self._require_template(mat)
         if template is None:
-            return self.error(mat, "未设置模板图片，输出原图")
+            return self.error(None, "未设置模板图片，输出原图")
         gray1 = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY) if template.ndim == 3 else template
         gray2 = cv2.cvtColor(mat, cv2.COLOR_BGR2GRAY) if mat.ndim == 3 else mat
         sift = cv2.SIFT_create(nfeatures=self.n_features or None, nOctaveLayers=self.n_octave_layers,
@@ -50,7 +50,7 @@ class SiftFeatureMatchingNode(OpenCVTemplateMatchingNodeBase):
         kp1, des1 = sift.detectAndCompute(gray1, None)
         kp2, des2 = sift.detectAndCompute(gray2, None)
         if des1 is None or des2 is None or len(des1) == 0 or len(des2) == 0:
-            return self.error(mat, "无法提取特征点")
+            return self.error(None, "无法提取特征点")
         good = self._match(des1, des2)
         out = mat.copy()
         match_rect = self._get_homography_rect(out, template, kp1, kp2, good)
@@ -69,7 +69,7 @@ class SiftFeatureMatchingNode(OpenCVTemplateMatchingNodeBase):
         if self.matched:
             return self.ok(out, msg)
         else:
-            return self.error(out, msg)
+            return self.error(None, msg)
 
     def _match(self, des1, des2) -> list:
         mt = MatcherType(self.matcher_type)

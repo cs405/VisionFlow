@@ -101,7 +101,7 @@ class DrawContoursNode(OpenCVNodeDataBase):
         contours, _ = cv2.findContours(thresh_gray, cv2.RETR_EXTERNAL,
                                         cv2.CHAIN_APPROX_SIMPLE)
         if not contours:
-            return self.error(draw_canvas, "未检测到轮廓")
+            return self.error(None, "未检测到轮廓")
 
         h, w = draw_canvas.shape[:2]
         ml, mr = self.margin_left, self.margin_right
@@ -126,7 +126,7 @@ class DrawContoursNode(OpenCVNodeDataBase):
             candidates.append((c, area, (x, y, bw, bh)))
 
         if not candidates:
-            return self.error(draw_canvas, f"过滤后无轮廓 (面积/边缘限制)")
+            return self.error(None, f"过滤后无轮廓 (面积/边缘限制)")
 
         # 按面积降序，取前 N 个
         candidates.sort(key=lambda v: v[1], reverse=True)
@@ -157,7 +157,7 @@ class DrawContoursNode(OpenCVNodeDataBase):
             return self.ok(canvas, f"绘制 {count} 个轮廓框（满足目标 {self.target_count}）" if self.target_count > 0
                            else f"绘制 {count} 个轮廓框")
         else:
-            return self.error(canvas, f"绘制 {count}/{self.target_count} 个轮廓框（未满足目标）" if self.target_count > 0
+            return self.error(None, f"绘制 {count}/{self.target_count} 个轮廓框（未满足目标）" if self.target_count > 0
                               else f"绘制 {count} 个轮廓框")
 
     # ── 绘制画布解析 ──
