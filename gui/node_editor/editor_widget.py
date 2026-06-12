@@ -599,9 +599,15 @@ class DiagramEditorWidget(QWidget):
                 nd = item.node_data
                 if nd is not None and hasattr(nd, '_last_error'):
                     del nd._last_error
-            # 2) 执行工作流（阻塞主线程）
+            # 2) 清空状态队列中的残留事件
+            while not self._state_queue.empty():
+                try: self._state_queue.get_nowait()
+                except: break
+            # 3) 执行工作流（阻塞主线程）
             self._workflow.execute()
-            # 3) 执行完毕：直接同步所有 NodeItem 状态（不依赖事件队列）
+            # 4) 先处理事件队列（让 NODE_ERROR/NODE_COMPLETED 更新到 NodeItem）
+            self._drain_state_queue()
+            # 5) 再以 _last_error 为准做最终同步（事件可能丢失，_last_error 是权威来源）
             self._sync_states_from_data()
 
     def _on_stop(self):
