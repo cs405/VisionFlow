@@ -1203,9 +1203,8 @@ class ROINodeData(VisionNodeData):
 
         # 根据图像源模式确定有效的输入图像
         if from_data is not None and from_data.mat is not None:
-            # 如果节点有 image_source_mode 属性且设置为"原图"，使用原始图像
             if hasattr(self, 'image_source_mode') and self.image_source_mode == "原图":
-                input_mat = self._original_mat if self._original_mat is not None else from_data.mat
+                input_mat = self._original_mat
             else:
                 input_mat = from_data.mat
         else:
@@ -1230,22 +1229,9 @@ class ROINodeData(VisionNodeData):
             h_img, w_img = input_mat.shape[:2]
             x, y = max(0, x), max(0, y)
             w, h = min(w, w_img - x), min(h, h_img - y)
-
-            # 设置预处理输入为ROI裁剪区域（不修改 from_data._mat）
             self._prepared_input = input_mat[y:y+h, x:x+w]
-            # 调用父类执行核心处理
             result = super().invoke(previors, diagram)
             self._prepared_input = None
-
-            # 将处理后的结果贴回完整输入图像
-            if self.mat is not None and self.mat.shape[:2] == (h, w):
-                try:
-                    full_result = input_mat.copy()
-                    full_result[y:y+h, x:x+w] = self.mat
-                    self._mat = full_result
-                    self._update_result_image_source()
-                except (ValueError, IndexError):
-                    pass  # 通道不匹配（如BGR→灰度），保持原始结果
         else:
             # 无ROI时的处理
             if from_data is not None and input_mat is not from_data.mat:
