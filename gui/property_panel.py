@@ -1389,13 +1389,8 @@ class PropertyPanel(QWidget):
         layout.addWidget(summary)
 
         def refresh_state():
-            """刷新状态"""
-            # 更新摘要文本
             summary.setText(self._format_roi_text(node))
-            # 编辑按钮在FromROI模式下禁用
             edit_btn.setEnabled(not isinstance(node.roi, FromROI))
-            # 更新ROI叠加层
-            self._update_roi_overlay(node)
 
         def change_mode(index: int):
             """模式改变"""
@@ -1415,10 +1410,9 @@ class PropertyPanel(QWidget):
                 return
             # 保存旧值快照
             old_value = self._snapshot_roi_value(node)
-            # 打开ROI编辑器
             rect = RoiEditorDialog.edit_roi(
                 image=self._get_current_image(),
-                rect=node.get_active_roi_rect(),
+                rect=node.get_active_roi_rect() or None,
                 parent=self,
             )
             # 如果取消，返回
@@ -1426,9 +1420,7 @@ class PropertyPanel(QWidget):
                 return
             # 如果是DrawROI或NoROI模式
             if isinstance(node.roi, (DrawROI, NoROI)):
-                # 设置DrawROI的矩形
                 node.draw_roi.rect = tuple(rect)
-                # 切换到DrawROI模式
                 node.roi = node.draw_roi
             # 如果是InputROI模式
             elif isinstance(node.roi, InputROI):

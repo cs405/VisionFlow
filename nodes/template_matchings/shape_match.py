@@ -37,8 +37,16 @@ class ShapeModel:
         self.h, self.w = img.shape[:2]
         xfeat = _get_xfeat(top_k)
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) == 3 else img
-        tensor = torch.from_numpy(gray.copy()).float()[None, None] / 255.0
-        self._feat = xfeat.detectAndCompute(tensor, detection_threshold=0.0)[0]
+        # 确保数据类型和设备与 XFeat 模型一致
+        tensor = torch.from_numpy(
+            gray.astype(np.float32).copy()
+        ).float()[None, None] / 255.0
+        tensor = tensor.to(xfeat.dev)
+        try:
+            self._feat = xfeat.detectAndCompute(tensor, detection_threshold=0.05)[0]
+        except Exception:
+            # 回退：用更低阈值重试
+            self._feat = xfeat.detectAndCompute(tensor, detection_threshold=0.0)[0]
         self._feat = {k: v.cpu() for k, v in self._feat.items()}
 
     @property
@@ -59,7 +67,7 @@ def find_shape_match(img, model, ratio_thresh=0.82, min_inliers=10,
         return []
     xfeat = _get_xfeat()
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) == 3 else img
-    t = torch.from_numpy(gray.copy()).float()[None, None] / 255.0
+    t = (torch.from_numpy(gray.astype(np.float32).copy()).float()[None, None] / 255.0).to(xfeat.dev)
     cur = xfeat.detectAndCompute(t, detection_threshold=0.0)[0]
     cur = {k: v.cpu() for k, v in cur.items()}
 
@@ -109,8 +117,8 @@ class ShapeTemplateMatchingNode(Base64MatchingNodeData, OpenCVNodeDataBase,
     __group__ = "模板匹配模块"
     template_image = Property("", name="模板图片", group=PropertyGroupNames.RUN_PARAMETERS,
                               editor="crop", order=1000)
-    ratio_thresh = Property(82, name="MNN阈值(%)", group=PropertyGroupNames.RUN_PARAMETERS,
-                            min_val=50, max_val=99, step=1)
+    ratio_thresh = Property(80, name="MNN阈值(%)", group=PropertyGroupNames.RUN_PARAMETERS,
+                            min_val=1, max_val=99, step=1)
     min_inliers = Property(10, name="最少内点数", group=PropertyGroupNames.RUN_PARAMETERS,
                            min_val=4, max_val=500)
     ransac_thresh = Property(4.0, name="RANSAC阈值(px)", group=PropertyGroupNames.RUN_PARAMETERS,

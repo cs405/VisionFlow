@@ -50,9 +50,8 @@ class SrcImageFilesNodeData(SrcFilesVisionNodeData, OpenCVNodeDataBase):
         self.pixel_width = mat.shape[1]
         # 记录图像高度（像素）
         self.pixel_height = mat.shape[0]
-        # 记录图像颜色类型（数据类型）
         self.image_color_type = mat.dtype.type.__name__ if hasattr(mat.dtype, 'type') else str(mat.dtype)
-        # 返回成功结果
+        self._original_mat = mat.copy()  # 全图原图，供下游"原图"模式使用
         return self.ok(mat, f"已加载: {os.path.basename(path)}")
 
     def _update_result_image_source(self):

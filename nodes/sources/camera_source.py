@@ -3,7 +3,8 @@
 import cv2
 import numpy as np
 
-from core.node_base import OpenCVNodeDataBase, SrcFilesVisionNodeData, Property, PropertyGroupNames
+from core.node_base import (OpenCVNodeDataBase, SrcFilesVisionNodeData,
+                            Property, PropertyGroupNames, NoROI)
 from core.data_packet import FlowableResult
 from core.workflow import WorkflowEngine
 from core.events import EventType, event_system
@@ -83,14 +84,18 @@ class CameraCaptureNodeData(SrcFilesVisionNodeData, OpenCVNodeDataBase):
             return self.error(None, f"无法打开摄像头 {self.camera_index}")
         # 从持续打开的摄像头读取最新一帧
         ret, frame = cap.read()
-        # 如果读取失败
         if not ret:
             return self.error(None, f"无法从摄像头 {self.camera_index} 读取帧")
-        # 记录图像宽度（像素）
         self.pixel_width = frame.shape[1]
-        # 记录图像高度（像素）
         self.pixel_height = frame.shape[0]
-        # 返回成功结果
+        # 保存全帧作为"原图"，供下游节点 image_source_mode="原图" 时使用
+        self._original_mat = frame.copy()
+        # 应用 ROI 裁剪（仅在用户实际绘制了有效 ROI 时）
+        if not isinstance(self.roi, NoROI):
+            rect = self.get_active_roi_rect()
+            if rect is not None and len(rect) == 4 and rect[2] > 0 and rect[3] > 0:
+                x, y, w, h = int(rect[0]), int(rect[1]), int(rect[2]), int(rect[3])
+                frame = frame[y:y+h, x:x+w]
         return self.ok(frame, "摄像头捕获")
 
     def _update_result_image_source(self):

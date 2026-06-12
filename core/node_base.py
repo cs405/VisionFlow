@@ -1080,12 +1080,9 @@ class DrawROI(ROIBase):
     """在图像上交互式绘制的ROI区域。"""
 
     def __init__(self):
-        # 调用父类构造函数，设置ROI名称为"绘制ROI"
         super().__init__("绘制ROI")
-        # 图像源（用于显示图像以供绘制）
         self.image_source: Any = None
-        # ROI矩形区域：(x, y, width, height)
-        self.rect: tuple = (0, 0, 100, 100)
+        self.rect: tuple | None = None  # None=未绘制，等用户在编辑器中画
 
     def to_dict(self) -> dict:
         """序列化为字典"""
@@ -1279,7 +1276,10 @@ class ROINodeData(VisionNodeData):
         if isinstance(self._roi, NoROI):
             self._roi = self.no_roi
         elif isinstance(self._roi, DrawROI):
-            self.draw_roi.rect = tuple(self._roi.rect)
+            r = tuple(self._roi.rect) if self._roi.rect else None
+            if r == (0, 0, 100, 100):
+                r = None  # 忽略旧版预设值
+            self.draw_roi.rect = r
             self._roi = self.draw_roi
         elif isinstance(self._roi, InputROI):
             self.input_roi.x = int(self._roi.x)
