@@ -148,17 +148,17 @@ class ShapeTemplateMatchingNode(Base64MatchingNodeData, OpenCVNodeDataBase,
             return self.error(None, "无输入图像")
         template = self.get_template_image()
         if template is None:
-            return self.ok(mat, "未设置模板图片，输出原图")
+            return self.error(mat, "未设置模板图片，输出原图")
 
         if self._model is None or self._model_b64 != self.base64_string:
             try:
                 self._model = ShapeModel(template, self.top_k)
             except Exception as e:
-                return self.ok(mat, f"特征提取失败: {e}")
+                return self.error(mat, f"特征提取失败: {e}")
             self._model_b64 = self.base64_string
 
         if self._model is None:
-            return self.ok(mat, "模板无效")
+            return self.error(mat, "模板无效")
 
         try:
             results = find_shape_match(mat, self._model,
@@ -167,7 +167,7 @@ class ShapeTemplateMatchingNode(Base64MatchingNodeData, OpenCVNodeDataBase,
                                        self.ransac_thresh,
                                        self.max_matches)
         except Exception as e:
-            return self.ok(mat, f"匹配异常: {e}")
+            return self.error(mat, f"匹配异常: {e}")
 
         out = mat.copy()
         best = 0.0
@@ -185,7 +185,10 @@ class ShapeTemplateMatchingNode(Base64MatchingNodeData, OpenCVNodeDataBase,
         self.confidence = best
         self.matched = len(results) > 0
         self.match_x, self.match_y, self.match_w, self.match_h = best_rect
-        return self.ok(out, f"匹配 {len(results)} 处 (最高: {best:.0f})")
+        if self.matched:
+            return self.ok(out, f"匹配 {len(results)} 处 (最高: {best:.0f})")
+        else:
+            return self.error(out, f"未匹配到目标")
 
     def _update_result_image_source(self):
         self._result_image_source = self._mat
