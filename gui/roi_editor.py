@@ -84,12 +84,9 @@ class RoiEditorDialog(QDialog):
         # 设置输入框范围
         self._set_spin_ranges(image)
 
-        # 如果提供了初始矩形，设置矩形
+        # 如果提供了初始矩形，设置矩形；否则不预设，等待用户自行框选
         if rect:
             self.set_rect(rect, angle)
-        else:
-            # 否则使用整图
-            self._use_full_image()
 
     def _setup_ui(self):
         """设置UI界面"""

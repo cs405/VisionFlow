@@ -50,6 +50,11 @@ class HSVBlobMatchingNode(OpenCVNodeDataBase, ITemplateMatchingGroupableNode):
     # ── 结果参数 ──
     blob_count = Property(0, name="Blob数量", group=PropertyGroupNames.RESULT_PARAMETERS,
                           readonly=True)
+    matched = Property(False, name="是否匹配", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)
+    match_x = Property(0, name="匹配X", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)
+    match_y = Property(0, name="匹配Y", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)
+    match_w = Property(0, name="匹配宽度", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)
+    match_h = Property(0, name="匹配高度", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)
 
     def __init__(self):
         super().__init__()
@@ -102,6 +107,8 @@ class HSVBlobMatchingNode(OpenCVNodeDataBase, ITemplateMatchingGroupableNode):
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
         mat = self.get_input_mat(from_node.mat if from_node else None)
+        self.matched = False
+        self.match_x = self.match_y = self.match_w = self.match_h = 0
         if mat is None:
             return self.error(None, "无输入图像")
 
@@ -119,6 +126,14 @@ class HSVBlobMatchingNode(OpenCVNodeDataBase, ITemplateMatchingGroupableNode):
         cv2.drawContours(out, filtered, -1, (0, 255, 0), 2)
 
         self.blob_count = len(filtered)
+        self.matched = len(filtered) > 0
+        if filtered:
+            # 取最大 blob 的包围矩形
+            largest = max(filtered, key=cv2.contourArea)
+            x, y, bw, bh = cv2.boundingRect(largest)
+            self.match_x, self.match_y, self.match_w, self.match_h = x, y, bw, bh
+        else:
+            self.match_x = self.match_y = self.match_w = self.match_h = 0
         return self.ok(out, f"发现 {len(filtered)} 个Blob")
 
     def _update_result_image_source(self):

@@ -51,6 +51,8 @@ class TemplateMatchingNode(OpenCVTemplateMatchingNodeBase):
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
         mat = self.get_input_mat(from_node.mat if from_node else None)
+        self.matched = False
+        self.match_x = self.match_y = self.match_w = self.match_h = 0
         if mat is None:
             return self.error(None, "无输入图像")
 
@@ -70,10 +72,15 @@ class TemplateMatchingNode(OpenCVTemplateMatchingNodeBase):
                          (0, 255, 0), 2)
             self.matching_count_result = 1
             self.confidence = float(max_val)
+            self.matched = True
+            self.match_x, self.match_y = max_loc
+            self.match_w, self.match_h = w, h
             return self.ok(out, f"匹配成功 置信度: {max_val:.3f}")
 
         self.matching_count_result = 0
         self.confidence = 0.0
+        self.matched = False
+        self.match_x = self.match_y = self.match_w = self.match_h = 0
         msg = f"未匹配 (最高置信度: {max_val:.3f} < {self.threshold})"
         if max_val >= self.threshold and not (self.min_area <= tpl_area <= self.max_area):
             msg += " (面积过滤未通过)"

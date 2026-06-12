@@ -47,6 +47,8 @@ class OrbFeatureMatchingNode(OpenCVTemplateMatchingNodeBase):
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
         mat = self.get_input_mat(from_node.mat if from_node else None)
+        self.matched = False
+        self.match_x = self.match_y = self.match_w = self.match_h = 0
         if mat is None:
             return self.error(None, "无输入图像")
 
@@ -78,17 +80,20 @@ class OrbFeatureMatchingNode(OpenCVTemplateMatchingNodeBase):
 
         out = mat.copy()
         matched = False
+        match_x = match_y = match_w = match_h = 0
         if homography is not None:
             h, w = template.shape[:2]
             corners = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
             transformed = cv2.perspectiveTransform(corners, homography)
             pts = np.int32(transformed)
-            x, y, rw, rh = cv2.boundingRect(pts)
-            area = rw * rh
+            match_x, match_y, match_w, match_h = cv2.boundingRect(pts)
+            area = match_w * match_h
             if self.min_area <= area <= self.max_area:
-                cv2.rectangle(out, (x, y), (x + rw, y + rh), (0, 255, 0), 2)
+                cv2.rectangle(out, (match_x, match_y), (match_x + match_w, match_y + match_h), (0, 255, 0), 2)
                 matched = True
 
+        self.matched = matched
+        self.match_x, self.match_y, self.match_w, self.match_h = match_x, match_y, match_w, match_h
         self.match_count = len(matches)
         self.matching_count_result = len(good)
         inliers = int(np.sum(mask)) if mask is not None else 0

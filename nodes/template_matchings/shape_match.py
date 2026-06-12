@@ -142,6 +142,8 @@ class ShapeTemplateMatchingNode(Base64MatchingNodeData, OpenCVNodeDataBase,
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
         mat = self.get_input_mat(from_node.mat if from_node else None)
+        self.matched = False
+        self.match_x = self.match_y = self.match_w = self.match_h = 0
         if mat is None:
             return self.error(None, "无输入图像")
         template = self.get_template_image()
@@ -169,15 +171,20 @@ class ShapeTemplateMatchingNode(Base64MatchingNodeData, OpenCVNodeDataBase,
 
         out = mat.copy()
         best = 0.0
+        best_rect = (0, 0, 0, 0)
         for r in results:
             best = max(best, r["score"])
             x, y, bw, bh = int(r["x"]), int(r["y"]), int(r["w"]), int(r["h"])
+            if r["score"] >= best:
+                best_rect = (x, y, bw, bh)
             cv2.rectangle(out, (x, y), (x + bw, y + bh), (0, 255, 0), 2)
             cv2.putText(out, f"{r['score']:.0f}% in:{r['inliers']}",
                         (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
 
         self.matching_count_result = len(results)
         self.confidence = best
+        self.matched = len(results) > 0
+        self.match_x, self.match_y, self.match_w, self.match_h = best_rect
         return self.ok(out, f"匹配 {len(results)} 处 (最高: {best:.0f})")
 
     def _update_result_image_source(self):

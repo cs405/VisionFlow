@@ -36,6 +36,8 @@ class SiftFeatureMatchingNode(OpenCVTemplateMatchingNodeBase):
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
         mat = self.get_input_mat(from_node.mat if from_node else None)
+        self.matched = False
+        self.match_x = self.match_y = self.match_w = self.match_h = 0
         if mat is None:
             return self.error(None, "无输入图像")
         template = self._require_template(mat)
@@ -51,12 +53,18 @@ class SiftFeatureMatchingNode(OpenCVTemplateMatchingNodeBase):
             return self.ok(mat, "无法提取特征点")
         good = self._match(des1, des2)
         out = mat.copy()
-        matched = self._draw_homography_rect(out, template, kp1, kp2, good)
+        match_rect = self._get_homography_rect(out, template, kp1, kp2, good)
         self.feature_count_result = len(kp1)
         self.matching_count_result = len(good)
         self.confidence = len(good) / max(len(kp1), 1)
+        if match_rect is not None:
+            self.matched = True
+            self.match_x, self.match_y, self.match_w, self.match_h = match_rect
+        else:
+            self.matched = False
+            self.match_x = self.match_y = self.match_w = self.match_h = 0
         msg = f"SIFT匹配 {len(good)}/{len(kp1)} 个特征点"
-        if not matched and len(good) >= 4:
+        if not match_rect and len(good) >= 4:
             msg += " (面积过滤未通过)"
         return self.ok(out, msg)
 
@@ -74,22 +82,22 @@ class SiftFeatureMatchingNode(OpenCVTemplateMatchingNodeBase):
             knn = flann.knnMatch(des1, des2, k=2)
             return [m for m, n in knn if m.distance < 0.75 * n.distance]
 
-    def _draw_homography_rect(self, out, template, kp1, kp2, good) -> bool:
+    def _get_homography_rect(self, out, template, kp1, kp2, good) -> tuple | None:
         if len(good) < 4:
-            return False
+            return None
         src_pts = np.float32([kp1[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
         dst_pts = np.float32([kp2[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
         H, _ = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
         if H is None:
-            return False
+            return None
         h, w = template.shape[:2]
         corners = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
         transformed = cv2.perspectiveTransform(corners, H)
         x, y, rw, rh = cv2.boundingRect(np.int32(transformed))
         if self.min_area <= rw * rh <= self.max_area:
             cv2.rectangle(out, (x, y), (x + rw, y + rh), (0, 255, 0), 2)
-            return True
-        return False
+            return (x, y, rw, rh)
+        return None
 
 
 SiftBase64FeatureMatchingNode = SiftFeatureMatchingNode

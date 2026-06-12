@@ -3041,11 +3041,6 @@ class MainWindow(QMainWindow):
         else:
             self._img_panel.set_image(None)
 
-        # 更新ROI矩形
-        if isinstance(node, ROINodeData):
-            self._img_panel.set_roi_rect(node.get_active_roi_rect(), label=node.roi.name)
-        else:
-            self._img_panel.clear_roi_rect()
 
         # 更新状态栏
         if node is not None:
@@ -3185,10 +3180,6 @@ class MainWindow(QMainWindow):
         """
         # 如果有选中的节点
         if self._selected_node:
-            # 如果是ROI节点，更新ROI矩形
-            if isinstance(self._selected_node, ROINodeData):
-                self._img_panel.set_roi_rect(self._selected_node.get_active_roi_rect(),
-                                             label=self._selected_node.roi.name)
             # 发布节点属性变化事件
             event_system.publish(EventType.NODE_PROPERTY_CHANGED, sender=self._selected_node, name=name, old=old,
                                  new=new)
