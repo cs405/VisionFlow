@@ -593,14 +593,16 @@ class DiagramEditorWidget(QWidget):
     def _on_run(self):
         """运行工作流"""
         if self._workflow:
-            # 重置所有节点的状态为空闲，清除上次运行遗留的状态
+            # 1) 重置所有节点为 IDLE，清除上次运行残留的 _last_error
             for item in self.scene.get_all_node_items():
                 item.set_state(NodeState.IDLE)
                 nd = item.node_data
-                if nd and hasattr(nd, '_last_error'):
+                if nd is not None and hasattr(nd, '_last_error'):
                     del nd._last_error
-            # 执行工作流
+            # 2) 执行工作流（阻塞主线程）
             self._workflow.execute()
+            # 3) 执行完毕：直接同步所有 NodeItem 状态（不依赖事件队列）
+            self._sync_states_from_data()
 
     def _on_stop(self):
         """停止工作流"""
@@ -614,23 +616,14 @@ class DiagramEditorWidget(QWidget):
 
     def _on_run_step(self):
         """单步执行当前选中的节点"""
-        # 获取场景中选中的节点数据
         nd = self.scene.get_selected_node_data()
-        # 如果存在选中的节点且是视觉节点，并且有工作流
         if nd and isinstance(nd, VisionNodeData) and self._workflow:
-            # 获取节点的图形项
             item = self.scene.get_node_item(nd.node_id)
-            # 如果图形项存在，设置状态为运行中
             if item:
                 item.set_state(NodeState.RUNNING)
-            # 执行单步执行
             self._workflow.execute_step(nd.node_id)
-            # 重新获取图形项（可能被刷新）
-            item = self.scene.get_node_item(nd.node_id)
-            # 如果图形项存在，从节点数据更新显示
-            if item:
-                item.update_from_node()
-            # 发出状态消息
+            # 直接同步状态，不依赖事件队列
+            self._sync_states_from_data()
             self.scene.status_message.emit(f"单步执行: {nd.name}")
 
     def _on_undo(self):
@@ -776,6 +769,25 @@ class DiagramEditorWidget(QWidget):
         if sender is self._subscribed_workflow:
             # 将所有节点状态设为"idle"放入队列
             self._state_queue.put(("__all__", "idle"))
+
+    def _sync_states_from_data(self):
+        """执行完毕后直接同步：从节点数据 _last_error 设置 NodeItem 状态。
+
+        参照 WPF-VisionMaster：状态存储在数据对象上，执行完成后直接读取。
+        不依赖事件队列（主线程阻塞期间事件无法被定时器处理）。
+        """
+        from core.node_base import VisionNodeData
+        for item in self.scene.get_all_node_items():
+            nd = item.node_data
+            if not isinstance(nd, VisionNodeData):
+                continue
+            if not hasattr(nd, '_last_error'):
+                # 未执行过的节点保持 IDLE
+                continue
+            if nd._last_error:
+                item.set_state(NodeState.ERROR)
+            else:
+                item.set_state(NodeState.COMPLETED)
 
     def refresh_all_node_states(self):
         """同步所有节点项的视觉状态到模型状态
