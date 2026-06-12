@@ -44,8 +44,14 @@ class DrawContoursNode(OpenCVNodeDataBase):
                         min_val=0, description="面积小于此值的轮廓忽略")
     max_area = Property(999999, name="最大面积", group=PropertyGroupNames.RUN_PARAMETERS,
                         min_val=0, description="面积大于此值的轮廓忽略")
-    edge_margin = Property(0, name="边缘忽略(px)", group=PropertyGroupNames.RUN_PARAMETERS,
-                           min_val=0, description="距边缘多少像素内的轮廓忽略，0=不忽略")
+    margin_left = Property(0, name="忽略左边缘(px)", group=PropertyGroupNames.RUN_PARAMETERS,
+                           min_val=0, description="距左边缘多少像素内的轮廓忽略，0=不忽略")
+    margin_right = Property(0, name="忽略右边缘(px)", group=PropertyGroupNames.RUN_PARAMETERS,
+                            min_val=0, description="距右边缘多少像素内的轮廓忽略，0=不忽略")
+    margin_top = Property(0, name="忽略上边缘(px)", group=PropertyGroupNames.RUN_PARAMETERS,
+                          min_val=0, description="距上边缘多少像素内的轮廓忽略，0=不忽略")
+    margin_bottom = Property(0, name="忽略下边缘(px)", group=PropertyGroupNames.RUN_PARAMETERS,
+                             min_val=0, description="距下边缘多少像素内的轮廓忽略，0=不忽略")
     target_count = Property(0, name="目标数量", group=PropertyGroupNames.RUN_PARAMETERS,
                             min_val=0, description="期望绘制的矩形框数量，0=不限制")
 
@@ -98,21 +104,25 @@ class DrawContoursNode(OpenCVNodeDataBase):
             return self.error(draw_canvas, "未检测到轮廓")
 
         h, w = draw_canvas.shape[:2]
-        margin = self.edge_margin
-        margin_r = w - margin
-        margin_b = h - margin
+        ml, mr = self.margin_left, self.margin_right
+        mt, mb = self.margin_top, self.margin_bottom
 
-        # 过滤：面积 + 边缘距离
+        # 过滤：面积 + 四边边缘距离
         candidates: list[tuple[np.ndarray, float, tuple]] = []
         for c in contours:
             area = cv2.contourArea(c)
             if area < self.min_area or area > self.max_area:
                 continue
             x, y, bw, bh = cv2.boundingRect(c)
-            # 边缘忽略
-            if margin > 0:
-                if x < margin or y < margin or x + bw > margin_r or y + bh > margin_b:
-                    continue
+            # 四边边缘忽略
+            if ml > 0 and x < ml:
+                continue
+            if mr > 0 and x + bw > w - mr:
+                continue
+            if mt > 0 and y < mt:
+                continue
+            if mb > 0 and y + bh > h - mb:
+                continue
             candidates.append((c, area, (x, y, bw, bh)))
 
         if not candidates:
@@ -123,10 +133,12 @@ class DrawContoursNode(OpenCVNodeDataBase):
         if self.target_count > 0:
             candidates = candidates[:self.target_count]
 
-        # 在指定画布上绘制红色矩形框
-        out = draw_canvas.copy()
+        # 在指定画布上绘制红色矩形框（确保是 3 通道才能画红色）
+        canvas = draw_canvas.copy()
+        if len(canvas.shape) == 2:
+            canvas = cv2.cvtColor(canvas, cv2.COLOR_GRAY2BGR)
         for c, area, (x, y, bw, bh) in candidates:
-            cv2.rectangle(out, (x, y), (x + bw, y + bh), (0, 0, 255), 2)
+            cv2.rectangle(canvas, (x, y), (x + bw, y + bh), (0, 0, 255), 2)
 
         count = len(candidates)
         self.drawn_count = count
@@ -142,10 +154,10 @@ class DrawContoursNode(OpenCVNodeDataBase):
             self.match_x, self.match_y, self.match_w, self.match_h = candidates[0][2]
 
         if self.matched:
-            return self.ok(out, f"绘制 {count} 个轮廓框（满足目标 {self.target_count}）" if self.target_count > 0
+            return self.ok(canvas, f"绘制 {count} 个轮廓框（满足目标 {self.target_count}）" if self.target_count > 0
                            else f"绘制 {count} 个轮廓框")
         else:
-            return self.error(out, f"绘制 {count}/{self.target_count} 个轮廓框（未满足目标）" if self.target_count > 0
+            return self.error(canvas, f"绘制 {count}/{self.target_count} 个轮廓框（未满足目标）" if self.target_count > 0
                               else f"绘制 {count} 个轮廓框")
 
     # ── 绘制画布解析 ──
