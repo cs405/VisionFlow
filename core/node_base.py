@@ -1595,6 +1595,18 @@ class Base64MatchingNodeData(VisionNodeData):
         # 解码为彩色图像
         return cv2.imdecode(arr, cv2.IMREAD_COLOR)
 
+    # ── ROI 暴露：将匹配结果作为下游可用的 ROI ──
+
+    def get_active_roi_rect(self) -> tuple | None:
+        """如果匹配成功，返回匹配矩形作为 ROI，供下游节点"来自上游"截取。"""
+        if getattr(self, "matched", False):
+            x, y, w, h = self.match_x, self.match_y, self.match_w, self.match_h
+            if w > 0 and h > 0:
+                return (int(x), int(y), int(w), int(h))
+        return super().get_active_roi_rect()
+
+    # ── 序列化 ──
+
     def to_dict(self) -> dict:
         data = super().to_dict()
         data["base64_string"] = self._base64_string

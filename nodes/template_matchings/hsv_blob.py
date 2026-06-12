@@ -136,6 +136,14 @@ class HSVBlobMatchingNode(OpenCVNodeDataBase, ITemplateMatchingGroupableNode):
             self.match_x = self.match_y = self.match_w = self.match_h = 0
         return self.ok(out, f"发现 {len(filtered)} 个Blob")
 
+    def get_active_roi_rect(self) -> tuple | None:
+        """匹配成功时将最大 blob 包围矩形暴露为 ROI，供下游"来自上游"截取。"""
+        if self.matched:
+            x, y, w, h = self.match_x, self.match_y, self.match_w, self.match_h
+            if w > 0 and h > 0:
+                return (int(x), int(y), int(w), int(h))
+        return super().get_active_roi_rect()
+
     def _update_result_image_source(self):
         self._result_image_source = self._mat
 
