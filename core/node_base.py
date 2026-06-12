@@ -1553,6 +1553,13 @@ class Base64MatchingNodeData(VisionNodeData):
     matching_count_result = Property(0, name="匹配数量", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)
     # 置信度结果（只读）
     confidence = Property(0.0, name="置信度", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)
+    # 是否匹配到目标（只读，供条件分支使用）
+    matched = Property(False, name="是否匹配", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)
+    # 匹配矩形坐标（只读）
+    match_x = Property(0, name="匹配X", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)
+    match_y = Property(0, name="匹配Y", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)
+    match_w = Property(0, name="匹配宽度", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)
+    match_h = Property(0, name="匹配高度", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)
 
     def __init__(self):
         super().__init__()
