@@ -927,6 +927,9 @@ class VisionNodeData(DemoNodeDataBase):
         if self.diagram_data and hasattr(self.diagram_data, 'on_node_completed'):
             self.diagram_data.on_node_completed(self, state, ts)
 
+        # 记录错误状态（供 update_from_node / refresh_all_node_states 读取）
+        self._last_error = result.is_error
+
         # 发布事件
         if result.is_ok:
             event_system.publish(EventType.NODE_COMPLETED, sender=self, result=result)

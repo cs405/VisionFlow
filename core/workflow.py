@@ -586,10 +586,16 @@ class WorkflowEngine:
 
         active_link_ids = {l.link_id for l in active}
 
-        # 递归禁用非活动端口下游的所有节点
+        # 递归禁用非活动端口下游的所有节点，并发布 ERROR 状态
+        new_disabled: set[str] = set()
         for link in all_outgoing:
             if link.link_id not in active_link_ids:
-                self._disable_downstream(link.to_node_id, disabled)
+                self._disable_downstream(link.to_node_id, new_disabled)
+        disabled.update(new_disabled)
+        for nid in new_disabled:
+            node = self._nodes.get(nid)
+            if node is not None:
+                event_system.publish(EventType.NODE_ERROR, sender=node, result=None)
 
     def _disable_downstream(self, node_id: str, disabled: set[str]):
         """递归禁用节点及其所有下游节点"""
