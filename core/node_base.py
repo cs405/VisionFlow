@@ -904,10 +904,10 @@ class VisionNodeData(DemoNodeDataBase):
 
         # 如果新 mat 不是旧 mat，则释放旧 mat
         if self._mat is not None and result.value is not self._mat:
-            self._mat = None  # 旧 mat 将被 GC 回收
+            self._mat = None
 
-        # 更新当前图像和消息
-        self._mat = result.value
+        # 更新当前图像和消息（error 时不传递数据给下游）
+        self._mat = result.value if result.is_ok else None
         self.message = result.message
 
         # 更新结果图像源
