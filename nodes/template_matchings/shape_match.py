@@ -1,10 +1,7 @@
-"""基于 XFeat 的特征模板匹配。
+"""XFeat 特征模板匹配 — CVPR 2024 轻量级特征匹配。
 
-实现思路：
-1. 使用 XFeat 从模板和搜索图中提取稀疏特征点与描述符；
-2. 通过互近邻 (MNN) + 余弦相似度进行特征匹配；
-3. 通过 RANSAC 估计单应性矩阵，计算模板在搜索图中的位置；
-4. 支持旋转、缩放、透视变换的鲁棒匹配。
+基于 XFeat 稀疏特征点 + MNN 匹配 + MAGSAC 鲁棒单应性估计。
+支持旋转/缩放/透视变换，适合实时模板匹配场景。
 """
 
 import os as _os
@@ -18,59 +15,31 @@ from core.node_base import Base64MatchingNodeData, OpenCVNodeDataBase, Property,
 from core.data_packet import FlowableResult
 from nodes.template_matchings.template_base import ITemplateMatchingGroupableNode
 
-
 # ---------------------------------------------------------------------------
-# 全局模型缓存
+# 全局 XFeat 模型（单例，避免重复加载）
 # ---------------------------------------------------------------------------
-
-_global_device = None
 _global_xfeat = None
 
 
-def _get_device():
-    global _global_device
-    if _global_device is None:
-        _global_device = torch.device("cpu")
-    return _global_device
-
-
-def _get_xfeat():
+def _get_xfeat(top_k=2048):
     global _global_xfeat
     if _global_xfeat is None:
-        from kornia.feature import XFeat
-        device = _get_device()
-        _global_xfeat = XFeat().to(device).eval()
-        _global_xfeat.detection_threshold = 0.0
-        _global_xfeat.top_k = 2048
+        from nodes.modules.xfeat import XFeat
+        _global_xfeat = XFeat(top_k=top_k).eval()
     return _global_xfeat
 
 
 # ---------------------------------------------------------------------------
-# ShapeModel
+# ShapeModel — 缓存模板的 XFeat 特征
 # ---------------------------------------------------------------------------
-
 class ShapeModel:
-    """缓存模板 tensor，供 XFeat match_xfeat 使用。"""
-
-    def __init__(self, img):
-        self._device = _get_device()
+    def __init__(self, img, top_k=2048):
         self.h, self.w = img.shape[:2]
-        self._tensor = self._to_tensor(img)
-
-    def _to_tensor(self, img):
+        xfeat = _get_xfeat(top_k)
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) == 3 else img
-        if gray.dtype != np.uint8:
-            gray = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
         tensor = torch.from_numpy(gray.copy()).float()[None, None] / 255.0
-        return tensor.to(self._device)
-
-    @property
-    def device(self):
-        return self._device
-
-    @property
-    def tensor(self):
-        return self._tensor
+        self._feat = xfeat.detectAndCompute(tensor, detection_threshold=0.0)[0]
+        self._feat = {k: v.cpu() for k, v in self._feat.items()}
 
     @property
     def shape(self):
@@ -78,107 +47,78 @@ class ShapeModel:
 
     @property
     def num_pts(self):
-        return 1  # 模板总是有效（特征在匹配时提取）
+        return len(self._feat.get("keypoints", []))
 
 
 # ---------------------------------------------------------------------------
-# find_shape_match — XFeat MNN + RANSAC
+# find_shape_match — XFeat MNN + MAGSAC 单应性
 # ---------------------------------------------------------------------------
-
-def find_shape_match(img, model, min_match_dist=0.75, max_matches=5,
-                     min_inliers=8, ransac_thresh=5.0):
-    """使用 XFeat 特征 + BFMatcher ratio test + RANSAC 单应性估计。
-
-    Args:
-        img: 搜索图像 (H, W, 3) BGR
-        model: ShapeModel 实例
-        min_match_dist: ratio test 阈值 (越小越严格)
-        min_inliers: RANSAC 最少内点数
-        ransac_thresh: RANSAC 重投影误差阈值 (像素)
-
-    Returns:
-        list[dict]
-    """
+def find_shape_match(img, model, ratio_thresh=0.82, min_inliers=10,
+                     ransac_thresh=4.0, max_matches=5):
     if model is None:
         return []
-
     xfeat = _get_xfeat()
-    img_tensor = model._to_tensor(img)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) == 3 else img
+    t = torch.from_numpy(gray.copy()).float()[None, None] / 255.0
+    cur = xfeat.detectAndCompute(t, detection_threshold=0.0)[0]
+    cur = {k: v.cpu() for k, v in cur.items()}
 
-    # 提取特征
-    f0 = xfeat.detectAndCompute(model.tensor, detection_threshold=0.0)[0]
-    f1 = xfeat.detectAndCompute(img_tensor, detection_threshold=0.0)[0]
+    kpts0 = model._feat["keypoints"].numpy()
+    desc0 = model._feat["descriptors"].numpy()
+    kpts1 = cur["keypoints"].numpy()
+    desc1 = cur["descriptors"].numpy()
 
-    if len(f0["keypoints"]) < 4 or len(f1["keypoints"]) < 4:
+    if len(kpts0) < 4 or len(kpts1) < 4:
         return []
 
-    desc0 = f0["descriptors"].cpu().numpy()
-    desc1 = f1["descriptors"].cpu().numpy()
-    kpts0_np = f0["keypoints"].cpu().numpy()
-    kpts1_np = f1["keypoints"].cpu().numpy()
-
-    # BFMatcher + ratio test
-    bf = cv2.BFMatcher(cv2.NORM_L2)
-    raw = bf.knnMatch(desc0, desc1, k=2)
-    good = [m for m, n in raw if m.distance < min_match_dist * n.distance]
-
-    if len(good) < 4:
+    # MNN 匹配 (XFeat 风格)
+    idx0, idx1 = xfeat.match(model._feat["descriptors"], cur["descriptors"],
+                              ratio_thresh)
+    if len(idx0) < 4:
         return []
+    pts0 = kpts0[idx0.cpu().numpy()]
+    pts1 = kpts1[idx1.cpu().numpy()]
 
-    kpts0 = np.float32([kpts0_np[m.queryIdx] for m in good])
-    kpts1 = np.float32([kpts1_np[m.trainIdx] for m in good])
-
-    H, mask = cv2.findHomography(kpts0, kpts1, cv2.RANSAC, ransac_thresh)
+    # MAGSAC 鲁棒单应性
+    H, mask = cv2.findHomography(pts0, pts1, cv2.USAC_MAGSAC, ransac_thresh,
+                                  maxIters=700, confidence=0.995)
     if H is None or mask is None:
         return []
-
     inliers = int(mask.sum())
     if inliers < min_inliers:
         return []
 
     h, w = model.h, model.w
     corners = np.float32([[0, 0], [0, h - 1], [w - 1, h - 1], [w - 1, 0]]).reshape(-1, 1, 2)
-    transformed = cv2.perspectiveTransform(corners, H)
-    pts = transformed.reshape(-1, 2)
-
-    x, y = pts[:, 0].min(), pts[:, 1].min()
-    bw, bh = pts[:, 0].max() - x, pts[:, 1].max() - y
-
-    v = pts[1] - pts[0]
-    angle = float(np.degrees(np.arctan2(v[1], v[0])))
-
+    transformed = cv2.perspectiveTransform(corners, H).reshape(-1, 2)
+    x, y = transformed[:, 0].min(), transformed[:, 1].min()
+    bw, bh = transformed[:, 0].max() - x, transformed[:, 1].max() - y
+    score = min(100.0, inliers / max(len(kpts0), 1) * 100.0)
     return [{
-        "x": float(pts[0, 0]),
-        "y": float(pts[0, 1]),
-        "cx": float(x + bw / 2.0),
-        "cy": float(y + bh / 2.0),
-        "angle": angle,
-        "scale": float(bw) / max(w, 1.0),
-        "score": float(inliers) / max(len(kpts0), 1),
-        "rect_size": (float(bw), float(bh)),
-        "quad": pts.tolist(),
+        "x": float(x), "y": float(y), "w": float(bw), "h": float(bh),
+        "score": score, "inliers": inliers,
+        "quad": transformed.tolist(),
     }]
 
 
 # ---------------------------------------------------------------------------
-# ShapeTemplateMatchingNode
+# VisionFlow 节点
 # ---------------------------------------------------------------------------
-
 class ShapeTemplateMatchingNode(Base64MatchingNodeData, OpenCVNodeDataBase,
-                                ITemplateMatchingGroupableNode):
+                                 ITemplateMatchingGroupableNode):
     __group__ = "模板匹配模块"
     template_image = Property("", name="模板图片", group=PropertyGroupNames.RUN_PARAMETERS,
                               editor="crop", order=1000)
-
-    min_match_dist = Property(80, name="Ratio Test阈值(%)", group=PropertyGroupNames.RUN_PARAMETERS,
-                              min_val=50, max_val=100, step=5)
+    ratio_thresh = Property(82, name="MNN阈值(%)", group=PropertyGroupNames.RUN_PARAMETERS,
+                            min_val=50, max_val=99, step=1)
+    min_inliers = Property(10, name="最少内点数", group=PropertyGroupNames.RUN_PARAMETERS,
+                           min_val=4, max_val=500)
+    ransac_thresh = Property(4.0, name="RANSAC阈值(px)", group=PropertyGroupNames.RUN_PARAMETERS,
+                             min_val=1.0, max_val=50.0, step=0.5)
     max_matches = Property(3, name="最大匹配数", group=PropertyGroupNames.RUN_PARAMETERS,
                            min_val=1, max_val=100)
-    min_inliers = Property(8, name="最少内点数", group=PropertyGroupNames.RUN_PARAMETERS,
-                           min_val=4, max_val=500)
-    ransac_thresh = Property(5.0, name="RANSAC阈值(px)", group=PropertyGroupNames.RUN_PARAMETERS,
-                             min_val=1.0, max_val=50.0, step=0.5)
-
+    top_k = Property(2048, name="最大特征点数", group=PropertyGroupNames.RUN_PARAMETERS,
+                     min_val=256, max_val=4096, step=256)
     matching_count_result = Property(0, name="匹配数量", group=PropertyGroupNames.RESULT_PARAMETERS,
                                      readonly=True)
     confidence = Property(0.0, name="置信度(0-100)", group=PropertyGroupNames.RESULT_PARAMETERS,
@@ -201,7 +141,7 @@ class ShapeTemplateMatchingNode(Base64MatchingNodeData, OpenCVNodeDataBase,
 
         if self._model is None or self._model_b64 != self.base64_string:
             try:
-                self._model = ShapeModel(template)
+                self._model = ShapeModel(template, self.top_k)
             except Exception as e:
                 return self.ok(mat, f"特征提取失败: {e}")
             self._model_b64 = self.base64_string
@@ -210,35 +150,22 @@ class ShapeTemplateMatchingNode(Base64MatchingNodeData, OpenCVNodeDataBase,
             return self.ok(mat, "模板无效")
 
         try:
-            results = find_shape_match(
-                mat,
-                self._model,
-                min_match_dist=self.min_match_dist / 100.0,
-                max_matches=self.max_matches,
-                min_inliers=self.min_inliers,
-                ransac_thresh=self.ransac_thresh,
-            )
+            results = find_shape_match(mat, self._model,
+                                       self.ratio_thresh / 100.0,
+                                       self.min_inliers,
+                                       self.ransac_thresh,
+                                       self.max_matches)
         except Exception as e:
             return self.ok(mat, f"匹配异常: {e}")
 
         out = mat.copy()
         best = 0.0
-        for result in results:
-            score = float(result["score"])
-            sc = int(round(score * 100.0))
-            best = max(best, float(sc))
-
-            cx, cy = result["cx"], result["cy"]
-            rw, rh = result["rect_size"]
-            x1, y1 = int(cx - rw / 2), int(cy - rh / 2)
-            x2, y2 = int(cx + rw / 2), int(cy + rh / 2)
-            cv2.rectangle(out, (x1, y1), (x2, y2), (0, 255, 0), 2)
-
-            label_x = x1
-            label_y = y1 - 5 if y1 > 10 else y2 + 15
-            cv2.putText(out, f"{sc}%",
-                        (label_x, label_y),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+        for r in results:
+            best = max(best, r["score"])
+            x, y, bw, bh = int(r["x"]), int(r["y"]), int(r["w"]), int(r["h"])
+            cv2.rectangle(out, (x, y), (x + bw, y + bh), (0, 255, 0), 2)
+            cv2.putText(out, f"{r['score']:.0f}% in:{r['inliers']}",
+                        (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
 
         self.matching_count_result = len(results)
         self.confidence = best
