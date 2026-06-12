@@ -188,7 +188,7 @@ class ShapeTemplateMatchingNode(Base64MatchingNodeData, OpenCVNodeDataBase,
         if self.matched:
             return self.ok(out, f"匹配 {len(results)} 处 (最高: {best:.0f})")
         else:
-            return self.error(out, f"未匹配到目标")
+            return self.error(out, f"错误: 未匹配到目标")
 
     def _update_result_image_source(self):
         self._result_image_source = self._mat

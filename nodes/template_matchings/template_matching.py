@@ -81,7 +81,7 @@ class TemplateMatchingNode(OpenCVTemplateMatchingNodeBase):
         self.confidence = 0.0
         self.matched = False
         self.match_x = self.match_y = self.match_w = self.match_h = 0
-        msg = f"未匹配 (最高置信度: {max_val:.3f} < {self.threshold})"
+        msg = f"错误: 未匹配 (最高置信度: {max_val:.3f} < {self.threshold})"
         if max_val >= self.threshold and not (self.min_area <= tpl_area <= self.max_area):
             msg += " (面积过滤未通过)"
         return self.error(mat, msg)
