@@ -92,7 +92,7 @@ class OpenCVTemplateMatchingNodeBase(Base64MatchingNodeData, OpenCVNodeDataBase,
 # ── 经典匹配结果绘制辅助 ────────────────────────────────────────────
 
 def draw_matches(out: np.ndarray, tpl: np.ndarray, results: list[dict],
-                 color=(0, 255, 0), max_draw=30):
+                 color=(0, 0, 255), max_draw=30):
     """在输出图像上绘制旋转矩形匹配结果。
 
     参数：
@@ -117,3 +117,49 @@ def draw_matches(out: np.ndarray, tpl: np.ndarray, results: list[dict],
         score = r.get('score', 0)
         cv2.putText(out, f'{score:.2f}', (int(cx) - 20, int(cy) - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
+
+
+# ── 图像格式归一化辅助 ────────────────────────────────────────────
+
+def prepare_gray_image(img: np.ndarray) -> np.ndarray:
+    """将任意格式的输入图像归一化为 uint8 灰度连续数组，供 DLL 安全使用。
+
+    处理逻辑：
+      - float32/float64 → 先缩放到 0-255 再转 uint8
+      - 4 通道 (RGBA/BGRA) → 先取前 3 通道 BGR 再转灰度
+      - 3 通道 (BGR/RGB) → 转灰度
+      - 2 通道 → 取第一通道
+      - uint8 灰度 → 直接使用
+    始终返回 C-contiguous uint8 (H, W) 数组。
+    """
+    # 确保是 numpy 数组
+    img = np.asarray(img)
+
+    # 处理浮点类型：假设值域 0.0-1.0 或 0.0-255.0
+    if img.dtype in (np.float32, np.float64, np.float16):
+        if img.max() <= 1.0:
+            img = (img * 255).astype(np.uint8)
+        else:
+            img = np.clip(img, 0, 255).astype(np.uint8)
+
+    # 确保 uint8
+    if img.dtype != np.uint8:
+        img = img.astype(np.uint8)
+
+    # 处理通道数
+    if img.ndim == 2:
+        gray = img
+    elif img.ndim == 3:
+        ch = img.shape[2]
+        if ch == 4:
+            gray = cv2.cvtColor(img[:, :, :3], cv2.COLOR_BGR2GRAY)
+        elif ch == 3:
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        elif ch == 2:
+            gray = img[:, :, 0]
+        else:
+            gray = cv2.cvtColor(img[:, :, :3], cv2.COLOR_BGR2GRAY)
+    else:
+        raise ValueError(f"不支持的图像维度: {img.ndim}")
+
+    return np.ascontiguousarray(gray, dtype=np.uint8)

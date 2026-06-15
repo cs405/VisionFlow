@@ -15,9 +15,12 @@ Vision Matching DLLs — 五个算法的 Python ctypes 封装。
 每个匹配结果 dict: {"x": float, "y": float, "angle": float, "score": float}
 """
 
-import ctypes, os, numpy as np
+import ctypes, os, numpy as np, threading
 
 _dll_dir = os.path.dirname(os.path.abspath(__file__))
+
+# 线程锁 — C++ DLL 不是线程安全的，确保同一时刻只有一个线程调用 DLL
+_dll_lock = threading.Lock()
 
 
 class _EdgeResult(ctypes.Structure):
@@ -105,12 +108,13 @@ def edge_match(img: np.ndarray, tpl: np.ndarray,
     img, tpl = check(img), check(tpl)
     buf = (_EdgeResult * max_results)()
     ms = ctypes.c_double(0)
-    n = dll.edge_match_dll(
-        img.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8)), img.shape[1], img.shape[0],
-        tpl.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8)), tpl.shape[1], tpl.shape[0],
-        tpl_canny_low, tpl_canny_high, match_threshold, min_score,
-        angle_start, angle_end, angle_step,
-        buf, max_results, ctypes.byref(ms))
+    with _dll_lock:
+        n = dll.edge_match_dll(
+            img.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8)), img.shape[1], img.shape[0],
+            tpl.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8)), tpl.shape[1], tpl.shape[0],
+            tpl_canny_low, tpl_canny_high, match_threshold, min_score,
+            angle_start, angle_end, angle_step,
+            buf, max_results, ctypes.byref(ms))
     return [{"x": buf[i].x, "y": buf[i].y, "angle": buf[i].angle, "score": buf[i].score}
             for i in range(min(n, max_results))], ms.value
 
@@ -149,11 +153,12 @@ def shape_context(img: np.ndarray, tpl: np.ndarray,
     img, tpl = check(img), check(tpl)
     buf = (_ShapeResult * max_results)()
     ms = ctypes.c_double(0)
-    n = dll.shape_context_dll(
-        img.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8)), img.shape[1], img.shape[0],
-        tpl.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8)), tpl.shape[1], tpl.shape[0],
-        sample_step, n_radial, n_angular, min_score, max_targets,
-        buf, max_results, ctypes.byref(ms))
+    with _dll_lock:
+        n = dll.shape_context_dll(
+            img.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8)), img.shape[1], img.shape[0],
+            tpl.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8)), tpl.shape[1], tpl.shape[0],
+            sample_step, n_radial, n_angular, min_score, max_targets,
+            buf, max_results, ctypes.byref(ms))
     return [{"x": buf[i].x, "y": buf[i].y, "angle": buf[i].angle,
              "score": buf[i].score, "scale": buf[i].scale}
             for i in range(min(n, max_results))], ms.value
@@ -188,11 +193,12 @@ def chamfer_match(img: np.ndarray, tpl: np.ndarray,
     img, tpl = check(img), check(tpl)
     buf = (_ChamferResult * max_results)()
     ms = ctypes.c_double(0)
-    n = dll.chamfer_match_dll(
-        img.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8)), img.shape[1], img.shape[0],
-        tpl.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8)), tpl.shape[1], tpl.shape[0],
-        tpl_canny_low, tpl_canny_high, max_dist,
-        buf, max_results, ctypes.byref(ms))
+    with _dll_lock:
+        n = dll.chamfer_match_dll(
+            img.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8)), img.shape[1], img.shape[0],
+            tpl.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8)), tpl.shape[1], tpl.shape[0],
+            tpl_canny_low, tpl_canny_high, max_dist,
+            buf, max_results, ctypes.byref(ms))
     return [{"x": buf[i].x, "y": buf[i].y, "angle": buf[i].angle, "score": buf[i].score}
             for i in range(min(n, max_results))], ms.value
 
@@ -224,11 +230,12 @@ def sad_match(img: np.ndarray, tpl: np.ndarray,
     img, tpl = check(img), check(tpl)
     buf = (_SADResult * max_results)()
     ms = ctypes.c_double(0)
-    n = dll.sad_match_dll(
-        img.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8)), img.shape[1], img.shape[0],
-        tpl.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8)), tpl.shape[1], tpl.shape[0],
-        tpl_canny_low, tpl_canny_high, max_dist,
-        buf, max_results, ctypes.byref(ms))
+    with _dll_lock:
+        n = dll.sad_match_dll(
+            img.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8)), img.shape[1], img.shape[0],
+            tpl.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8)), tpl.shape[1], tpl.shape[0],
+            tpl_canny_low, tpl_canny_high, max_dist,
+            buf, max_results, ctypes.byref(ms))
     return [{"x": buf[i].x, "y": buf[i].y, "angle": buf[i].angle, "score": buf[i].score}
             for i in range(min(n, max_results))], ms.value
 
@@ -260,10 +267,11 @@ def ncc_match(img: np.ndarray, tpl: np.ndarray,
     img, tpl = check(img), check(tpl)
     buf = (_NCCResult * max_results)()
     ms = ctypes.c_double(0)
-    n = dll.ncc_match_dll(
-        img.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8)), img.shape[1], img.shape[0],
-        tpl.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8)), tpl.shape[1], tpl.shape[0],
-        tpl_canny_low, tpl_canny_high, min_score,
-        buf, max_results, ctypes.byref(ms))
+    with _dll_lock:
+        n = dll.ncc_match_dll(
+            img.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8)), img.shape[1], img.shape[0],
+            tpl.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8)), tpl.shape[1], tpl.shape[0],
+            tpl_canny_low, tpl_canny_high, min_score,
+            buf, max_results, ctypes.byref(ms))
     return [{"x": buf[i].x, "y": buf[i].y, "angle": buf[i].angle, "score": buf[i].score}
             for i in range(min(n, max_results))], ms.value

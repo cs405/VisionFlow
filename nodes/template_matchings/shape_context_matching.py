@@ -6,7 +6,8 @@ import cv2
 
 from core.node_base import Property, PropertyGroupNames
 from core.data_packet import FlowableResult
-from nodes.template_matchings.template_base import OpenCVTemplateMatchingNodeBase, draw_matches
+from nodes.template_matchings.template_base import (OpenCVTemplateMatchingNodeBase,
+                                                      draw_matches, prepare_gray_image)
 
 
 class ShapeContextMatchingNode(OpenCVTemplateMatchingNodeBase):
@@ -39,19 +40,25 @@ class ShapeContextMatchingNode(OpenCVTemplateMatchingNodeBase):
         if template is None:
             return self.error(None, "未设置模板图片，输出原图")
 
-        tpl_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY) if template.ndim == 3 else template
-        img_gray = cv2.cvtColor(mat, cv2.COLOR_BGR2GRAY) if mat.ndim == 3 else mat
+        tpl_gray = prepare_gray_image(template)
+        img_gray = prepare_gray_image(mat)
 
-        from nodes.dll.vision_dll import shape_context
-        results, ms = shape_context(
-            img_gray, tpl_gray,
-            sample_step=self.sample_step,
-            n_radial=self.n_radial,
-            n_angular=self.n_angular,
-            min_score=self.min_score,
-            max_targets=self.max_targets,
-            max_results=self.max_results,
-        )
+        if tpl_gray.shape[0] > img_gray.shape[0] or tpl_gray.shape[1] > img_gray.shape[1]:
+            return self.error(mat, "模板尺寸大于目标图像，无法匹配")
+
+        try:
+            from nodes.dll.vision_dll import shape_context
+            results, ms = shape_context(
+                img_gray, tpl_gray,
+                sample_step=int(self.sample_step),
+                n_radial=int(self.n_radial),
+                n_angular=int(self.n_angular),
+                min_score=float(self.min_score),
+                max_targets=int(self.max_targets),
+                max_results=int(self.max_results),
+            )
+        except Exception as e:
+            return self.error(mat, f"形状上下文匹配异常: {e}")
 
         out = mat.copy()
         draw_matches(out, template, results)
@@ -65,4 +72,4 @@ class ShapeContextMatchingNode(OpenCVTemplateMatchingNodeBase):
             self.match_x, self.match_y = int(r['x'] - w / 2), int(r['y'] - h / 2)
             self.match_w, self.match_h = w, h
             return self.ok(out, f"形状上下文匹配 {len(results)} 处 ({ms:.0f}ms)")
-        return self.error(None, f"形状上下文匹配: 未匹配到目标 ({ms:.0f}ms)")
+        return self.error(mat, f"形状上下文匹配: 未匹配到目标 ({ms:.0f}ms)")

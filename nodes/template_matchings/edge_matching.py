@@ -6,7 +6,8 @@ import cv2
 
 from core.node_base import Property, PropertyGroupNames
 from core.data_packet import FlowableResult
-from nodes.template_matchings.template_base import OpenCVTemplateMatchingNodeBase, draw_matches
+from nodes.template_matchings.template_base import (OpenCVTemplateMatchingNodeBase,
+                                                      draw_matches, prepare_gray_image)
 
 
 class EdgeMatchingNode(OpenCVTemplateMatchingNodeBase):
@@ -43,21 +44,27 @@ class EdgeMatchingNode(OpenCVTemplateMatchingNodeBase):
         if template is None:
             return self.error(None, "未设置模板图片，输出原图")
 
-        tpl_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY) if template.ndim == 3 else template
-        img_gray = cv2.cvtColor(mat, cv2.COLOR_BGR2GRAY) if mat.ndim == 3 else mat
+        tpl_gray = prepare_gray_image(template)
+        img_gray = prepare_gray_image(mat)
 
-        from nodes.dll.vision_dll import edge_match
-        results, ms = edge_match(
-            img_gray, tpl_gray,
-            tpl_canny_low=self.tpl_canny_low,
-            tpl_canny_high=self.tpl_canny_high,
-            match_threshold=self.match_threshold,
-            min_score=self.min_score,
-            angle_start=self.angle_start,
-            angle_end=self.angle_end,
-            angle_step=self.angle_step,
-            max_results=self.max_results,
-        )
+        if tpl_gray.shape[0] > img_gray.shape[0] or tpl_gray.shape[1] > img_gray.shape[1]:
+            return self.error(mat, "模板尺寸大于目标图像，无法匹配")
+
+        try:
+            from nodes.dll.vision_dll import edge_match
+            results, ms = edge_match(
+                img_gray, tpl_gray,
+                tpl_canny_low=float(self.tpl_canny_low),
+                tpl_canny_high=float(self.tpl_canny_high),
+                match_threshold=float(self.match_threshold),
+                min_score=float(self.min_score),
+                angle_start=float(self.angle_start),
+                angle_end=float(self.angle_end),
+                angle_step=float(self.angle_step),
+                max_results=int(self.max_results),
+            )
+        except Exception as e:
+            return self.error(mat, f"边缘匹配异常: {e}")
 
         out = mat.copy()
         draw_matches(out, template, results)
@@ -71,4 +78,4 @@ class EdgeMatchingNode(OpenCVTemplateMatchingNodeBase):
             self.match_x, self.match_y = int(r['x'] - w / 2), int(r['y'] - h / 2)
             self.match_w, self.match_h = w, h
             return self.ok(out, f"边缘匹配 {len(results)} 处 ({ms:.0f}ms)")
-        return self.error(None, f"边缘匹配: 未匹配到目标 ({ms:.0f}ms)")
+        return self.error(mat, f"边缘匹配: 未匹配到目标 ({ms:.0f}ms)")
