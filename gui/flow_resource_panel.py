@@ -61,7 +61,7 @@ THUMB_SIZE = 75
 # 缩略图边距（像素）
 THUMB_MARGIN = 2
 # 缩略图条高度（90px列表 + 顶部/底部内边距）
-STRIP_HEIGHT = 106
+STRIP_HEIGHT = 116
 # 翻页按钮大小
 PAGE_BTN_SIZE = 40
 
@@ -528,8 +528,8 @@ class FlowResourcePanel(QWidget):
 
         # 滚动区域（用于放置缩略图）
         self._scroll_area = QScrollArea()
-        # 设置固定高度（THUMB_SIZE + 14）
-        self._scroll_area.setFixedHeight(THUMB_SIZE + 14)
+        # 设置固定高度（THUMB_SIZE + 24）
+        self._scroll_area.setFixedHeight(THUMB_SIZE + 24)
         # 设置控件可调整大小
         self._scroll_area.setWidgetResizable(True)
         # 水平滚动条始终显示
