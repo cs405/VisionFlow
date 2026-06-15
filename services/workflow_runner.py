@@ -37,6 +37,9 @@ class WorkflowRunner:
         self._stop_event = threading.Event()
         # 是否连续运行模式标志
         self._continuous = False
+        # 单次执行完成标记（后台线程设置，主线程轮询，避免跨线程信号不可靠）
+        self._run_finished = threading.Event()
+        self._run_had_error: bool = False
 
     # -- 属性 --
 
@@ -82,8 +85,9 @@ class WorkflowRunner:
             return
         # 设置为非连续模式
         self._continuous = False
-        # 清除停止事件
+        # 清除停止事件和完成标记
         self._stop_event.clear()
+        self._run_finished.clear()
         # 创建后台线程，目标函数为_run_once
         self._thread = threading.Thread(target=self._run_once, daemon=True)
         # 启动线程
@@ -110,8 +114,9 @@ class WorkflowRunner:
             return
         # 设置为非连续模式
         self._continuous = False
-        # 清除停止事件
+        # 清除停止事件和完成标记
         self._stop_event.clear()
+        self._run_finished.clear()
         # 创建后台线程，目标函数为_run_all
         self._thread = threading.Thread(
             target=self._run_all, args=(file_paths, auto_switch, interval),
@@ -163,15 +168,20 @@ class WorkflowRunner:
                 return
             # 启动工作流
             result = self._workflow.start()
+            self._run_had_error = result.is_error
             # 如果执行出错
             if result.is_error:
                 # 发布错误消息事件
                 event_system.publish(EventType.MESSAGE_ERROR, sender=self,
                                      message=f"流程执行出错: {result.message}")
         except Exception:
+            self._run_had_error = True
             # 发生异常时发布错误消息事件
             event_system.publish(EventType.MESSAGE_ERROR, sender=self,
                                  message=f"流程异常: {traceback.format_exc()}")
+        finally:
+            # 通知主线程执行已完成
+            self._run_finished.set()
 
     def _run_all(self, file_paths: list[str], auto_switch: bool, interval: float):
         """运行全部循环 — 遍历所有源文件
@@ -241,6 +251,8 @@ class WorkflowRunner:
         # 发布文件迭代完成事件
         event_system.publish(EventType.FILE_ITERATION_COMPLETED, sender=self,
                              total=total)
+        # 通知主线程执行已完成
+        self._run_finished.set()
 
     def _run_continuous(self):
         """连续执行循环 — 帧率由起始节点的 invoke_milliseconds_delay 统一控制。
