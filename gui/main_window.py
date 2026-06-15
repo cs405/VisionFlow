@@ -1612,8 +1612,8 @@ class MainWindow(QMainWindow):
         for child in bar.findChildren(QWidget):
             child.installEventFilter(self)
 
-        # 将自定义标题栏设置为窗口的菜单组件
-        self.setMenuWidget(bar)  # 将自定义标题栏设置为窗口的菜单组件，这样它就会出现在窗口的顶部，并且可以与窗口的系统按钮（最小化、最大化、关闭）一起使用
+        # 标题栏将在 _setup_main_surface() 中作为普通 widget 添加到主布局
+        # 不使用 setMenuWidget()，以避免 QMenu 在 frameless 窗口下无法接收鼠标事件的问题
 
     def eventFilter(self, obj, event):
         """拦截标题栏控件上的鼠标事件，用于窗口拖动和双击"""
@@ -1688,14 +1688,16 @@ class MainWindow(QMainWindow):
         # 从当前控件向上遍历
         w = widget
         while w is not None and w is not self._caption_bar:
+            # 如果是弹出菜单，检查点击位置是否在有效的菜单项上
+            if isinstance(w, QMenu):
+                cp = w.mapFromGlobal(QCursor.pos())
+                return w.actionAt(cp) is not None
             # 如果是按钮类型
             if isinstance(w, QPushButton):
                 return True
-            # 如果是菜单栏
+            # 如果是菜单栏，检查点击位置是否在有效的菜单项上
             if isinstance(w, QMenuBar):
-                # 获取鼠标在菜单栏上的位置
                 cp = w.mapFromGlobal(QCursor.pos())
-                # 如果该位置有菜单项
                 return w.actionAt(cp) is not None
             # 如果是输入框
             if isinstance(w, QLineEdit):
@@ -1766,6 +1768,9 @@ class MainWindow(QMainWindow):
         root_layout.setContentsMargins(0, 0, 0, 0)
         # 设置根页面的间距为0
         root_layout.setSpacing(0)
+
+        # 将标题栏添加到根布局顶部（替代 setMenuWidget，避免 QMenu 点击失效）
+        root_layout.addWidget(self._caption_bar)
 
         # 创建页面堆叠组件，用于切换不同的页面
         self._root_stack = QStackedWidget()
@@ -2189,113 +2194,41 @@ class MainWindow(QMainWindow):
 
     def _build_menus(self, menu_bar: QMenuBar):
         """构建菜单栏"""
-        # 文件菜单
+        # ── 文件菜单 ──
         file_menu = menu_bar.addMenu("文件(&F)")
-        # 添加菜单项
-        for text, slot, shortcut in [
-            ("新建项目(&N)", self._on_new_project, "Ctrl+N"),           # 新建项目
-            ("打开项目(&O)...", self._on_open_project, "Ctrl+O"),       # 打开项目
-            ("保存项目(&S)", self._on_save_project, "Ctrl+S"),          # 保存项目
-            ("另存为(&A)...", self._on_save_as_project, "Ctrl+Shift+S"), # 另存为
-        ]:
-            # 创建动作
-            action = QAction(text, self)
-            # 设置快捷键
-            action.setShortcut(shortcut)
-            # 连接触发信号
-            action.triggered.connect(slot)
-            # 添加到菜单
-            file_menu.addAction(action)
-        # 添加分隔线
+        file_menu.addAction("新建项目(&N)", self._on_new_project, "Ctrl+N")
+        file_menu.addAction("打开项目(&O)...", self._on_open_project, "Ctrl+O")
+        file_menu.addAction("保存项目(&S)", self._on_save_project, "Ctrl+S")
+        file_menu.addAction("另存为(&A)...", self._on_save_as_project, "Ctrl+Shift+S")
         file_menu.addSeparator()
         # 最近项目子菜单
         self._recent_menu = file_menu.addMenu("最近的项目(&R)")
-        # 连接显示信号
         self._recent_menu.aboutToShow.connect(self._refresh_recent)
-        # 添加分隔线
         file_menu.addSeparator()
-        # 退出动作
-        exit_action = QAction("退出(&X)", self)
-        # 设置快捷键
-        exit_action.setShortcut("Alt+F4")
-        # 连接触发信号
-        exit_action.triggered.connect(self._on_close_window)
-        # 添加到菜单
-        file_menu.addAction(exit_action)
+        file_menu.addAction("退出(&X)", self._on_close_window, "Alt+F4")
 
-        # 编辑菜单
+        # ── 编辑菜单 ──
         edit_menu = menu_bar.addMenu("编辑(&E)")
-        # 撤销动作
-        undo_action = QAction("撤销(&U)", self)
-        # 设置快捷键
-        undo_action.setShortcut("Ctrl+Z")
-        # 连接触发信号
-        undo_action.triggered.connect(self._on_undo_diagram)
-        # 添加到菜单
-        edit_menu.addAction(undo_action)
-        # 重做动作
-        redo_action = QAction("重做(&R)", self)
-        # 设置快捷键
-        redo_action.setShortcut("Ctrl+Y")
-        # 连接触发信号
-        redo_action.triggered.connect(self._on_redo_diagram)
-        # 添加到菜单
-        edit_menu.addAction(redo_action)
+        edit_menu.addAction("撤销(&U)", self._on_undo_diagram, "Ctrl+Z")
+        edit_menu.addAction("重做(&R)", self._on_redo_diagram, "Ctrl+Y")
 
-        # 运行菜单
+        # ── 运行菜单 ──
         run_menu = menu_bar.addMenu("运行(&R)")
-        # 运行流程动作
-        run_action = QAction("运行流程(&F)", self)
-        # 设置快捷键
-        run_action.setShortcut("F5")
-        # 连接触发信号
-        run_action.triggered.connect(self._on_run_workflow)
-        # 添加到菜单
-        run_menu.addAction(run_action)
-        # 停止动作
-        stop_action = QAction("停止(&S)", self)
-        # 设置快捷键
-        stop_action.setShortcut("Shift+F5")
-        # 连接触发信号
-        stop_action.triggered.connect(self._on_stop_workflow)
-        # 添加到菜单
-        run_menu.addAction(stop_action)
+        run_menu.addAction("运行流程(&F)", self._on_run_workflow, "F5")
+        run_menu.addAction("停止(&S)", self._on_stop_workflow, "Shift+F5")
 
-        # 系统菜单
+        # ── 系统菜单 ──
         system_menu = menu_bar.addMenu("系统(&S)")
-        # 项目属性动作
-        proj_edit_action = QAction("项目属性...", self)
-        # 连接触发信号
-        proj_edit_action.triggered.connect(self._on_edit_project)
-        # 添加到菜单
-        system_menu.addAction(proj_edit_action)
-        # 添加分隔线
+        system_menu.addAction("项目属性...", self._on_edit_project)
         system_menu.addSeparator()
-        # 切换左侧面板动作
-        left_toggle = QAction("切换左侧流程资源", self)
-        left_toggle.triggered.connect(self.toggle_left_panel)
-        # 添加到菜单
-        system_menu.addAction(left_toggle)
-        # 切换右侧面板动作
-        right_toggle = QAction("切换右侧图像结果区", self)
-        right_toggle.triggered.connect(self.toggle_right_panel)
-        # 添加到菜单
-        system_menu.addAction(right_toggle)
+        system_menu.addAction("切换左侧流程资源", self.toggle_left_panel)
+        system_menu.addAction("切换右侧图像结果区", self.toggle_right_panel)
 
-        # 帮助菜单
+        # ── 帮助菜单 ──
         help_menu = menu_bar.addMenu("帮助(&H)")
-        # 使用指南动作
-        guide_action = QAction("使用指南(&G)", self)
-        # 添加到菜单
-        help_menu.addAction(guide_action)
-        # 添加分隔线
+        help_menu.addAction("使用指南(&G)", self._on_open_guide)
         help_menu.addSeparator()
-        # 关于动作
-        about_action = QAction("关于 VisionFlow(&A)", self)
-        # 连接触发信号
-        about_action.triggered.connect(self._on_about)
-        # 添加到菜单
-        help_menu.addAction(about_action)
+        help_menu.addAction("关于 VisionFlow(&A)", self._on_about)
 
     def _refresh_recent(self):
         """刷新最近项目菜单"""
