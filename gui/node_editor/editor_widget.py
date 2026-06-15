@@ -593,12 +593,12 @@ class DiagramEditorWidget(QWidget):
     def _on_run(self):
         """运行工作流"""
         if self._workflow:
-            # 1) 重置所有节点为 IDLE，清除上次运行残留的 _last_error
+            # 1) 重置所有节点为 IDLE，清除上次运行残留的执行状态
             for item in self.scene.get_all_node_items():
                 item.set_state(NodeState.IDLE)
                 nd = item.node_data
-                if nd is not None and hasattr(nd, '_last_error'):
-                    del nd._last_error
+                if isinstance(nd, VisionNodeData):
+                    nd._execution_state = None
             # 2) 清空状态队列中的残留事件
             while not self._state_queue.empty():
                 try: self._state_queue.get_nowait()
@@ -607,7 +607,7 @@ class DiagramEditorWidget(QWidget):
             self._workflow.execute()
             # 4) 先处理事件队列（让 NODE_ERROR/NODE_COMPLETED 更新到 NodeItem）
             self._drain_state_queue()
-            # 5) 再以 _last_error 为准做最终同步（事件可能丢失，_last_error 是权威来源）
+            # 5) 再以 _execution_state 为准做最终同步（事件可能丢失，执行状态是权威来源）
             self._sync_states_from_data()
 
     def _on_stop(self):
@@ -777,7 +777,7 @@ class DiagramEditorWidget(QWidget):
             self._state_queue.put(("__all__", "idle"))
 
     def _sync_states_from_data(self):
-        """执行完毕后直接同步：从节点数据 _last_error 设置 NodeItem 状态。
+        """执行完毕后直接同步：从节点数据 _execution_state 设置 NodeItem 状态。
 
         参照 WPF-VisionMaster：状态存储在数据对象上，执行完成后直接读取。
         不依赖事件队列（主线程阻塞期间事件无法被定时器处理）。
@@ -787,13 +787,14 @@ class DiagramEditorWidget(QWidget):
             nd = item.node_data
             if not isinstance(nd, VisionNodeData):
                 continue
-            if not hasattr(nd, '_last_error'):
-                # 未执行过的节点保持 IDLE
-                continue
-            if nd._last_error:
+            state = nd._execution_state
+            if state == "error":
                 item.set_state(NodeState.ERROR)
-            else:
+            elif state == "completed":
                 item.set_state(NodeState.COMPLETED)
+            elif state == "break":
+                item.set_state(NodeState.IDLE)
+            # None = 未执行，保持当前状态不变
 
     def refresh_all_node_states(self):
         """同步所有节点项的视觉状态到模型状态

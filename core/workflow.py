@@ -586,7 +586,7 @@ class WorkflowEngine:
 
         active_link_ids = {l.link_id for l in active}
 
-        # 递归禁用非活动端口下游的所有节点，标记 _last_error
+        # 递归禁用非活动端口下游的所有节点，标记为错误状态
         new_disabled: set[str] = set()
         for link in all_outgoing:
             if link.link_id not in active_link_ids:
@@ -595,7 +595,7 @@ class WorkflowEngine:
         for nid in new_disabled:
             node = self._nodes.get(nid)
             if node is not None:
-                node._last_error = True
+                node._execution_state = "error"
                 event_system.publish(EventType.NODE_ERROR, sender=node, result=None)
 
     def _disable_downstream(self, node_id: str, disabled: set[str]):

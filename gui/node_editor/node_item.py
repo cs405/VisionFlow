@@ -392,15 +392,14 @@ class NodeItem(QGraphicsObject):
     def update_from_node(self):
         """从节点数据更新节点状态（仅对本次运行已执行的节点生效）"""
         if isinstance(self.node_data, VisionNodeData):
-            # 只有本轮执行过的节点才有 _last_error（由 _invoke_action 设置）
-            if not hasattr(self.node_data, '_last_error'):
-                self.update()
-                return
-            msg = self.node_data.message or ""
-            if self.node_data._last_error or "错误" in msg or "失败" in msg or "未匹配" in msg:
+            state = self.node_data._execution_state
+            if state == "error":
                 self.set_state(NodeState.ERROR)
-            elif msg:
+            elif state == "completed":
                 self.set_state(NodeState.COMPLETED)
+            elif state == "break":
+                self.set_state(NodeState.IDLE)
+            # None = 未执行，保持当前状态不变
         self.update()
 
     # ── 边界计算 ──────────────────────────────────────────────────────────────

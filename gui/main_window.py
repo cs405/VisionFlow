@@ -3510,10 +3510,10 @@ class MainWindow(QMainWindow):
             from core.node_base import VisionNodeData
             # 遍历场景中的所有节点项
             for item in editor.scene.get_all_node_items():
-                # 清除上次执行的 _last_error 残留，避免旧状态污染本轮判断
+                # 清除上次执行的残留状态，避免旧状态污染本轮判断
                 nd = item.node_data
-                if isinstance(nd, VisionNodeData) and hasattr(nd, '_last_error'):
-                    del nd._last_error
+                if isinstance(nd, VisionNodeData):
+                    nd._execution_state = None
                 # 设置节点状态为运行中
                 item.set_state(NodeState.RUNNING)
 
@@ -3530,15 +3530,14 @@ class MainWindow(QMainWindow):
                     auto_switch = getattr(start_node, 'use_auto_switch', True)
                     # 记录日志
                     self._log_panel.info(f"运行全部: {len(file_paths)} 个文件 ({node_count} 个节点)")
-                    # 设置执行完成回调
-                    self._wf_runner._on_finished = lambda event, data: self._wf_ui_update.emit(event, data)
                     # 启动运行全部模式
                     self._wf_runner.start_run_all(
                         file_paths=file_paths,
                         auto_switch=auto_switch,
                         interval=1.0,  # Task.Delay(1000)，间隔1秒
                     )
-                    # 状态完成由 _on_file_iteration_completed 处理
+                    # 状态完成由 _on_file_iteration_completed + 轮询兜底处理
+                    self._poll_execution_finished()
                     return
 
         # 根据连续模式设置日志标签
@@ -3553,6 +3552,25 @@ class MainWindow(QMainWindow):
             # 单次运行模式
             self._wf_runner.start_once()
 
+        # 用主线程定时器轮询 _run_finished 标记（避免跨线程 pyqtSignal 不可靠）
+        self._poll_execution_finished()
+
+
+    def _poll_execution_finished(self):
+        """用主线程定时器轮询后台线程的执行完成标记，完成后调用 _finalize_execution_state"""
+        def _check():
+            if self._wf_runner._run_finished.is_set():
+                self._finalize_execution_state()
+            else:
+                # 继续轮询，每100ms检查一次，最多检查50次（5秒超时）
+                _check.count += 1
+                if _check.count < 50:
+                    QTimer.singleShot(100, _check)
+                else:
+                    # 超时兜底：强制最终化
+                    self._finalize_execution_state()
+        _check.count = 0
+        QTimer.singleShot(50, _check)
 
     def _finalize_execution_state(self):
         """执行完成后，将节点状态设置为最终值"""
@@ -3569,16 +3587,17 @@ class MainWindow(QMainWindow):
         for item in editor.scene.get_all_node_items():
             # 获取节点数据
             nd = item.node_data
-            # 如果是视觉节点
+            # 如果是视觉节点，根据执行状态设置 UI 状态
             if isinstance(nd, VisionNodeData):
-                # 获取节点消息
-                msg = nd.message or ""
-                # 如果消息包含错误关键词或节点有错误属性
-                if "错误" in msg or "无法" in msg or hasattr(nd, '_last_error') and nd._last_error:
-                    # 设置状态为错误
+                state = nd._execution_state
+                if state == "error":
                     item.set_state(NodeState.ERROR)
+                elif state == "completed":
+                    item.set_state(NodeState.COMPLETED)
+                elif state == "break":
+                    item.set_state(NodeState.IDLE)
                 else:
-                    # 设置状态为完成
+                    # 未执行到的节点（上游中断导致跳过）设为已完成
                     item.set_state(NodeState.COMPLETED)
             else:
                 # 非视觉节点直接设为完成

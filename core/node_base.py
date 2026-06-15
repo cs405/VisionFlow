@@ -782,6 +782,8 @@ class VisionNodeData(DemoNodeDataBase):
         self._prepared_input: np.ndarray | None = None
         # 结果展示器
         self._result_presenter: Any = None
+        # 本轮执行状态: None(未执行) / "completed"(成功) / "error"(失败) / "break"(中断)
+        self._execution_state: str | None = None
 
     # -- Mat（当前图像/数据） --
 
@@ -930,8 +932,13 @@ class VisionNodeData(DemoNodeDataBase):
         if self.diagram_data and hasattr(self.diagram_data, 'on_node_completed'):
             self.diagram_data.on_node_completed(self, state, ts)
 
-        # 记录错误状态（供 update_from_node / refresh_all_node_states 读取）
-        self._last_error = result.is_error
+        # 记录执行状态（供 _finalize_execution_state / update_from_node 读取）
+        if result.is_error:
+            self._execution_state = "error"
+        elif result.is_break:
+            self._execution_state = "break"
+        else:
+            self._execution_state = "completed"
 
         # 发布事件
         if result.is_ok:
