@@ -15,7 +15,7 @@ from PyQt5.QtWidgets import (
     QLabel, QTabWidget, QMessageBox, QFileDialog, QApplication, QFormLayout,
     QPushButton, QFrame, QMenuBar, QMenu, QLineEdit, QStackedWidget, QTabBar,
     QDialog, QScrollArea, QGroupBox, QGridLayout, QCheckBox, QListWidgetItem,
-    QListWidget
+    QListWidget, QDialogButtonBox
 )
 from PyQt5.QtCore import Qt, QTimer, QSettings, pyqtSignal, QEvent
 from PyQt5.QtGui import QIcon, QPixmap, QCursor, QFont
@@ -1460,12 +1460,12 @@ class MainWindow(QMainWindow):
             (FontIcons.Sync,           "连续执行",     self._on_continuous_run),        # 连续执行按钮
             (FontIcons.Location,       "停止",         self._on_stop_workflow),         # 停止按钮
             (FontIcons.Refresh,        "重置",         self._on_reset_workflow_view),   # 重置按钮
-            (FontIcons.EditMirrored,   "编辑面板",     None),                            # 编辑面板按钮
-            (FontIcons.View,           "查看面板",     None),                            # 查看面板按钮
-            (FontIcons.DisconnectDrive,"删除选中节点", None),                            # 删除选中节点按钮
-            (FontIcons.Delete,         "清空节点",     None),                            # 清空节点按钮
-            (FontIcons.Zoom,           "缩放定位",     None),                            # 缩放定位按钮
-            (FontIcons.AlignCenter,    "对齐节点",     None),                            # 对齐节点按钮
+            # (FontIcons.EditMirrored,   "编辑面板",     None),                            # 编辑面板按钮
+            # (FontIcons.View,           "查看面板",     None),                            # 查看面板按钮
+            # (FontIcons.DisconnectDrive,"删除选中节点", None),                            # 删除选中节点按钮
+            # (FontIcons.Delete,         "清空节点",     None),                            # 清空节点按钮
+            # (FontIcons.Zoom,           "缩放定位",     None),                            # 缩放定位按钮
+            # (FontIcons.AlignCenter,    "对齐节点",     None),                            # 对齐节点按钮
         ]:
             # 创建字体图标按钮
             btn = FontIconButton(icon, tooltip=tip, font_size=16)
@@ -1492,11 +1492,11 @@ class MainWindow(QMainWindow):
 
         # 按钮组4 — 查看 | 标签页编辑
         # 创建查看按钮
-        self._tool_view_btn = FontIconButton(FontIcons.View, tooltip="查看", font_size=16)
+        # self._tool_view_btn = FontIconButton(FontIcons.View, tooltip="查看", font_size=16)
         # 设置样式
-        self._tool_view_btn.setStyleSheet(_CMD_BTN)
+        # self._tool_view_btn.setStyleSheet(_CMD_BTN)
         # 添加到布局
-        tb.addWidget(self._tool_view_btn)
+        # tb.addWidget(self._tool_view_btn)
 
         # 添加弹性空间（将后续按钮推到右侧）
         tb.addStretch(1)
@@ -4345,7 +4345,6 @@ class MainWindow(QMainWindow):
         if project is None:
             # 如果没有项目，新建项目
             project = project_service.new_project()
-        from PyQt5.QtWidgets import QDialog, QFormLayout, QDialogButtonBox
         # 创建对话框
         dlg = QDialog(self)
         # 设置窗口标题

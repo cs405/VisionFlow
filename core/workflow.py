@@ -8,6 +8,7 @@
   - 流程控制（OK/Error/Break 路由）
 """
 
+import threading
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from enum import Enum, auto
@@ -56,10 +57,9 @@ class WorkflowEngine:
     """
 
     def __init__(self, name: str = "新建流程"):
-        import threading
         # 工作流名称
         self.name = name
-        # 当前执行状态
+        # 当前执行状态：空闲
         self.state: WorkflowState = WorkflowState.IDLE
         # 节点字典：键为节点ID，值为节点对象
         self._nodes: dict[str, NodeBase] = {}

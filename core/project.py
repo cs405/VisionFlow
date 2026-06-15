@@ -10,17 +10,13 @@
 import json
 import os
 import uuid
+import traceback
 from datetime import datetime
-from typing import TYPE_CHECKING
+from core.events import EventType, event_system
+from core.workflow import WorkflowEngine
+from core.node_base import NodeBase
 
-try:
-    from PyQt5.QtCore import QSettings
-except ImportError:
-    QSettings = None
-
-if TYPE_CHECKING:
-    from core.workflow import WorkflowEngine
-    from core.node_base import NodeBase
+from PyQt5.QtCore import QSettings
 
 
 # =============================================================================
@@ -199,8 +195,6 @@ class ProjectItem:
 
     def add_diagram(self, name: str = None) -> DiagramData:
         """添加一个新的空图表"""
-        from core.workflow import WorkflowEngine
-
         # 生成图表名称
         idx = len(self.diagrams) + 1
         diagram_name = name or f"流程图 {idx}"
@@ -378,7 +372,6 @@ class ProjectService:
 
     def load_templates(self) -> list[DiagramData]:
         """从 workflow_templates/ 目录加载所有模板"""
-        import traceback
         templates: list[DiagramData] = []
         tmpl_dir = self._templates_dir
         if not os.path.isdir(tmpl_dir):
@@ -527,11 +520,9 @@ class ProjectService:
             # 添加到最近项目
             self.add_recent(project.file_path)
             # 发布保存事件
-            from core.events import EventType, event_system
             event_system.publish(EventType.PROJECT_SAVED, sender=self, project=project)
             return True
         except Exception as e:
-            from core.events import EventType, event_system
             event_system.publish(EventType.MESSAGE_ERROR, sender=self, message=f"保存失败: {e}")
             return False
 
@@ -548,7 +539,6 @@ class ProjectService:
         file_path = self._normalize_path(file_path)
         if not file_path or not os.path.exists(file_path):
             self.remove_recent(file_path)
-            from core.events import EventType, event_system
             event_system.publish(EventType.MESSAGE_ERROR, sender=self, message=f"文件不存在: {file_path}")
             return None
         try:
@@ -562,11 +552,9 @@ class ProjectService:
             self.current_project = project
             self.add_recent(file_path)
             # 发布加载事件
-            from core.events import EventType, event_system
             event_system.publish(EventType.PROJECT_LOADED, sender=self, project=project)
             return project
         except Exception as e:
-            from core.events import EventType, event_system
             event_system.publish(EventType.MESSAGE_ERROR, sender=self, message=f"加载失败: {e}")
             return None
 
@@ -578,7 +566,6 @@ class ProjectService:
         project.add_diagram(name)
         self.current_project = project
         # 发布项目变更事件
-        from core.events import EventType, event_system
         event_system.publish(EventType.PROJECT_CHANGED, sender=self, project=project)
         return project
 
