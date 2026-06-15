@@ -1624,6 +1624,9 @@ class MainWindow(QMainWindow):
             # 如果点击的是交互控件（按钮、菜单项、输入框等），不处理拖动
             if self._is_interactive_widget(obj):
                 return False
+            # 如果有活跃的弹出窗口（QMenu等），不吞事件，让其模态循环处理外部点击关闭
+            if QApplication.activePopupWidget() is not None:
+                return False
             # 记录拖拽起始全局坐标
             self._drag_pos = event.globalPos()
             # 标题栏捕获鼠标
