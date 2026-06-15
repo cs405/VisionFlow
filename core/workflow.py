@@ -466,7 +466,7 @@ class WorkflowEngine:
 
         # 设置运行状态
         self.state = WorkflowState.RUNNING
-        self._invoke_count = 0
+        self._invoke_count = 0  # 运行节点计数
         event_system.publish(EventType.WORKFLOW_STARTED, sender=self)
 
         # 获取拓扑排序结果

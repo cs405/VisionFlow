@@ -136,7 +136,7 @@ class ShapeTemplateMatchingNode(Base64MatchingNodeData, OpenCVNodeDataBase,
     def __init__(self):
         Base64MatchingNodeData.__init__(self)
         OpenCVNodeDataBase.__init__(self)
-        self.name = "形状模板匹配"
+        self.name = "XFeat匹配"
         self._model = None
         self._model_b64 = ""
 

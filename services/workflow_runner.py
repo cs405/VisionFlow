@@ -69,10 +69,14 @@ class WorkflowRunner:
         """
         self._workflow = workflow
 
-    # -- 执行 --
+    # -- 单步执行 --
 
     def start_once(self):
-        """在后台线程上执行工作流一次"""
+        """
+        在后台线程上执行工作流一次
+        行为：在后台线程上只执行工作流一次，针对当前源图像。
+        触发场景：用户点击"单次运行"按钮，或者只需要处理当前这一帧/这一张图时。
+        """
         # 如果没有绑定工作流或已在运行中，返回
         if not self._workflow or self.is_running:
             return
@@ -86,8 +90,16 @@ class WorkflowRunner:
         self._thread.start()
 
     def start_run_all(self, file_paths: list[str], auto_switch: bool = True, interval: float = 1.0):
-        """对每个文件执行一次工作流 — "运行全部" (VisionDiagramDataBase.Start())
-
+        """
+        对每个文件执行一次工作流 — "运行全部" (VisionDiagramDataBase.Start())，在图像的图像源勾选执行全部触发
+        行为：遍历所有源文件（file_paths 列表），每张图执行一次工作流，迭代之间有 interval 秒延迟（默认 1 秒）。
+        额外逻辑：
+        每次迭代前检查 _stop_event 是否被设置（用户点了停止）
+        检查 start_node.use_all_image 是否被关闭（可中途提前退出）
+        每轮更新 start_node.src_file_path 指向当前文件
+        发布 FILE_ITERATION_NEXT 事件（通知 UI 进度），完成后发布 FILE_ITERATION_COMPLETED
+        auto_switch 控制 UI 缩略图面板是否跟随切换
+        触发场景：用户点击"运行全部"按钮，需要对一批图片批量处理时。对应 VisionDiagramDataBase.Start() 的调用。
         参数：
             file_paths: 要遍历的源图像文件路径列表
             auto_switch: 是否更新源节点的当前文件
