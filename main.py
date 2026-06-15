@@ -28,6 +28,11 @@ from core.node_base import NodeBase
 from gui.theme import theme_manager
 from services.app_context import AppContext, set_app_context
 
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QIcon
+from PyQt5.QtWidgets import QApplication
+
+
 # 确保项目根目录在路径中
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -158,16 +163,6 @@ def run_gui(ctx, project_path: str = None):
     """
     # 配置日志
     setup_logging()
-
-    try:
-        # 导入 PyQt5 模块
-        from PyQt5.QtWidgets import QApplication
-        from PyQt5.QtCore import Qt
-        from PyQt5.QtGui import QIcon
-    except ImportError:
-        print("PyQt5 is required for GUI mode. Install it with: pip install PyQt5")
-        print("Or use CLI mode: python main.py --cli <project.json>")
-        sys.exit(1)
 
     # 创建 Qt 应用程序
     app = QApplication(sys.argv)
