@@ -728,20 +728,14 @@ class FlowResourcePanel(QWidget):
         self._reposition_page_buttons()
 
     def _reposition_page_buttons(self):
-        """将翻页按钮定位在面板的左右边缘"""
-        # 如果没有翻页按钮属性或按钮为None，返回
+        """翻页按钮水平居中放在滚动区域左右两端"""
         if not hasattr(self, '_page_right_btn') or self._page_right_btn is None:
             return
-        # 获取面板总宽度
-        pw = self.width()
-        # 获取滚动区域高度
+        sw = self._scroll_area.width()
         sh = self._scroll_area.height()
-        # 计算垂直居中位置
         cy = (sh - PAGE_BTN_SIZE) // 2
-        # 移动上一页按钮到左侧
         self._page_left_btn.move(2, cy)
-        # 移动下一页按钮到右侧
-        self._page_right_btn.move(pw - PAGE_BTN_SIZE - 2, cy)
+        self._page_right_btn.move(sw - PAGE_BTN_SIZE - 2, cy)
 
     # ── 翻页导航 ────────────
 
@@ -1022,8 +1016,14 @@ class FlowResourcePanel(QWidget):
         paths = getattr(node, 'src_file_paths', []) or []
         current = getattr(node, 'src_file_path', '')
 
-        # 遍历所有文件路径
+        # 去重后遍历所有文件路径
+        seen = set()
         for path in paths:
+            # 跳过重复路径
+            if path in seen:
+                continue
+            seen.add(path)
+
             # 创建缩略图按钮
             btn = ThumbnailButton(path)
             # 连接点击信号
