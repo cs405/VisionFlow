@@ -3248,6 +3248,7 @@ class MainWindow(QMainWindow):
             self._refresh_command_states(project_service.current_project)
         # 如果工作流完成（整条流程的每个节点都执行完，且没有出错、没有被停止）
         elif event == "done":
+            self._finalize_execution_state()
             # 计算工作流运行时间
             elapsed = self._format_elapsed()
             # 根据是否连续执行设置标签
@@ -3277,6 +3278,7 @@ class MainWindow(QMainWindow):
                         self._img_panel.set_image(self._selected_node._result_image_source)
         # 如果发生错误（某个节点发生错误）
         elif event == "error":
+            self._finalize_execution_state()
             # 关闭连续模式
             self._continuous_mode = False
             # 停止实时预览定时器
@@ -3298,6 +3300,7 @@ class MainWindow(QMainWindow):
             self._side_status_strip.set_status("结果区收到错误消息", "#f44336")
         # 如果事务停止
         elif event == "stopped":
+            self._finalize_execution_state()
             # 关闭连续模式
             self._continuous_mode = False
             # 更新状态标签
@@ -3472,7 +3475,6 @@ class MainWindow(QMainWindow):
     def _start_execution(self, continuous: bool = False):
         """公共执行入口 — 同步、检查、委托给 WorkflowRunner。
 
-        对齐：
           - 单次运行 → VisionDiagramDataBase.Start()（单张图像）
           - "运行全部" → VisionDiagramDataBase.Start() + UseAllImage 循环
           - 连续运行 → 带间隔的循环
@@ -3485,7 +3487,7 @@ class MainWindow(QMainWindow):
         # 如果没有工作流，返回
         if not self._workflow:
             return
-        # 同步工作流到项目（保存当前编辑器的状态）
+        # 同步工作流到项目（保存当前编辑器的状态）运行前强制刷新，获得流程图当前最新状态和数据
         self._sync_workflow_to_project()
         # 获取工作流中的节点数量
         node_count = len(self._workflow.get_all_nodes())
@@ -3505,8 +3507,13 @@ class MainWindow(QMainWindow):
         # 在主线程上将所有节点状态设置为运行中（可靠，不会产生跨线程问题）
         editor = self._current_diagram_editor()
         if editor:
+            from core.node_base import VisionNodeData
             # 遍历场景中的所有节点项
             for item in editor.scene.get_all_node_items():
+                # 清除上次执行的 _last_error 残留，避免旧状态污染本轮判断
+                nd = item.node_data
+                if isinstance(nd, VisionNodeData) and hasattr(nd, '_last_error'):
+                    del nd._last_error
                 # 设置节点状态为运行中
                 item.set_state(NodeState.RUNNING)
 
@@ -3523,6 +3530,8 @@ class MainWindow(QMainWindow):
                     auto_switch = getattr(start_node, 'use_auto_switch', True)
                     # 记录日志
                     self._log_panel.info(f"运行全部: {len(file_paths)} 个文件 ({node_count} 个节点)")
+                    # 设置执行完成回调
+                    self._wf_runner._on_finished = lambda event, data: self._wf_ui_update.emit(event, data)
                     # 启动运行全部模式
                     self._wf_runner.start_run_all(
                         file_paths=file_paths,
@@ -3544,9 +3553,6 @@ class MainWindow(QMainWindow):
             # 单次运行模式
             self._wf_runner.start_once()
 
-        # 安排执行后的状态更新（运行器在守护线程上运行）
-        # 延迟200毫秒后调用 _finalize_execution_state
-        QTimer.singleShot(200, self._finalize_execution_state)
 
     def _finalize_execution_state(self):
         """执行完成后，将节点状态设置为最终值"""

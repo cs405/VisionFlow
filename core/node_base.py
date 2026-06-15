@@ -858,10 +858,10 @@ class VisionNodeData(DemoNodeDataBase):
         """从第一个上游节点单步执行。"""
         # 检查图表数据是否存在
         if self.diagram_data is None:
-            return
+            return None
         # 如果工作流正在运行，则不执行
         if hasattr(self.diagram_data, 'state') and self.diagram_data.state.name == "RUNNING":
-            return
+            return None
 
         # 查找源节点
         src_data = self._find_source_node(self.diagram_data)
@@ -872,18 +872,21 @@ class VisionNodeData(DemoNodeDataBase):
         if len(from_nodes) == 0:
             from_data = self
         elif len(from_nodes) > 1:
-            return  # 多输入时无法自动选择
+            return None
         else:
             from_data = from_nodes[0]
 
         # 验证输入有效并执行
         if isinstance(from_data, VisionNodeData) and from_data.mat is not None:
             if not self.is_valid(from_data.mat):
-                return
+                return None
             result = self._invoke_action(lambda: self.invoke_core(src_data, from_data, self.diagram_data))
             # 更新图表的结果图像源
             if hasattr(self.diagram_data, 'result_image_source'):
                 self.diagram_data.result_image_source = self._result_image_source
+
+            return result
+        return None
 
     def _invoke_action(self, action: Callable[[], FlowableResult]) -> FlowableResult:
         """包装实际的 invoke 调用，管理 Mat 生命周期。
