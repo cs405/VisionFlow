@@ -1451,14 +1451,22 @@ class SrcFilesVisionNodeData(ROINodeData):
         new_files = self.collect_image_files(folder_path, recursive, image_extensions)
         if not new_files:
             return
-        self.src_file_paths.extend(new_files)
+        existing = set(self.src_file_paths)
+        for f in new_files:
+            if f not in existing:
+                self.src_file_paths.append(f)
+                existing.add(f)
         # 如果当前没有选中文件，则选中第一个
         if not self.src_file_path:
             self.src_file_path = self.src_file_paths[0]
 
     def add_files(self, file_paths: list[str]):
         """添加指定的图像文件"""
-        self.src_file_paths.extend(file_paths)
+        existing = set(self.src_file_paths)
+        for f in file_paths:
+            if f not in existing:
+                self.src_file_paths.append(f)
+                existing.add(f)
         # 如果当前没有选中文件且列表非空，则选中第一个
         if self.src_file_paths and not self.src_file_path:
             self.src_file_path = self.src_file_paths[0]
