@@ -87,3 +87,33 @@ class OpenCVTemplateMatchingNodeBase(Base64MatchingNodeData, OpenCVNodeDataBase,
         if template is None:
             return None
         return template
+
+
+# ── 经典匹配结果绘制辅助 ────────────────────────────────────────────
+
+def draw_matches(out: np.ndarray, tpl: np.ndarray, results: list[dict],
+                 color=(0, 255, 0), max_draw=30):
+    """在输出图像上绘制旋转矩形匹配结果。
+
+    参数：
+        out: 输出图像（原地修改）。
+        tpl: 模板图像（用于获取宽高）。
+        results: 匹配结果列表，每项含 x, y, angle, score。
+        color: 绘制颜色。
+        max_draw: 最多绘制数量。
+    """
+    h, w = tpl.shape[:2]
+    for r in results[:max_draw]:
+        cx, cy, angle = r['x'], r['y'], r.get('angle', 0)
+        rad = np.radians(angle)
+        cos_a, sin_a = np.cos(rad), np.sin(rad)
+        corners = np.array([
+            [-w / 2, -h / 2], [w / 2, -h / 2],
+            [w / 2, h / 2], [-w / 2, h / 2]
+        ])
+        rot = np.array([[cos_a, -sin_a], [sin_a, cos_a]])
+        pts = (corners @ rot.T + [cx, cy]).astype(np.int32)
+        cv2.polylines(out, [pts], True, color, 2)
+        score = r.get('score', 0)
+        cv2.putText(out, f'{score:.2f}', (int(cx) - 20, int(cy) - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
