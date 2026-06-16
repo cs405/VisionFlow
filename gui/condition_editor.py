@@ -21,7 +21,7 @@ from core.node_base import ConditionNodeData, VisionNodeData
 from core.conditions import (
     ConditionBranch,
     ConditionOperate,
-    ConditionsPrensenter,
+    ConditionsPresenter,
     FilterOperate,
     PropertyCondition,
 )
@@ -229,7 +229,7 @@ class ConditionEditorDialog(QDialog):
             output_id = output_combo.currentData() if output_combo else ""
 
             value_text = value_item.text().strip() if value_item else ""
-            # 尝试自动解析数值
+            # 委托给 PropertyCondition 的值处理逻辑（与 core 的 _str_to_bool / _values_equal 一致）
             value: str | float | int = value_text
             if value_text:
                 try:
@@ -238,7 +238,8 @@ class ConditionEditorDialog(QDialog):
                     try:
                         value = float(value_text)
                     except ValueError:
-                        pass
+                        from core.conditions import PropertyCondition as PC
+                        value = PC._str_to_bool(value_text)
 
             cond = PropertyCondition(
                 property_name=prop_name,
@@ -281,7 +282,7 @@ class ConditionEditorDialog(QDialog):
     # -- static entry point --
 
     @classmethod
-    def edit_conditions(cls, node: ConditionNodeData, parent=None) -> ConditionsPrensenter | None:
+    def edit_conditions(cls, node: ConditionNodeData, parent=None) -> ConditionsPresenter | None:
         dialog = cls(node=node, parent=parent)
         if dialog.exec_() == QDialog.Accepted:
             presenter = node.conditions_presenter

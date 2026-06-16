@@ -13,6 +13,14 @@
     label = FontIconTextBlock(FontIcons.Photo2, parent)
 """
 
+from core.constants import (
+    ICON_CAMERA, ICON_PHOTO2, ICON_COLOR, ICON_IN_PRIVATE,
+    ICON_ANNOTATION, ICON_HOME_GROUP, ICON_DIAL6, ICON_GOTO_TODAY,
+    ICON_LARGE_ERASE, ICON_GENERIC_SCAN, ICON_NARRATOR_FORWARD,
+    ICON_ETHERNET, ICON_COMMAND_PROMPT, ICON_MORE, ICON_VIDEO,
+    ICON_FAVORITE_STAR,
+)
+
 from PyQt5.QtWidgets import QPushButton, QLabel, QWidget, QHBoxLayout
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QFont, QFontDatabase, QPainter
@@ -23,7 +31,10 @@ from gui.theme import theme_manager, connect_theme
 # ── 字体族解析 ──────────────────────────────────────────────────
 
 def _detect_icon_font() -> str:
-    """检测 Windows 上可用的 Segoe 图标字体族"""
+    """检测 Windows 上可用的 Segoe 图标字体族。
+
+    模块内部使用，在 FontIcons 类初始化时调用以确定图标字体族。
+    """
     # 候选字体列表（按优先级排序）
     candidates = [
         "Segoe MDL2 Assets",        # Windows 10 图标字体
@@ -127,25 +138,25 @@ class FontIcons:
     Location = ""            # 位置/停止位置
 
     # ── 文件/对象图标 ──
-    Photo2 = ""              # 照片
+    Photo2 = ICON_PHOTO2              # 照片
     Calendar = ""            # 日历
     Folder = ""              # 文件夹
     Document = ""            # 文档
-    Video = ""               # 视频
-    Camera = ""              # 相机
+    Video = ICON_VIDEO               # 视频
+    Camera = ICON_CAMERA              # 相机
     OpenAs = ""              # 打开为
 
     # ── 节点分组图标 ──
-    InPrivate = ""           # 滤波模块 BlurDataGroup
-    Annotation = ""          # 图像分割提取 TakeoffDataGroup
-    HomeGroup = ""           # 形态学模块 MorphologyDataGroup
-    Dial6 = ""               # 逻辑模块 ConditionDataGroup
-    GotoToday = ""           # 模板匹配 TemplateMatchingDataGroup
-    LargeErase = ""          # 对象识别 DetectorDataGroup
-    GenericScan = ""         # 特征识别 FeatureDetectorDataGroup
-    NarratorForward = ""     # 网络通讯 NetworkDataGroup
-    CommandPrompt = ""       # Onnx通用模型 OnnxDataGroup
-    More = ""                # 其他模块 OtherDataGroup
+    InPrivate = ICON_IN_PRIVATE           # 滤波模块 BlurDataGroup
+    Annotation = ICON_ANNOTATION          # 图像分割提取 TakeoffDataGroup
+    HomeGroup = ICON_HOME_GROUP           # 形态学模块 MorphologyDataGroup
+    Dial6 = ICON_DIAL6               # 逻辑模块 ConditionDataGroup
+    GotoToday = ICON_GOTO_TODAY           # 模板匹配 TemplateMatchingDataGroup
+    LargeErase = ICON_LARGE_ERASE          # 对象识别 DetectorDataGroup
+    GenericScan = ICON_GENERIC_SCAN         # 特征识别 FeatureDetectorDataGroup
+    NarratorForward = ICON_NARRATOR_FORWARD     # 网络通讯 NetworkDataGroup
+    CommandPrompt = ICON_COMMAND_PROMPT       # Onnx通用模型 OnnxDataGroup
+    More = ICON_MORE                # 其他模块 OtherDataGroup
 
     # ── 布局/视图图标 ──
     AlignLeft = ""           # 左对齐
@@ -154,7 +165,7 @@ class FontIcons:
     DisconnectDrive = ""     # 断开连接/删除节点
 
     # ── 工具图标 ──
-    Color = ""               # 调色板/主题
+    Color = ICON_COLOR               # 调色板/主题
     Brightness = ""          # 太阳/亮度
     QuietHours = ""          # 月亮/夜间模式
     Crop = ""                # 裁剪
@@ -163,7 +174,7 @@ class FontIcons:
     DictionaryAdd = ""       # 从模板添加
     Manage = ""              # 管理/模板管理器
     SaveAs = ""              # 另存为模板
-    Ethernet = ""            # 运行模式
+    Ethernet = ICON_ETHERNET            # 运行模式
 
     # ── 窗口控制图标 ──
     ChromeMinimize = ""      # 最小化
@@ -198,7 +209,7 @@ class FontIcons:
     Car = ""                 # 汽车
 
     # ── 后备/额外图标 ──
-    FavoriteStar = ""        # 实心星形（收藏）
+    FavoriteStar = ICON_FAVORITE_STAR        # 实心星形（收藏）
     FavoriteStarOutline = "" # 空心星形（收藏轮廓）
     Pin = ""                 # 图钉（固定）
     Unpin = ""               # 取消固定

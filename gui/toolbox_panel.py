@@ -1035,12 +1035,16 @@ class ToolboxPanel(QWidget):
 
     # QSettings中收藏夹的键名
     FAVORITES_KEY = "Toolbox/Favorites"
-    # QSettings中最近使用的键名
     RECENTS_KEY = "Toolbox/Recents"
-    # 视图模式键名：'tree' 或 'grid'
     VIEW_MODE_KEY = "Toolbox/ViewMode"
-    # 最大最近使用记录数量
     MAX_RECENTS = 10
+
+    @property
+    def _settings(self):
+        """惰性获取 QSettings 实例。"""
+        if not hasattr(self, '_settings_inst'):
+            self._settings_inst = QSettings()
+        return self._settings_inst
 
     def __init__(self, parent=None):
         """初始化工具箱面板
@@ -1073,9 +1077,8 @@ class ToolboxPanel(QWidget):
     # ── 持久化 ────────────────────────────────────────────────────
 
     def _load_persisted(self):
-        """从QSettings加载持久化数据"""
-        # 创建QSettings对象
-        s = QSettings()
+        """从设置加载持久化数据"""
+        s = self._settings
         # 获取收藏夹列表
         favs = s.value(self.FAVORITES_KEY, [])
         # 如果是字符串（兼容旧版本），转换为列表
@@ -1099,31 +1102,22 @@ class ToolboxPanel(QWidget):
 
     def _save_favorites(self):
         """保存收藏夹到QSettings"""
-        # 创建QSettings对象
-        s = QSettings()
-        # 保存收藏夹列表
+        s = self._settings
         s.setValue(self.FAVORITES_KEY, self._favorites)
-        # 同步到磁盘
         s.sync()
         # 发出收藏夹变更信号
         self.favorites_changed.emit()
 
     def _save_recents(self):
-        """保存最近使用列表到QSettings"""
-        # 创建QSettings对象
-        s = QSettings()
-        # 保存最近使用列表（只保留前MAX_RECENTS条）
+        """保存最近使用列表到设置"""
+        s = self._settings
         s.setValue(self.RECENTS_KEY, self._recents[:self.MAX_RECENTS])
-        # 同步到磁盘
         s.sync()
 
     def _save_view_mode(self):
-        """保存视图模式到QSettings"""
-        # 创建QSettings对象
-        s = QSettings()
-        # 保存视图模式（'true'表示树形视图）
+        """保存视图模式到设置"""
+        s = self._settings
         s.setValue(self.VIEW_MODE_KEY, "true" if self._view_is_tree else "false")
-        # 同步到磁盘（立即写入磁盘）
         s.sync()
 
     def is_favorite(self, type_name: str) -> bool:
@@ -1479,16 +1473,8 @@ class ToolboxPanel(QWidget):
             for node_type in group.node_types:
                 # 获取类型名称
                 type_name = node_type.__name__
-                # 显示名称
-                display_name = type_name
-                try:
-                    # 尝试实例化获取显示名称
-                    instance = node_type()
-                    candidate = getattr(instance, 'display_name', '') or getattr(instance, 'name', '')
-                    if isinstance(candidate, str) and candidate.strip():
-                        display_name = candidate.strip()
-                except Exception:
-                    pass
+                # 显示名称: 优先使用类属性 __display_name__，其次使用类名
+                display_name = getattr(node_type, '__display_name__', None) or type_name
 
                 # 获取文档字符串作为描述
                 doc = (node_type.__doc__ or '').strip().splitlines()

@@ -938,20 +938,7 @@ class PropertyPanel(QWidget):
         返回：
             (属性名, 属性描述符) 列表
         """
-        # 结果列表
-        result = []
-        # 遍历节点的MRO（方法解析顺序）
-        for cls in type(self._current_node).__mro__:
-            # 如果到达object，停止
-            if cls is object:
-                break
-            # 遍历类的字典
-            for name, desc in cls.__dict__.items():
-                # 如果是Property描述符
-                if isinstance(desc, Property):
-                    # 如果属性名还没有添加
-                    if name not in [r[0] for r in result]:
-                        result.append((name, desc))
+        result = list(self._current_node.get_property_descriptors())
 
         # 源节点不应显示image_source_mode属性
         if isinstance(self._current_node, SrcFilesVisionNodeData):
@@ -1509,7 +1496,7 @@ class PropertyPanel(QWidget):
         return [VisionPropertyCondition.from_dict(c.to_dict()) for c in conditions]
 
     def _create_condition_widget(self) -> QWidget:
-        """创建条件控件 — 显示 ConditionsPrensenter 的分支摘要。"""
+        """创建条件控件 — 显示 ConditionsPresenter 的分支摘要。"""
         node = self._current_node
         if not isinstance(node, ConditionNodeData):
             return None
@@ -1626,16 +1613,11 @@ class PropertyPanel(QWidget):
             main._resource_panel.set_node(self._current_node)
 
     def _find_main_window(self):
-        """查找主窗口"""
-        # 从当前控件向上遍历
-        w = self
-        while w is not None:
-            from gui.main_window import MainWindow
-            # 如果是主窗口
-            if isinstance(w, MainWindow):
-                return w
-            # 获取父对象
-            w = w.parent()
+        """查找主窗口：遍历父控件链查找 MainWindow 实例。"""
+        from PyQt5.QtWidgets import QApplication
+        for widget in QApplication.topLevelWidgets():
+            if widget.__class__.__name__ == "MainWindow":
+                return widget
         return None
 
     def _set_property_value(self, prop_name: str, new_value: Any, *, force: bool = False):

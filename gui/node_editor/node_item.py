@@ -9,9 +9,10 @@ from PyQt5.QtCore import Qt, QRectF, QPointF, pyqtSignal, QTimer, QSizeF
 from PyQt5.QtGui import (QPen, QBrush, QColor, QPainter, QPainterPath,
                          QFont, QFontMetrics, QLinearGradient)
 
-from core.node_base import (NodeBase, Port, PortType, PortDock,
-                            VisionNodeData, SrcFilesVisionNodeData,
-                            ConditionNodeData, WaitAllParallelNodeData)
+from core.node_base import NodeBase, Port, PortType, PortDock
+from core.node_vision import VisionNodeData
+from core.node_selectable import SrcFilesVisionNodeData
+from core.node_condition import ConditionNodeData, WaitAllParallelNodeData
 from gui.node_editor.socket_item import SocketItem, PORT_DIAMETER
 from gui.font_icons import FontIcons, icon_font
 

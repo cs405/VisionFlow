@@ -17,7 +17,7 @@ from PyQt5.QtCore import Qt, pyqtSignal, QRect
 from gui.theme import theme_manager, connect_theme
 from PyQt5.QtGui import QColor, QFont, QPainter, QPixmap
 
-from core.node_base import VisionNodeData
+from core.node_vision import VisionNodeData
 from gui.image_viewer import OverlayType
 from core.result_presenter import (ResultItem, RectangleResultItem, LineResultItem,
                                     ScoreRectangleResultItem, VisionMessage,
