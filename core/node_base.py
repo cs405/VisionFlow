@@ -782,6 +782,9 @@ class VisionNodeData(DemoNodeDataBase):
         self._prepared_input: np.ndarray | None = None
         # 结果展示器
         self._result_presenter: Any = None
+        # 累积裁剪偏移量 (x, y, w, h)，相对于原始图像
+        # 由 ROINodeData / 匹配节点自动维护，ROIMapBackNode 只读不写
+        self._crop_chain_offset: tuple = (0, 0, 0, 0)
         # 本轮执行状态: None(未执行) / "completed"(成功) / "error"(失败) / "break"(中断)
         self._execution_state: str | None = None
 
@@ -946,7 +949,14 @@ class VisionNodeData(DemoNodeDataBase):
         elif result.is_error:
             event_system.publish(EventType.NODE_ERROR, sender=self, result=result)
 
+        # 调用后置钩子（子类可重写以在 invoke_core 完成后做额外处理）
+        self._on_post_invoke(result)
+
         return result
+
+    def _on_post_invoke(self, result: FlowableResult):
+        """invoke_core 完成后的后置钩子。子类可重写。"""
+        pass
 
     # -- 子类必须实现的抽象方法 --
 
@@ -1214,6 +1224,9 @@ class ROINodeData(VisionNodeData):
             elif from_data.mat is not None:
                 self._original_mat = from_data.mat.copy()
 
+        # 传播上游累积裁剪偏移量
+        upstream_offset = getattr(from_data, '_crop_chain_offset', (0, 0, 0, 0))
+
         # 根据图像源模式确定有效的输入图像
         if from_data is not None and from_data.mat is not None:
             if hasattr(self, 'image_source_mode') and self.image_source_mode == "原图":
@@ -1242,11 +1255,14 @@ class ROINodeData(VisionNodeData):
             h_img, w_img = input_mat.shape[:2]
             x, y = max(0, x), max(0, y)
             w, h = min(w, w_img - x), min(h, h_img - y)
+            # 累积裁剪偏移量：上游偏移 + 本次ROI偏移
+            self._crop_chain_offset = (upstream_offset[0] + x, upstream_offset[1] + y, w, h)
             self._prepared_input = input_mat[y:y+h, x:x+w]
             result = super().invoke(previors, diagram)
             self._prepared_input = None
         else:
-            # 无ROI时的处理
+            # 无ROI时透传上游偏移量
+            self._crop_chain_offset = upstream_offset
             if from_data is not None and input_mat is not from_data.mat:
                 self._prepared_input = input_mat
                 result = super().invoke(previors, diagram)
@@ -1587,6 +1603,22 @@ class Base64MatchingNodeData(VisionNodeData):
         # Base64编码的模板图像字符串
         self._base64_string: str = ""
 
+    def _on_post_invoke(self, result: FlowableResult):
+        """匹配成功后，将匹配偏移量累加到 _crop_chain_offset。
+
+        所有模板匹配节点（XFeat、SIFT、SURF、ORB、Template等）自动适配，
+        无需逐个修改。
+        """
+        super()._on_post_invoke(result)
+        if result.is_ok and self.matched and self.match_w > 0 and self.match_h > 0:
+            prev = self._crop_chain_offset
+            self._crop_chain_offset = (
+                prev[0] + int(self.match_x),
+                prev[1] + int(self.match_y),
+                int(self.match_w),
+                int(self.match_h),
+            )
+
     @property
     def base64_string(self) -> str:
         """获取Base64编码的模板图像"""
@@ -1792,6 +1824,8 @@ class ConditionNodeData(VisionNodeData):
                 self._original_mat = upstream_original
             elif from_node.mat is not None:
                 self._original_mat = from_node.mat.copy()
+            # 传播上游累积裁剪偏移量（ROINodeData.invoke 的正常行为）
+            self._crop_chain_offset = getattr(from_node, '_crop_chain_offset', (0, 0, 0, 0))
 
         src_data = self._find_source_node(diagram)
 

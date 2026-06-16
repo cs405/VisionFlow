@@ -188,7 +188,6 @@ class XFeatMatchingNode(Base64MatchingNodeData, OpenCVNodeDataBase,
         if self.matched:
             x, y, bw, bh = best_rect
             if bw > 0 and bh > 0:
-                # 从带框的图上裁剪，保留匹配框（厚度3）
                 matched_region = out[y:y + bh, x:x + bw].copy()
                 return self.ok(matched_region, f"匹配 {len(results)} 处 (最高: {best:.0f})")
             return self.error(None, "匹配区域无效")
