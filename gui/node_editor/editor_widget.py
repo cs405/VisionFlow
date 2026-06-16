@@ -779,7 +779,7 @@ class DiagramEditorWidget(QWidget):
     def _sync_states_from_data(self):
         """执行完毕后直接同步：从节点数据 _execution_state 设置 NodeItem 状态。
 
-        参照 WPF-VisionMaster：状态存储在数据对象上，执行完成后直接读取。
+        状态存储在数据对象上，执行完成后直接读取。
         不依赖事件队列（主线程阻塞期间事件无法被定时器处理）。
         """
         from core.node_base import VisionNodeData
