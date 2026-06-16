@@ -38,6 +38,12 @@ class DataCollectorNode(OpenCVNodeDataBase, LogicModuleNode):
         super().__init__()
         self.name = "数据收集"
 
+    def _reset_for_new_execution(self):
+        """每次工作流启动时重置结果属性，避免上次运行残留值。"""
+        self.matched = False
+        self.true_count = 0
+        self.total_count = 0
+
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
         mat = self.get_input_mat(from_node.mat if from_node else None)
 
