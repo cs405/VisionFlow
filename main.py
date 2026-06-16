@@ -180,6 +180,11 @@ def run_gui(ctx, project_path: str = None):
         # 设置应用程序图标
         app.setWindowIcon(QIcon(icon_path))
 
+    # 注入坐标转换器（core → GUI 桥接）
+    from core.commands import set_point_converter
+    from PyQt5.QtCore import QPointF
+    set_point_converter(lambda p: QPointF(p[0], p[1]))
+
     # 通过 ThemeManager 应用主题（唯一数据源）
     app.setStyle("Fusion")
     # 设置应用程序调色板
