@@ -701,11 +701,7 @@ class WorkflowEngine:
         return results
 
     def _group_by_levels(self, topo_order: list[str]) -> list[list[str]]:
-        """将拓扑排序后的节点按执行层级分组。
-
-        使用 BFS 距离确保下游节点始终在后续层级，
-        条件分支等依赖端口路由的节点才能正常工作。
-        """
+        """将拓扑排序后的节点按执行层级分组（BFS 距离，每次执行时重新计算）。"""
         if not topo_order:
             return []
 

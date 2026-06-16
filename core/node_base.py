@@ -230,6 +230,7 @@ class LinkData:
             "to_node_id": self.to_node_id,
             "to_port_id": self.to_port_id,
             "text": self.text,
+            "stroke_color": self.stroke_color,
         }
 
     @classmethod
@@ -242,8 +243,8 @@ class LinkData:
             to_port_id=data.get("to_port_id", ""),
             text=data.get("text", ""),
         )
-        # 使用字典中的link_id覆盖自动生成的ID（保持ID一致性）
         link.link_id = data.get("link_id", link.link_id)
+        link.stroke_color = data.get("stroke_color", link.stroke_color)
         return link
 
     def invoke(self, diagram: "WorkflowEngine | None" = None) -> "FlowableResult":
@@ -327,6 +328,7 @@ class NodeBase(ABC):
         for cb in self._property_callbacks.get(name, []):
             cb(name, old_value, new_value)
         # 批量更新模式下跳过事件发布，避免逐个属性变更时洪水式发布
+        # _batch_updating 仅在单线程（主线程）中设置，无需同步
         if not getattr(self, '_batch_updating', False):
             event_system.publish(EventType.NODE_PROPERTY_CHANGED,
                                 sender=self, name=name, old=old_value, new=new_value)
@@ -409,20 +411,17 @@ class NodeBase(ABC):
         self._diagram_data = value
 
     def get_all_from_node_datas(self) -> list["NodeBase"]:
-        """递归获取所有上游节点"""
+        """获取所有上游节点（迭代 BFS，避免深图递归溢出）。"""
         visited: set[str] = set()
         result: list[NodeBase] = []
-
-        def traverse(node: NodeBase):
-            # 避免重复访问
+        queue = list(self.from_node_datas)
+        while queue:
+            node = queue.pop()
             if node.node_id in visited:
-                return
+                continue
             visited.add(node.node_id)
-            for from_node in node.from_node_datas:
-                result.append(from_node)
-                traverse(from_node)
-
-        traverse(self)
+            result.append(node)
+            queue.extend(node.from_node_datas)
         return result
 
     def get_all_from_this_node_datas(self) -> list["NodeBase"]:
@@ -528,8 +527,10 @@ class NodeBase(ABC):
         # numpy浮点数转为Python float
         if isinstance(value, (np.floating,)):
             return float(value)
-        # numpy数组转为列表
+        # numpy数组转为列表（对大数组使用 ravel 减少内存）
         if isinstance(value, np.ndarray):
+            if value.size > 10000:
+                return {"__ndarray_shape__": value.shape, "__ndarray_dtype__": str(value.dtype)}
             return value.tolist()
         # 枚举类型
         if isinstance(value, Enum):
@@ -563,14 +564,6 @@ class NodeBase(ABC):
         if isinstance(value, list):
             return [self._deserialize_property_value(v) for v in value]
         if not isinstance(value, dict):
-            # 尝试将字符串数字转回数字（numpy序列化的后备方案）
-            if isinstance(value, str):
-                try:
-                    if '.' in value or 'e' in value.lower():
-                        return float(value)
-                    return int(value)
-                except (ValueError, OverflowError):
-                    pass
             return value
 
         # 恢复元组
@@ -666,11 +659,11 @@ class NodeBase(ABC):
     def from_dict(cls, data: dict) -> "NodeBase":
         """从字典反序列化节点。
 
-        注意：此方法仅恢复基本字段。子类（如 ConditionNodeData）应覆盖
-        from_dict 或使用 restore_from_dict 来完成完整状态恢复。
+        注意：此方法跳过 __init__ 中的 load_default()（避免文件 I/O），
+        仅初始化必要基础状态。子类应覆盖或使用 restore_from_dict 完成恢复。
         """
         node = cls.__new__(cls)
-        cls.__init__(node)  # 调用完整 __init__ 链，确保子类状态正确初始化
+        NodeBase.__init__(node)  # 跳过子类 __init__，避免 load_default() 文件扫描
         node._id = data.get("id", node._id)
         node.name = data.get("name", node.name)
         node._title = data.get("title", "")

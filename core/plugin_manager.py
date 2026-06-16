@@ -127,9 +127,12 @@ class PluginManager:
                     group.unregister(obj)
 
     def load_from_path(self, path: str):
-        """从单个 Python 文件加载节点模块。"""
+        """从单个 Python 文件加载节点模块。
+
+        注意：不将文件目录加入 sys.path，使用相对导入的模块会失败。
+        推荐让节点模块仅使用绝对导入（from core.node_base import ...）。
+        """
         import importlib.util
-        # 从文件路径提取模块名称
         module_name = os.path.splitext(os.path.basename(path))[0]
         # 创建模块加载规格
         spec = importlib.util.spec_from_file_location(module_name, path)

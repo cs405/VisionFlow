@@ -372,3 +372,8 @@ class WaitAllParallelNodeData(VisionNodeData, LogicModuleNode):
         data = super().to_dict()
         data["result_count"] = self._result_count
         return data
+
+    def restore_from_dict(self, data: dict) -> "WaitAllParallelNodeData":
+        super().restore_from_dict(data)
+        self._result_count = data.get("result_count", 0)
+        return self

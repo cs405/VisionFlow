@@ -137,7 +137,7 @@ class SrcFilesVisionNodeData(ROINodeData):
     # 支持的图像文件扩展名列表
     _IMAGE_EXTENSIONS = (
         ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".tif",
-        ".webp", ".svg", ".tga", ".dds", ".eps", ".pdf",
+        ".webp", ".svg", ".tga", ".dds", ".eps",
     )
 
     @classmethod
@@ -301,7 +301,10 @@ class SrcFilesVisionNodeData(ROINodeData):
 
     @classmethod
     def from_dict(cls, data: dict) -> "SrcFilesVisionNodeData":
-        """从字典反序列化节点"""
+        """从字典反序列化节点。
+
+        注意：工作流反序列化走 restore_from_dict 路径，此方法可能未被调用。
+        """
         node = super().from_dict(data)
         node.src_file_paths = data.get("src_file_paths", [])
         node.src_file_path = data.get("src_file_path", "")

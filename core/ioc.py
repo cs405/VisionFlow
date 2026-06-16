@@ -13,7 +13,10 @@ logger = logging.getLogger(__name__)
 # 创建类型变量 T，用于泛型（未实际使用，但为类型注解保留）
 T = TypeVar("T")
 
-_BUILTIN_MODULES = frozenset({"builtins", "typing", "abc", "enum"})
+_BUILTIN_MODULES = frozenset({
+    "builtins", "typing", "abc", "enum", "datetime", "decimal",
+    "pathlib", "collections", "fractions", "io", "uuid",
+})
 
 
 def _is_builtin_type(t: type) -> bool:

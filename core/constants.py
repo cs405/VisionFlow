@@ -27,8 +27,9 @@
       - 结果输出模块 → OutputDataGroup
       - Onnx通用模型 → OnnxDataGroup
       - 其他模块 → OtherDataGroup
-# TODO: 分层违规 — core 层不应依赖 gui 层。FontIcons 应迁移到 core 层
-# 作为字符串常量，由 GUI 层完成 {str: QIcon/QFont} 映射。
+# TODO(arch): 分层违规 — core 层不应依赖 gui 层。
+# 迁移路径：在 core 层定义 IconKey 字符串常量，GUI 层维护 {IconKey: QIcon} 映射表。
+# 涉及文件：gui/font_icons.py, gui/node_editor/node_item.py, gui/widgets/toolbox_panel.py
 from gui.font_icons import FontIcons
 
 

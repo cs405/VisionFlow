@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import Any
+# TODO(arch): QPointF 是 PyQt5 类型，与"GUI 框架无关"的声明矛盾。
+# 迁移路径：_to_point 返回 (x, y) 元组，GUI 适配器负责转换为 QPointF。
 from PyQt5.QtCore import QPointF
 
 
@@ -280,9 +282,10 @@ class RemoveNodeCommand(Command):
         # 步骤2：保存节点数据（用于撤销时重建节点）
         self._saved_node = item.node_data
 
-        # 步骤3：保存节点位置（用于撤销时恢复到原位置）
+        # 步骤3：保存节点位置和组名（用于撤销时恢复到原位）
         p = item.pos()
         self._saved_pos = (p.x(), p.y())
+        self._group_name = getattr(item, 'group_name', '')
 
         # 步骤4：从场景中删除节点
         # 注意：此处假设 remove_node_item 也会删除该节点相关的所有连线

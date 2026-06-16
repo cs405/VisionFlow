@@ -55,10 +55,15 @@ class FromROI(ROIBase):
     """从上游节点获取的ROI区域。"""
 
     def __init__(self, source_node: NodeBase = None):
-        # 调用父类构造函数，设置ROI名称为"使用上游ROI"
         super().__init__("使用上游ROI")
-        # ROI来源节点（上游节点）
         self.source_node = source_node
+        self._source_node_id: str = ""  # 序列化时保存，反序列化后由 load_data 恢复
+
+    def to_dict(self) -> dict:
+        data = super().to_dict()
+        if self.source_node is not None:
+            data["source_node_id"] = self.source_node.node_id
+        return data
 
 
 class DrawROI(ROIBase):
@@ -217,18 +222,20 @@ class ROINodeData(VisionNodeData):
         # 有ROI时的处理
         if roi_rect is not None:
             x, y, w, h = roi_rect
-            # 累积裁剪偏移量：上游偏移 + 本次ROI偏移
             self._crop_chain_offset = (upstream_offset[0] + x, upstream_offset[1] + y, w, h)
             self._prepared_input = input_mat[y:y+h, x:x+w]
-            result = super().invoke(previors, diagram)
-            self._prepared_input = None
+            try:
+                result = super().invoke(previors, diagram)
+            finally:
+                self._prepared_input = None
         else:
-            # 无ROI时透传上游偏移量
             self._crop_chain_offset = upstream_offset
             if from_data is not None and input_mat is not from_data.mat:
                 self._prepared_input = input_mat
-                result = super().invoke(previors, diagram)
-                self._prepared_input = None
+                try:
+                    result = super().invoke(previors, diagram)
+                finally:
+                    self._prepared_input = None
             else:
                 result = super().invoke(previors, diagram)
 

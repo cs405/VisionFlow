@@ -223,7 +223,11 @@ class VisionNodeData(DemoParamsMixin, HelpPresenterMixin, PropertyPresenterMixin
     def _invoke_action(self, action: Callable[[], FlowableResult]) -> FlowableResult:
         """包装实际的 invoke 调用，管理 Mat 生命周期。"""
         self._pre_invoke()
-        result = action()
+        try:
+            result = action()
+        except Exception:
+            self._execution_state = "error"
+            raise
         self._post_invoke(result)
         return result
 

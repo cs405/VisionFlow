@@ -3,6 +3,7 @@
 工作流执行事件、节点状态变更和属性变更的发布/订阅系统。
 """
 
+import threading
 from collections import defaultdict
 from enum import Enum, auto
 from typing import Any, Callable
@@ -60,33 +61,27 @@ class EventSystem:
 
     # 定义构造函数
     def __init__(self):
-        # 回调函数字典，键为事件类型，值为可调用对象的列表，支持一个事件触发多个处理函数
-        # 使用 defaultdict(list) 确保访问不存在的键时自动返回空列表
         self._handlers: dict[EventType, list[Callable]] = defaultdict(list)
-        # 防止 MESSAGE_ERROR 处理器自身异常导致无限递归
         self._in_error_publish: bool = False
+        self._lock = threading.Lock()
 
-    # 定义订阅方法
     def subscribe(self, event_type: EventType, handler: Callable):
-        """订阅事件类型
+        """订阅事件类型。处理函数签名: handler(sender, **kwargs)"""
+        with self._lock:
+            self._handlers[event_type].append(handler)
 
-        处理函数签名: handler(sender, **kwargs)
-        """
-        # 将处理函数添加到对应事件类型的处理函数列表中
-        self._handlers[event_type].append(handler)
-
-    # 定义取消订阅方法
     def unsubscribe(self, event_type: EventType, handler: Callable):
         """取消订阅"""
-        handlers = self._handlers.get(event_type)
-        if handlers and handler in handlers:
-            handlers.remove(handler)
+        with self._lock:
+            handlers = self._handlers.get(event_type)
+            if handlers and handler in handlers:
+                handlers.remove(handler)
 
-    # 定义发布事件方法
     def publish(self, event_type: EventType, sender: Any = None, **kwargs):
-        """发布事件给所有订阅者"""
-        # 遍历该事件类型的所有处理函数
-        for handler in self._handlers.get(event_type, []):
+        """发布事件给所有订阅者（线程安全）"""
+        with self._lock:
+            handlers = list(self._handlers.get(event_type, []))
+        for handler in handlers:
             # 尝试执行处理函数
             try:
                 # 调用处理函数，传入发送者和关键字参数
@@ -105,8 +100,8 @@ class EventSystem:
     # 定义清空方法
     def clear(self):
         """移除所有订阅"""
-        # 清空处理函数字典
-        self._handlers.clear()
+        with self._lock:
+            self._handlers.clear()
 
 
 # 创建全局事件系统实例

@@ -17,6 +17,8 @@ from core.events import EventType, event_system
 from core.workflow import WorkflowEngine
 from core.node_base import NodeBase
 
+# TODO(arch): QSettings 是 PyQt5 类型，core 层不应依赖 GUI 框架。
+# 迁移路径：用 JSON 文件或抽象 KeyValueStore 接口替代 QSettings。
 from PyQt5.QtCore import QSettings
 
 # 模板文件命名模式: NNN_name.json

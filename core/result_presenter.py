@@ -228,20 +228,28 @@ class ValueResultPresenter:
         """设置要呈现的结果"""
         self._result = result
 
+    # UI labels (override in subclass for i18n)
+    LABEL_NODE_NAME = "节点名称"
+    LABEL_NODE_TYPE = "节点类型"
+    LABEL_STATUS = "执行状态"
+    LABEL_MESSAGE = "消息"
+    LABEL_DURATION = "耗时"
+    LABEL_SUCCESS = "成功"
+    LABEL_FAILURE = "失败"
+
     def get_rows(self) -> list[tuple[str, str, ResultItemType]]:
         """返回表格显示的行数据 (名称, 值字符串, 类型)"""
         if self._result is None:
             return []
         rows: list[tuple[str, str, ResultItemType]] = []
-        # 添加基本信息行
-        rows.append(("节点名称", self._result.node_name, ResultItemType.VALUE))
-        rows.append(("节点类型", self._result.node_type, ResultItemType.VALUE))
-        rows.append(("执行状态", "成功" if self._result.success else "失败",
+        rows.append((self.LABEL_NODE_NAME, self._result.node_name, ResultItemType.VALUE))
+        rows.append((self.LABEL_NODE_TYPE, self._result.node_type, ResultItemType.VALUE))
+        rows.append((self.LABEL_STATUS,
+                     self.LABEL_SUCCESS if self._result.success else self.LABEL_FAILURE,
                      ResultItemType.VALUE))
-        rows.append(("消息", self._result.message or "-", ResultItemType.VALUE))
-        # 添加耗时信息（如果有）
+        rows.append((self.LABEL_MESSAGE, self._result.message or "-", ResultItemType.VALUE))
         if self._result.execution_time_ms > 0:
-            rows.append(("耗时", f"{self._result.execution_time_ms:.1f} ms",
+            rows.append((self.LABEL_DURATION, f"{self._result.execution_time_ms:.1f} ms",
                          ResultItemType.VALUE))
         # 添加所有值类型的项
         for item in self._result.value_items:
@@ -258,6 +266,7 @@ class DataGridResultPresenter:
     """
 
     # 表格列定义
+    # UI labels (override in subclass for i18n)
     COLUMNS = ("名称", "值", "X", "Y", "宽度", "高度", "分数")
 
     def __init__(self, node_result: NodeResult = None):
