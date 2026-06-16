@@ -281,13 +281,15 @@ class SrcFilesVisionNodeData(ROINodeData):
         assets/images 目录可能不存在，此时静默跳过。
         """
         super().load_default()
+        if not hasattr(self, 'src_file_paths'):
+            self.src_file_paths: list[str] = []
         try:
             assets_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "images")
             if os.path.isdir(assets_dir):
                 self.add_files_from_folder(assets_dir)
         except Exception:
             pass
-        self.src_file_path = ""
+        self.src_file_path = self.src_file_paths[0] if self.src_file_paths else ""
 
     def to_dict(self) -> dict:
         """序列化节点为字典"""

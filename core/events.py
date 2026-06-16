@@ -80,18 +80,17 @@ class EventSystem:
         """发布事件给所有订阅者（线程安全）。
 
         如果 handler 抛出异常且 event_type 不是 MESSAGE_ERROR，
-        发布一条 MESSAGE_ERROR 事件通知 UI，但同一 publish 调用
-        中只报告第一个错误，避免重复。
+        发布 MESSAGE_ERROR 事件通知 UI（最多报告前 5 个错误，避免洪水）。
         """
         with self._lock:
             handlers = list(self._handlers.get(event_type, []))
-        error_reported = False
+        error_count = 0
         for handler in handlers:
             try:
                 handler(sender, **kwargs)
             except Exception as e:
-                if event_type != EventType.MESSAGE_ERROR and not error_reported:
-                    error_reported = True
+                if event_type != EventType.MESSAGE_ERROR and error_count < 5:
+                    error_count += 1
                     try:
                         self.publish(EventType.MESSAGE_ERROR, sender=None,
                                     message=f"事件处理函数错误: {e}")

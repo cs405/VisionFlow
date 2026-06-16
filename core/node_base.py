@@ -650,8 +650,10 @@ class NodeBase(ABC):
                     continue
                 try:
                     setattr(self, name, self._deserialize_property_value(raw_value))
-                except Exception:
-                    continue
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        "恢复属性 '%s.%s' 失败: %s", type(self).__name__, name, e)
 
         return self
 

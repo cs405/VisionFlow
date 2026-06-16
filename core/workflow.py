@@ -161,7 +161,6 @@ class WorkflowEngine:
 
         线程安全：从 ThreadPoolExecutor 的工作线程调用。
         """
-        import time
         # 检查是否启用输出历史记录
         if not getattr(node, 'use_invoked_part', True):
             return
@@ -664,11 +663,6 @@ class WorkflowEngine:
                 if link.to_node_id == node.node_id:
                     link.invoke(diagram=self)
                     previors = previors or link
-        else:
-            for link in self._links:
-                if link.to_node_id == node.node_id:
-                    previors = link
-                    break
 
         # ── 端口模式：执行传入的端口 ──
         if self.flowable_mode == DiagramFlowableMode.PORT:
@@ -696,7 +690,7 @@ class WorkflowEngine:
         """并行执行一组节点（复用线程池减少创建/销毁开销）。"""
         if self._executor is None:
             self._executor = ThreadPoolExecutor(max_workers=self._max_workers)
-        results: list[FlowableResult] = []
+        results: dict[str, FlowableResult] = {}
         futures = {}
         for nid in node_ids:
             node = self._nodes.get(nid)
@@ -704,12 +698,12 @@ class WorkflowEngine:
                 futures[self._executor.submit(self._execute_node, node)] = nid
 
         for future in as_completed(futures):
+            nid = futures[future]
             try:
-                result = future.result()
-                results.append(result)
+                results[nid] = future.result()
             except Exception as e:
-                results.append(FlowableResult.error(message=str(e)))
-        return results
+                results[nid] = FlowableResult.error(message=str(e))
+        return [results[nid] for nid in node_ids]
 
     def _invalidate_levels_cache(self):
         """拓扑变更时使层级缓存失效。"""
@@ -824,10 +818,9 @@ class WorkflowEngine:
 
     def dispose(self):
         """清理所有资源"""
-        self.clear()
         for node in list(self._nodes.values()):
             node.dispose()
-        self._nodes.clear()
+        self.clear()
         if self._executor is not None:
             self._executor.shutdown(wait=True)
             self._executor = None

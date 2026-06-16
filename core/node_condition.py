@@ -335,11 +335,16 @@ class WaitAllParallelNodeData(VisionNodeData, LogicModuleNode):
         with self._result_lock:
             self._result_count += 1
             if not self._parallel_count_cached:
-                self._cached_parallel_count = sum(
-                    1 for n in self.from_node_datas
-                    if hasattr(n, 'invoke_mode') and n.invoke_mode == FlowableInvokeMode.PARALLEL
-                    and getattr(n, '_execution_state', None) != 'error'
-                )
+                # 统计所有标记为 PARALLEL 的上游节点（不含 error 状态的）
+                parallel_count = 0
+                for n in self.from_node_datas:
+                    if hasattr(n, 'invoke_mode') and n.invoke_mode == FlowableInvokeMode.PARALLEL:
+                        if getattr(n, '_execution_state', None) != 'error':
+                            parallel_count += 1
+                # 如果没有显式的 PARALLEL 节点，则统计所有上游节点数
+                if parallel_count == 0:
+                    parallel_count = max(1, len(self.from_node_datas))
+                self._cached_parallel_count = parallel_count
                 self._parallel_count_cached = True
             all_done = self._result_count >= self._cached_parallel_count
             if all_done:

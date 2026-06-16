@@ -355,9 +355,12 @@ class VisionNodeData(HelpPresenterMixin, PropertyPresenterMixin, NodeBase):
             node = diagram.get_node_by_id(previors.from_node_id)
             if isinstance(node, VisionNodeData):
                 return node
-        # 后备方案：使用第一个 from_node_data
-        # 注意：菱形依赖图中 from_node_datas 包含所有祖先节点，
-        # 返回的第一个可能不是直接前驱，但作为 fallback 已足够
+        # 后备方案：在 from_node_datas 中查找直接前驱
+        # 直接前驱 = 其 to_node_datas 中包含 self 的节点
+        for n in self.from_node_datas:
+            if isinstance(n, VisionNodeData) and self in getattr(n, 'to_node_datas', []):
+                return n
+        # 最后兜底：返回第一个 VisionNodeData 类型的上游节点
         for n in self.from_node_datas:
             if isinstance(n, VisionNodeData):
                 return n

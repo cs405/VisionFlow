@@ -650,7 +650,7 @@ class ProjectService:
             "modified_at": project.modified_at,
             "selected_diagram_index": project.selected_diagram_index,
             "diagrams": [d.to_dict() for d in project.diagrams],
-            "templates": [t.to_dict() for t in project._templates],
+            "templates": [t.to_dict() for t in project.templates],
         }
 
     def _deserialize(self, data: dict, file_path: str) -> ProjectItem:

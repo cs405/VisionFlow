@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 _BUILTIN_MODULES = frozenset({
     "builtins", "typing", "abc", "enum", "datetime", "decimal",
     "pathlib", "collections", "fractions", "io", "uuid",
+    "numpy", "cv2", "PyQt5", "PyQt5.QtCore", "PyQt5.QtGui", "PyQt5.QtWidgets",
 })
 
 
