@@ -5,6 +5,7 @@
 
 import inspect
 import logging
+import threading
 from typing import Any, Callable, TypeVar
 
 logger = logging.getLogger(__name__)
@@ -100,23 +101,28 @@ class ServiceProvider:
         }
         # 初始化单例实例缓存，键为服务类型，值为实例
         self._singletons: dict[type, Any] = {}
+        self._singletons_lock = threading.Lock()
 
     # 定义根据类型解析服务的方法
     def resolve(self, service_type: type) -> Any:
-        """根据类型解析服务"""
+        """根据类型解析服务（线程安全）"""
         # 检查是否已有缓存的单例实例
         if service_type in self._singletons:
-            # 如果有，直接返回缓存的实例
             return self._singletons[service_type]
 
         # 查找服务注册描述符
         descriptor = self._find_descriptor(service_type)
-        # 如果找不到描述符
         if descriptor is None:
-            # 抛出 KeyError 异常
             raise KeyError(f"服务未注册: {service_type.__name__}")
 
-        # 创建实例并返回
+        # 创建实例（单例时加锁防重复创建）
+        if descriptor.singleton:
+            with self._singletons_lock:
+                if service_type in self._singletons:
+                    return self._singletons[service_type]
+                instance = self._create_instance(descriptor)
+                self._singletons[service_type] = instance
+                return instance
         return self._create_instance(descriptor)
 
     # 定义查找描述符的方法
@@ -129,37 +135,16 @@ class ServiceProvider:
         """根据描述符创建服务实例"""
         # 情况1：使用预构建的实例
         if descriptor.instance is not None:
-            # 如果是单例
-            if descriptor.singleton:
-                # 缓存实例到单例字典
-                self._singletons[descriptor.service_type] = descriptor.instance
-            # 返回预构建的实例
             return descriptor.instance
 
         # 情况2：使用工厂函数
         if descriptor.factory is not None:
-            # 调用工厂函数，传入当前服务提供者作为参数
-            instance = descriptor.factory(self)
-            # 如果是单例
-            if descriptor.singleton:
-                # 缓存实例到单例字典
-                self._singletons[descriptor.service_type] = instance
-            # 返回工厂函数创建的实例
-            return instance
+            return descriptor.factory(self)
 
         # 情况3：构造函数注入
-        # 获取实现类型
         impl_type = descriptor.implementation_type
-        # 解析构造函数参数
         params = self._resolve_constructor_params(impl_type)
-        # 实例化对象
-        instance = impl_type(**params)
-        # 如果是单例
-        if descriptor.singleton:
-            # 缓存实例到单例字典
-            self._singletons[descriptor.service_type] = instance
-        # 返回新创建的实例
-        return instance
+        return impl_type(**params)
 
     # 定义解析构造函数参数的方法
     def _resolve_constructor_params(self, impl_type: type) -> dict:
@@ -205,4 +190,6 @@ class ServiceProvider:
 # 创建全局服务集合实例
 # 注意：此实例在 services/app_context.py 的 init_defaults() 中通过同步机制
 # 与 AppContext 保持一致。新代码应通过 app_context.service_collection 访问。
+# 当前 IoC 支持：singleton/transient 注册 + 构造函数注入。
+# 未来可扩展：命名注册、开放泛型、scoped 生命周期。
 service_collection = ServiceCollection()

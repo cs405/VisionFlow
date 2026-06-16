@@ -27,7 +27,8 @@
       - 结果输出模块 → OutputDataGroup
       - Onnx通用模型 → OnnxDataGroup
       - 其他模块 → OtherDataGroup
-"""
+# TODO: 分层违规 — core 层不应依赖 gui 层。FontIcons 应迁移到 core 层
+# 作为字符串常量，由 GUI 层完成 {str: QIcon/QFont} 映射。
 from gui.font_icons import FontIcons
 
 

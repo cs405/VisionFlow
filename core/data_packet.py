@@ -75,8 +75,10 @@ class DataPacket:
     在 Python 中使用 numpy.ndarray 表示图像，
     使用 DataPacket 进行更丰富的数据交换（元数据、多输出等）。
     """
-    image: np.ndarray | None = None                    # 单张图像数据
-    images: list[np.ndarray] = field(default_factory=list)  # 多张图像列表
+    # 单张图像数据（与 images 互斥：优先使用 image，images 用于多输出场景）
+    image: np.ndarray | None = None
+    # 多张图像列表（当节点产生多个独立输出时使用）
+    images: list[np.ndarray] = field(default_factory=list)
     numeric_value: float = 0.0                         # 数值数据
     text_value: str = ""                               # 文本数据
     metadata: dict[str, Any] = field(default_factory=dict)  # 元数据字典

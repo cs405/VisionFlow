@@ -23,8 +23,11 @@ def _is_hidden_or_system(path: str) -> bool:
             attrs = ctypes.windll.kernel32.GetFileAttributesW(path)
             if attrs != -1 and attrs & (2 | 4):
                 return True
-        except Exception:
+        except FileNotFoundError:
             pass
+        except OSError:
+            import logging
+            logging.getLogger(__name__).debug("无法获取文件属性: %s", path)
         return False
     return os.path.basename(path).startswith('.')
 
@@ -272,12 +275,18 @@ class SrcFilesVisionNodeData(ROINodeData):
         return self.src_file_path is not None, ""
 
     def load_default(self):
-        """加载默认设置：从 assets/images 文件夹添加示例图片"""
+        """加载默认设置：从 assets/images 文件夹添加示例图片。
+
+        注意：在打包部署（PyInstaller 等）或 zip 内运行时，
+        assets/images 目录可能不存在，此时静默跳过。
+        """
         super().load_default()
-        # 获取 assets/images 文件夹路径
-        assets_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "images")
-        if os.path.isdir(assets_dir):
-            self.add_files_from_folder(assets_dir)
+        try:
+            assets_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "images")
+            if os.path.isdir(assets_dir):
+                self.add_files_from_folder(assets_dir)
+        except Exception:
+            pass
         self.src_file_path = ""
 
     def to_dict(self) -> dict:

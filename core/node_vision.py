@@ -338,6 +338,8 @@ class VisionNodeData(DemoParamsMixin, HelpPresenterMixin, PropertyPresenterMixin
             if isinstance(node, VisionNodeData):
                 return node
         # 后备方案：使用第一个 from_node_data
+        # 注意：菱形依赖图中 from_node_datas 包含所有祖先节点，
+        # 返回的第一个可能不是直接前驱，但作为 fallback 已足够
         for n in self.from_node_datas:
             if isinstance(n, VisionNodeData):
                 return n

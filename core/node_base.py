@@ -457,10 +457,7 @@ class NodeBase(ABC):
 
     def _make_port(self, port_type: PortType, dock: PortDock) -> Port:
         """创建单个端口。子类可重写以自定义端口样式"""
-        p = self.create_port_data()
-        p.dock = dock
-        p.port_type = port_type
-        return p
+        return Port(node_id=self.node_id, port_type=port_type, dock=dock)
 
     def get_input_ports(self) -> list[Port]:
         """获取所有输入端口"""
@@ -667,7 +664,11 @@ class NodeBase(ABC):
 
     @classmethod
     def from_dict(cls, data: dict) -> "NodeBase":
-        """从字典反序列化节点"""
+        """从字典反序列化节点。
+
+        注意：此方法仅恢复基本字段。子类（如 ConditionNodeData）应覆盖
+        from_dict 或使用 restore_from_dict 来完成完整状态恢复。
+        """
         node = cls.__new__(cls)
         cls.__init__(node)  # 调用完整 __init__ 链，确保子类状态正确初始化
         node._id = data.get("id", node._id)

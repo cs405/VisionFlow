@@ -24,7 +24,7 @@ _TEMPLATE_FILE_RE = re.compile(r'^\d{3}_.*\.json$')
 
 
 def _get_templates_dir() -> str:
-    """获取模板存储目录路径（确保目录存在）。"""
+    """获取模板存储目录路径（首次调用时创建目录）。"""
     d = os.path.join(os.path.dirname(os.path.dirname(__file__)), "workflow_templates")
     os.makedirs(d, exist_ok=True)
     return d
@@ -362,7 +362,8 @@ class ProjectService:
         self._recent_projects: list[str] = []
         # QSettings 实例
         self._settings = QSettings()
-        # 加载最近项目列表
+        # 加载最近项目列表（注意：cleanup_recent_projects 会写入 QSettings，
+        # 仅在构造时执行一次清理，后续通过正常流程写入）
         self._load_recent_projects()
         # 模板列表
         self._templates: list[DiagramData] = []

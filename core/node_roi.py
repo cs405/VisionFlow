@@ -145,9 +145,6 @@ class ROINodeData(VisionNodeData):
 
     def get_rois(self) -> list[ROIBase]:
         """获取所有可用的ROI选项"""
-        # 更新绘制ROI的图像源为当前结果图像
-        self.draw_roi.image_source = self._result_image_source
-        # 返回所有ROI选项列表
         return [self.no_roi, self.from_roi, self.draw_roi, self.input_roi]
 
     def get_active_roi_rect(self) -> tuple | None:
@@ -188,9 +185,10 @@ class ROINodeData(VisionNodeData):
         # 查找上游节点
         from_data = self._find_from_node(diagram, previors)
 
-        # 为 FromROI 模式连接上游ROI
+        # 为 FromROI 模式连接上游ROI（仅在用户未手动指定源节点时自动连接）
         if isinstance(from_data, ROINodeData) and from_data is not self:
-            self.from_roi.source_node = from_data
+            if self.from_roi.source_node is self:
+                self.from_roi.source_node = from_data
 
         # 传递上游的原始图像
         if isinstance(from_data, VisionNodeData):
@@ -234,7 +232,7 @@ class ROINodeData(VisionNodeData):
             else:
                 result = super().invoke(previors, diagram)
 
-        # 更新绘制ROI的图像源
+        # 同步 ROI 图像源（从 getter 中移出，避免 getter 副作用）
         self.draw_roi.image_source = self._result_image_source
         return result
 

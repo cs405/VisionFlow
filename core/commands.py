@@ -13,6 +13,11 @@ from typing import Any
 from PyQt5.QtCore import QPointF
 
 
+# 场景对象类型：GUI 层的 QGraphicsScene 或其适配器。
+# 使用 Any 避免 core 层直接依赖 PyQt5.QtWidgets。
+SceneType = Any
+
+
 class Command(ABC):
     """
     命令模式基类（抽象类）
@@ -847,8 +852,5 @@ def _to_point(pos):
     if _point_converter is None:
         with _point_lock:
             if _point_converter is None:
-                try:
-                    _point_converter = lambda p: QPointF(p[0], p[1])
-                except ImportError:
-                    _point_converter = lambda p: p
+                _point_converter = lambda p: QPointF(p[0], p[1])
     return _point_converter(pos)

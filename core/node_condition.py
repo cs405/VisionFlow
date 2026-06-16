@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+import threading
+
 from core.data_packet import FlowableResult, FlowableInvokeMode
 from core.events import EventType, event_system
 from core.node_base import NodeBase, Property, PropertyGroupNames, Port, LinkData
@@ -155,6 +157,8 @@ class ConditionNodeData(VisionNodeData):
             if isinstance(n, VisionNodeData):
                 from_node = n
                 break
+        if from_node is None:
+            return self.break_(None, "没有找到上游 VisionNodeData 节点")
 
         # 传播上游 _original_mat（ROINodeData.invoke 的正常行为，条件分支也需要）
         if isinstance(from_node, VisionNodeData):
@@ -308,6 +312,7 @@ class WaitAllParallelNodeData(VisionNodeData, LogicModuleNode):
         self.name = "并行等待"
         # 已完成的并行分支计数
         self._result_count = 0
+        self._result_lock = threading.Lock()
 
     def invoke(self, previors: LinkData | None, diagram: "WorkflowEngine") -> FlowableResult:
         """统计并行调用次数。只有当所有分支都完成时才继续执行。"""
@@ -323,8 +328,9 @@ class WaitAllParallelNodeData(VisionNodeData, LogicModuleNode):
 
         # 调用每个并行分支完成时的处理
         self.on_parallel_from_invoked(src_data, from_node, diagram)
-        # 增加完成计数
-        self._result_count += 1
+        # 增加完成计数（线程安全）
+        with self._result_lock:
+            self._result_count += 1
 
         # 统计并行模式的上游节点数量（排除已被条件分支禁用的节点）
         parallel_count = sum(
@@ -333,8 +339,10 @@ class WaitAllParallelNodeData(VisionNodeData, LogicModuleNode):
             and getattr(n, '_execution_state', None) != 'error'
         )
 
-        # 如果所有并行分支都已完成
-        if self._result_count >= parallel_count:
+        # 如果所有并行分支都已完成（线程安全读取）
+        with self._result_lock:
+            all_done = self._result_count >= parallel_count
+        if all_done:
             # 重置计数
             self._result_count = 0
             # 调用所有并行分支完成时的处理

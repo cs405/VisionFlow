@@ -69,6 +69,8 @@ class WorkflowEngine:
         self._execution_order: list[str] = []
         # 最大并行工作线程数
         self._max_workers: int = 4
+        # 可复用的线程池（惰性创建，避免每层重复创建/销毁开销）
+        self._executor: ThreadPoolExecutor | None = None
         # 调用计数
         self._invoke_count: int = 0
         # 结果图像源
@@ -80,6 +82,8 @@ class WorkflowEngine:
         # 历史消息列表
         self.messages: list[VisionMessage] = []
         # 消息索引：按节点 id() 快速查找已有消息（O(1) 替代 O(n) 遍历）
+        # 注意：id() 在对象 GC 后可复用，节点增删理论上可能命中旧索引；
+        # 实际使用中节点生命周期长于消息，此风险极低。
         self._message_index: dict[int, VisionMessage] = {}
         # 当前聚合消息
         self.current_message: VisionMessage | None = None
@@ -613,18 +617,23 @@ class WorkflowEngine:
                 event_system.publish(EventType.NODE_ERROR, sender=node, result=None)
 
     def _disable_downstream(self, node_id: str, disabled: set[str]):
-        """递归禁用节点及其所有下游节点"""
-        if node_id in disabled:
-            return
-        disabled.add(node_id)
-        for link in self._links:
-            if link.from_node_id == node_id:
-                self._disable_downstream(link.to_node_id, disabled)
+        """禁用节点及其所有下游节点（迭代，避免深图递归栈溢出）。"""
+        stack = [node_id]
+        while stack:
+            nid = stack.pop()
+            if nid in disabled:
+                continue
+            disabled.add(nid)
+            for link in self._links:
+                if link.from_node_id == nid:
+                    stack.append(link.to_node_id)
 
     def stop(self):
-        """停止执行
+        """停止执行（惰性停止）
 
-        将工作流设置为 STOPPED 状态。execute() 循环会在处理每个层级前检查此标志并跳出。
+        设置 STOPPED 状态，execute() 循环在每层级处理前检查并跳出。
+        注意：已提交到 ThreadPoolExecutor 的节点任务不会立即中断，
+        它们会运行至完成。这是设计权衡：强行中断线程可能留下不一致状态。
         """
         self.state = WorkflowState.STOPPED
         event_system.publish(EventType.WORKFLOW_STOPPED, sender=self)
@@ -673,23 +682,22 @@ class WorkflowEngine:
         return result
 
     def _execute_parallel(self, node_ids: list[str]) -> list[FlowableResult]:
-        """并行执行一组节点"""
+        """并行执行一组节点（复用线程池减少创建/销毁开销）。"""
+        if self._executor is None:
+            self._executor = ThreadPoolExecutor(max_workers=self._max_workers)
         results: list[FlowableResult] = []
-        with ThreadPoolExecutor(max_workers=min(self._max_workers, len(node_ids))) as executor:
-            futures = {}
-            # 提交所有任务
-            for nid in node_ids:
-                node = self._nodes.get(nid)
-                if node:
-                    futures[executor.submit(self._execute_node, node)] = nid
+        futures = {}
+        for nid in node_ids:
+            node = self._nodes.get(nid)
+            if node:
+                futures[self._executor.submit(self._execute_node, node)] = nid
 
-            # 收集结果
-            for future in as_completed(futures):
-                try:
-                    result = future.result()
-                    results.append(result)
-                except Exception as e:
-                    results.append(FlowableResult.error(message=str(e)))
+        for future in as_completed(futures):
+            try:
+                result = future.result()
+                results.append(result)
+            except Exception as e:
+                results.append(FlowableResult.error(message=str(e)))
         return results
 
     def _group_by_levels(self, topo_order: list[str]) -> list[list[str]]:
@@ -740,12 +748,12 @@ class WorkflowEngine:
             "links": [l.to_dict() for l in self._links],
         }
 
-    def from_dict(self, data: dict, node_factory: Callable[[str], NodeBase | None] | None = None):
+    def from_dict(self, data: dict, node_factory: Callable[[str], NodeBase | None]):
         """从字典加载工作流
 
         参数：
             data: 序列化的工作流字典
-            node_factory: 用于反序列化节点的函数 (type_name) -> NodeBase
+            node_factory: 用于反序列化节点的函数 (type_name) -> NodeBase（必需）
         """
         self.name = data.get("name", "新建流程")
         self._nodes.clear()
@@ -755,10 +763,7 @@ class WorkflowEngine:
         node_map: dict[str, NodeBase] = {}
         for node_data in data.get("nodes", []):
             type_name = node_data.get("type", "")
-            if node_factory:
-                node = node_factory(type_name)
-            else:
-                node = None
+            node = node_factory(type_name)
             if node is None:
                 continue
             # 恢复节点状态
@@ -804,3 +809,6 @@ class WorkflowEngine:
         for node in list(self._nodes.values()):
             node.dispose()
         self._nodes.clear()
+        if self._executor is not None:
+            self._executor.shutdown(wait=False)
+            self._executor = None
