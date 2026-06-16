@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import Any
+from PyQt5.QtCore import QPointF
 
 
 class Command(ABC):
@@ -822,7 +823,6 @@ def _to_point(pos):
     global _point_converter
     if _point_converter is None:
         try:
-            from PyQt5.QtCore import QPointF
             _point_converter = lambda p: QPointF(p[0], p[1])
         except ImportError:
             _point_converter = lambda p: p
