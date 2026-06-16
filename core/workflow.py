@@ -79,6 +79,8 @@ class WorkflowEngine:
         self.message: str = ""
         # 历史消息列表
         self.messages: list[VisionMessage] = []
+        # 消息索引：按节点 id() 快速查找已有消息（O(1) 替代 O(n) 遍历）
+        self._message_index: dict[int, VisionMessage] = {}
         # 当前聚合消息
         self.current_message: VisionMessage | None = None
         # 线程锁，保护消息列表的线程安全
@@ -163,24 +165,26 @@ class WorkflowEngine:
         if hasattr(node, 'src_file_path'):
             src_path = node.src_file_path or ""
 
-        # 获取结果图像
+        # 获取结果图像（拷贝 numpy 数组以避免多线程数据竞争）
         result_image = getattr(node, '_result_image_source', None)
+        if result_image is not None and hasattr(result_image, 'copy'):
+            result_image = result_image.copy()
 
         # 加锁保护消息列表
+        node_key = id(node)
         with self._messages_lock:
-            # 查找已有的消息（用于视频/摄像头节点原地更新）
-            for msg in self.messages:
-                if msg.result_node_data is node:
-                    # 更新已有消息
-                    msg.time_span = time_span
-                    msg.message = node.message or msg.message
-                    msg.state = state
-                    if result_image is not None:
-                        msg.result_image_source = result_image
-                    msg.src_file_path = src_path
-                    self._log_current_message_locked()
-                    self._notify_history_callbacks()
-                    return
+            # O(1) 查找已有消息（用于视频/摄像头节点原地更新）
+            existing = self._message_index.get(node_key)
+            if existing is not None:
+                existing.time_span = time_span
+                existing.message = node.message or existing.message
+                existing.state = state
+                if result_image is not None:
+                    existing.result_image_source = result_image
+                existing.src_file_path = src_path
+                self._log_current_message_locked()
+                self._notify_history_callbacks()
+                return
 
             # 创建新消息条目
             msg = VisionMessage(
@@ -194,6 +198,7 @@ class WorkflowEngine:
                 result_node_data=node,
             )
             self.messages.append(msg)
+            self._message_index[node_key] = msg
             self._log_current_message_locked()
             self._notify_history_callbacks()
 
@@ -225,6 +230,7 @@ class WorkflowEngine:
         """清空历史消息"""
         with self._messages_lock:
             self.messages.clear()
+            self._message_index.clear()
             self.current_message = None
 
     def get_start_nodes(self) -> list[NodeBase]:
@@ -555,6 +561,7 @@ class WorkflowEngine:
         """
         self.state = WorkflowState.IDLE
         self._invoke_count = 0
+        self._execution_order.clear()
 
     def execute_step(self, node_id: str) -> FlowableResult:
         """执行单个节点（用于单步调试）"""

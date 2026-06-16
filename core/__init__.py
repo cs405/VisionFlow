@@ -31,4 +31,5 @@ from core.conditions import (
     PropertyCondition,
     ConditionBranch,
     ConditionsPrensenter,
+    ConditionsPresenter,  # 正确拼写（ConditionsPrensenter 保留向后兼容）
 )

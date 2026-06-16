@@ -146,14 +146,24 @@ class PropertyCondition:
     def _values_equal(a: Any, b: Any) -> bool:
         """比较两个值是否相等，支持布尔、数值、字符串的类型自适应比较。"""
         if isinstance(a, bool) and not isinstance(b, bool):
-            b = str(b).strip().lower() in {"1", "true", "yes", "y", "on", "是"}
-        if isinstance(b, bool) and not isinstance(a, bool):
-            a = str(a).strip().lower() in {"1", "true", "yes", "y", "on", "是"}
+            b = PropertyCondition._str_to_bool(b)
+        elif isinstance(b, bool) and not isinstance(a, bool):
+            a = PropertyCondition._str_to_bool(a)
         try:
             return float(a) == float(b)
         except (ValueError, TypeError):
             pass
         return str(a) == str(b)
+
+    @staticmethod
+    def _str_to_bool(val: Any) -> Any:
+        """将常见真假字符串转为 bool，无法识别时返回原值使得回退到字符串比较。"""
+        s = str(val).strip().lower()
+        if s in {"1", "true", "yes", "y", "on", "是"}:
+            return True
+        if s in {"0", "false", "no", "n", "off", "否"}:
+            return False
+        return val
 
     def display_text(self) -> str:
         return f"{self.property_name} {self.filter_operate.value} {self.value}"
@@ -462,3 +472,7 @@ class ConditionsPrensenter:
             branch.condition_operate = ConditionOperate.ALL
             branch.conditions = [pc]
             self.branches.append(branch)
+
+
+# 正确拼写别名（ConditionsPrensenter 保留向后兼容）
+ConditionsPresenter = ConditionsPrensenter

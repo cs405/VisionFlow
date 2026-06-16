@@ -165,13 +165,13 @@ def create_standard_groups() -> NodeDataGroupBase:
         NodeGroup("图像分割提取模块", "提取与分割图像区域", order=10300, icon="Cut"),
         NodeGroup("形态学模块", "形态学图像处理操作", order=10400, icon="Morphology"),
         NodeGroup("逻辑模块", "条件分支与并行控制", order=10500, icon="Logic"),
+        NodeGroup("Onnx通用模型", "ONNX深度学习模型推理", order=10501, icon="DNN"),
         NodeGroup("模板匹配模块", "模板匹配与特征匹配", order=10600, icon="Match"),
         NodeGroup("对象识别模块", "目标检测与识别", order=10700, icon="Detect"),
-        NodeGroup("网络通讯模块", "Modbus等网络通讯", order=10700, icon="Network"),
-        NodeGroup("其他模块", "其他图像处理功能", order=10900, icon="Other"),
-        NodeGroup("结果输出模块", "流程结果输出", order=10900, icon="Output"),
-        NodeGroup("Onnx通用模型", "ONNX深度学习模型推理", order=10500, icon="DNN"),
+        NodeGroup("网络通讯模块", "Modbus等网络通讯", order=10701, icon="Network"),
         NodeGroup("特征提取模块", "图像特征检测与提取", order=10800, icon="Feature"),
+        NodeGroup("其他模块", "其他图像处理功能", order=10900, icon="Other"),
+        NodeGroup("结果输出模块", "流程结果输出", order=10901, icon="Output"),
         NodeGroup("视频处理模块", "视频分析与处理", order=11000, icon="Video"),
     ]
 

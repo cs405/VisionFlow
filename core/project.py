@@ -9,6 +9,7 @@
 
 import json
 import os
+import re
 import uuid
 import traceback
 from datetime import datetime
@@ -17,6 +18,16 @@ from core.workflow import WorkflowEngine
 from core.node_base import NodeBase
 
 from PyQt5.QtCore import QSettings
+
+# 模板文件命名模式: NNN_name.json
+_TEMPLATE_FILE_RE = re.compile(r'^\d{3}_.*\.json$')
+
+
+def _get_templates_dir() -> str:
+    """获取模板存储目录路径（确保目录存在）。"""
+    d = os.path.join(os.path.dirname(os.path.dirname(__file__)), "workflow_templates")
+    os.makedirs(d, exist_ok=True)
+    return d
 
 
 # =============================================================================
@@ -138,25 +149,21 @@ class ProjectItem:
     @property
     def _templates_dir(self) -> str:
         """模板存储目录"""
-        import os as _os
-        d = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)),
-                          "workflow_templates")
-        _os.makedirs(d, exist_ok=True)
-        return d
+        return _get_templates_dir()
 
     def _persist_templates(self):
-        """将模板列表持久化到目录"""
-        import re, os as _os
+        """将模板列表持久化到目录（仅清理模板文件，保留其他 JSON 文件）。"""
         tmpl_dir = self._templates_dir
-        for fname in _os.listdir(tmpl_dir):
-            if fname.endswith(".json"):
+        # 只删除与模板命名模式匹配的文件，避免误删用户文件
+        for fname in os.listdir(tmpl_dir):
+            if _TEMPLATE_FILE_RE.match(fname):
                 try:
-                    _os.remove(_os.path.join(tmpl_dir, fname))
+                    os.remove(os.path.join(tmpl_dir, fname))
                 except OSError:
                     pass
         for i, t in enumerate(self._templates):
             name = re.sub(r'[\\/:*?"<>|]', '_', t.name or f"template_{i}")
-            fpath = _os.path.join(tmpl_dir, f"{i:03d}_{name}.json")
+            fpath = os.path.join(tmpl_dir, f"{i:03d}_{name}.json")
             json_str = json.dumps(t.to_dict(), ensure_ascii=False, indent=2, default=str)
             with open(fpath, "w", encoding="utf-8") as f:
                 f.write(json_str)
@@ -354,7 +361,7 @@ class ProjectService:
         # 最近项目列表
         self._recent_projects: list[str] = []
         # QSettings 实例
-        self._settings = QSettings() if QSettings is not None else None
+        self._settings = QSettings()
         # 加载最近项目列表
         self._load_recent_projects()
         # 模板列表
@@ -365,10 +372,7 @@ class ProjectService:
     @property
     def _templates_dir(self) -> str:
         """获取模板目录路径"""
-        d = os.path.join(os.path.dirname(os.path.dirname(__file__)),
-                         "workflow_templates")
-        os.makedirs(d, exist_ok=True)
-        return d
+        return _get_templates_dir()
 
     def load_templates(self) -> list[DiagramData]:
         """从 workflow_templates/ 目录加载所有模板"""
@@ -392,12 +396,14 @@ class ProjectService:
         return templates
 
     def save_templates(self, templates: list[DiagramData]):
-        """将模板列表持久化到 workflow_templates/ 目录（每个模板一个文件）"""
-        import re
+        """将模板列表持久化到 workflow_templates/ 目录（每个模板一个文件）。
+
+        仅清理与模板命名模式匹配的文件，保留目录中的其他 JSON 文件。
+        """
         tmpl_dir = self._templates_dir
-        # 清理旧文件
+        # 只删除模板文件，避免误删用户放置的其他 JSON 文件
         for fname in os.listdir(tmpl_dir):
-            if fname.endswith(".json"):
+            if _TEMPLATE_FILE_RE.match(fname):
                 try:
                     os.remove(os.path.join(tmpl_dir, fname))
                 except OSError:

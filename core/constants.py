@@ -71,12 +71,7 @@ GROUP_META = {
     "Video": {"color": "#8d6e63", "icon": FontIcons.Video},  # 对应"视频处理模块"
 }
 
-# ── Group colors (flattened, used by node_item.py) ─────────────────────
-
-GROUP_COLORS = {k: v["color"] for k, v in GROUP_META.items()}
-
-
-# 从 GROUP_META 中提取颜色映射，生成扁平化的颜色字典
+# 从 GROUP_META 中提取颜色映射，生成扁平化的颜色字典（用于 node_item.py）
 GROUP_COLORS = {k: v["color"] for k, v in GROUP_META.items()}
 
 

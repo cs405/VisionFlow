@@ -179,6 +179,20 @@ class ROINodeData(VisionNodeData):
                 return src.get_active_roi_rect()
         return None
 
+    @staticmethod
+    def _validate_roi_rect(roi_rect: tuple | None,
+                           input_mat: "np.ndarray | None") -> tuple | None:
+        """验证 ROI 矩形并裁剪到图像边界内。返回 (x,y,w,h) 或 None。"""
+        if roi_rect is None or input_mat is None:
+            return None
+        x, y, w, h = int(roi_rect[0]), int(roi_rect[1]), int(roi_rect[2]), int(roi_rect[3])
+        h_img, w_img = input_mat.shape[:2]
+        x, y = max(0, x), max(0, y)
+        w, h = min(w, w_img - x), min(h, h_img - y)
+        if w <= 0 or h <= 0:
+            return None
+        return (x, y, w, h)
+
     def invoke(self, previors: LinkData | None, diagram: "WorkflowEngine") -> FlowableResult:
         """执行节点处理，支持ROI裁剪"""
         # 查找上游节点
@@ -208,25 +222,13 @@ class ROINodeData(VisionNodeData):
         else:
             input_mat = None
 
-        # 获取当前节点的ROI矩形（如果不是 NoROI 模式）
+        # 获取当前节点的ROI矩形并验证裁剪到图像边界内
         roi_rect = self.get_active_roi_rect() if not isinstance(self._roi, NoROI) else None
-
-        # 验证ROI矩形有效性（边界检查和裁剪）
-        if roi_rect is not None and input_mat is not None:
-            x, y, w, h = int(roi_rect[0]), int(roi_rect[1]), int(roi_rect[2]), int(roi_rect[3])
-            h_img, w_img = input_mat.shape[:2]
-            # 裁剪到图像边界内
-            x, y = max(0, x), max(0, y)
-            w, h = min(w, w_img - x), min(h, h_img - y)
-            if w <= 0 or h <= 0:
-                roi_rect = None  # ROI无效，走无ROI路径
+        roi_rect = self._validate_roi_rect(roi_rect, input_mat)
 
         # 有ROI时的处理
-        if roi_rect is not None and input_mat is not None:
-            x, y, w, h = int(roi_rect[0]), int(roi_rect[1]), int(roi_rect[2]), int(roi_rect[3])
-            h_img, w_img = input_mat.shape[:2]
-            x, y = max(0, x), max(0, y)
-            w, h = min(w, w_img - x), min(h, h_img - y)
+        if roi_rect is not None:
+            x, y, w, h = roi_rect
             # 累积裁剪偏移量：上游偏移 + 本次ROI偏移
             self._crop_chain_offset = (upstream_offset[0] + x, upstream_offset[1] + y, w, h)
             self._prepared_input = input_mat[y:y+h, x:x+w]

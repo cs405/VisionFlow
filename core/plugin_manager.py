@@ -72,16 +72,22 @@ class PluginManager:
         # 避免重复加载
         if module_name in self._loaded_modules:
             return
+        import logging
         try:
-            # 导入模块
             module = importlib.import_module(module_name)
-            # 记录已加载的模块
-            self._loaded_modules.append(module_name)
-            # 注册模块中的节点类
+        except Exception as e:
+            logging.warning(f"导入模块 {module_name} 失败: {e}")
+            return
+
+        self._loaded_modules.append(module_name)
+        try:
             self._register_module_classes(module)
         except Exception as e:
-            import logging
-            logging.warning(f"加载模块 {module_name} 失败: {e}")
+            # 注册失败时清理已注册内容，避免部分注册导致不一致状态
+            logging.warning(f"注册模块 {module_name} 的节点类时失败: {e}")
+            self._unregister_module_classes(module)
+            self._loaded_modules.remove(module_name)
+            raise
 
     def _register_module_classes(self, module):
         """注册模块中找到的所有 NodeBase 子类。"""
@@ -107,6 +113,20 @@ class PluginManager:
             category = getattr(obj, '__category__', None) or group_name or ""
             # 在节点注册表中注册
             node_registry.register(obj, category)
+
+    def _unregister_module_classes(self, module):
+        """移除模块中所有已注册的 NodeBase 子类（用于失败回滚）。"""
+        for name, obj in inspect.getmembers(module, inspect.isclass):
+            if name.startswith("_") or not issubclass(obj, NodeBase) or obj is NodeBase:
+                continue
+            # 从节点注册表中移除
+            node_registry.unregister(obj.__name__)
+            # 从分组管理器中移除
+            group_name = getattr(obj, '__group__', None)
+            if group_name:
+                group = node_data_group_manager.get_group(group_name)
+                if group:
+                    group.unregister(obj)
 
     def load_from_path(self, path: str):
         """从单个 Python 文件加载节点模块。"""

@@ -3,11 +3,22 @@
 支持单例和瞬态注册，支持自动构造函数注入。
 """
 
-from typing import Any, Callable, TypeVar
 import inspect
+import logging
+from typing import Any, Callable, TypeVar
+
+logger = logging.getLogger(__name__)
 
 # 创建类型变量 T，用于泛型（未实际使用，但为类型注解保留）
 T = TypeVar("T")
+
+_BUILTIN_MODULES = frozenset({"builtins", "typing", "abc", "enum"})
+
+
+def _is_builtin_type(t: type) -> bool:
+    """检查类型是否为内置/标准库类型（无需注册到 IoC 容器）。"""
+    mod = getattr(t, '__module__', '')
+    return mod in _BUILTIN_MODULES
 
 
 # 定义服务描述符类，用于描述单个服务注册信息
@@ -178,6 +189,13 @@ class ServiceProvider:
                 except KeyError:
                     # 解析失败则使用默认值（如果存在）
                     if param.default != inspect.Parameter.empty:
+                        # 仅对非内置类型发出警告（str、int 等不需要注册）
+                        if not _is_builtin_type(param.annotation):
+                            logger.warning(
+                                "无法解析类型 %s 用于 %s.%s 的参数 '%s'，使用默认值",
+                                getattr(param.annotation, '__name__', param.annotation),
+                                impl_type.__name__, name, name,
+                            )
                         resolved[name] = param.default
             # 如果参数有默认值（无类型注解或类型注解解析失败）
             elif param.default != inspect.Parameter.empty:

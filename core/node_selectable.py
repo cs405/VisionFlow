@@ -10,6 +10,25 @@ from core.node_vision import VisionNodeData
 from core.node_roi import ROINodeData
 
 
+def _is_hidden_or_system(path: str) -> bool:
+    """检查文件/目录是否为隐藏或系统文件。
+
+    Windows: 通过 GetFileAttributesW 检查 FILE_ATTRIBUTE_HIDDEN (2)
+             和 FILE_ATTRIBUTE_SYSTEM (4)。
+    其他平台: 检查名称是否以 '.' 开头。
+    """
+    if os.name == 'nt':
+        try:
+            import ctypes
+            attrs = ctypes.windll.kernel32.GetFileAttributesW(path)
+            if attrs != -1 and attrs & (2 | 4):
+                return True
+        except Exception:
+            pass
+        return False
+    return os.path.basename(path).startswith('.')
+
+
 # =============================================================================
 # SelectableResultImageNodeData - 选择使用哪个上游节点的结果图像
 # =============================================================================
@@ -143,14 +162,9 @@ class SrcFilesVisionNodeData(ROINodeData):
 
             for name in sorted(entries):
                 full_path = os.path.join(directory, name)
-                # 在Windows上跳过隐藏和系统文件
-                try:
-                    # import stat
-                    attrs = os.stat(full_path).st_file_attributes if os.name == 'nt' else 0
-                    if attrs & (2 | 4):  # hidden | system
-                        continue
-                except (OSError, AttributeError):
-                    pass  # 无法获取属性则继续
+                # 跳过隐藏和系统文件
+                if _is_hidden_or_system(full_path):
+                    continue
 
                 if os.path.isdir(full_path):
                     if recursive:

@@ -92,6 +92,7 @@ class BatchCommand(Command):
         super().__init__()  # 调用父类构造函数
         self._description = description  # 覆盖命令描述（自定义文本）
         self._commands: list[Command] = []  # 子命令列表（存储待批量执行的命令）
+        self._executed: list[Command] = []  # 本轮已执行的子命令（用于失败回滚）
 
     def add(self, cmd: Command):
         """
@@ -116,11 +117,28 @@ class BatchCommand(Command):
 
         说明：
             - 按照添加的顺序依次执行每个命令
-            - 任何一个命令失败可能需要考虑事务回滚（取决于设计）
+            - 任何一个命令失败时，先撤销失败命令的副作用，再逆序撤销已执行命令，
+              然后清空 _executed 列表（后续 CommandStack 的 undo 调用成为安全空操作）
         """
-        # 顺序执行所有子命令
+        self._executed.clear()
         for cmd in self._commands:
-            cmd.execute(scene)
+            try:
+                cmd.execute(scene)
+            except Exception:
+                # 撤销失败命令可能已产生的副作用
+                try:
+                    cmd.undo(scene)
+                except Exception:
+                    pass
+                # 逆序撤销之前已执行的命令
+                for c in reversed(self._executed):
+                    try:
+                        c.undo(scene)
+                    except Exception:
+                        pass
+                self._executed.clear()
+                raise
+            self._executed.append(cmd)
 
     def undo(self, scene: Any) -> Any:
         """
@@ -130,14 +148,12 @@ class BatchCommand(Command):
             scene: 场景对象
 
         说明：
-            - 必须按添加顺序的逆序撤销（后执行的先撤销）
-            - 确保恢复到执行前的完整状态
-            - 例如：添加A、添加B、添加C 的顺序
-              撤销时：删除C、删除B、删除A
+            - 按执行顺序的逆序撤销（后执行的先撤销）
+            - 仅撤销实际已执行的子命令（失败时未执行的不处理）
         """
-        # 逆序撤销：reversed() 保证子命令以相反顺序执行
-        for cmd in reversed(self._commands):
+        for cmd in reversed(self._executed):
             cmd.undo(scene)
+        self._executed.clear()
 
 
 class AddNodeCommand(Command):
@@ -659,9 +675,17 @@ class CommandStack:
             - 场景对象在命令执行时传入
         """
         # 步骤1：执行命令（传入场景对象）
-        result = cmd.execute(self._scene)
+        # 若执行失败则尝试回滚，避免部分修改残留在场景中
+        try:
+            result = cmd.execute(self._scene)
+        except Exception:
+            try:
+                cmd.undo(self._scene)
+            except Exception:
+                pass
+            raise
 
-        # 步骤2：将命令压入撤销栈
+        # 步骤2：将命令压入撤销栈（仅在执行成功后）
         self._undo_stack.append(cmd)
 
         # 步骤3：清空重做栈（新操作使之前重做路径失效）
@@ -813,17 +837,22 @@ class CommandStack:
         return self._redo_stack[-1].description if self._redo_stack else ""
 
 
-# ── Point conversion (lazy-initialized) ───────────────────────────────────
+# ── Point conversion (thread-safe lazy-initialized) ──────────────────────
+
+import threading
 
 _point_converter = None
+_point_lock = threading.Lock()
 
 
 def _to_point(pos):
     """Convert (x, y) tuple to framework-specific point type."""
     global _point_converter
     if _point_converter is None:
-        try:
-            _point_converter = lambda p: QPointF(p[0], p[1])
-        except ImportError:
-            _point_converter = lambda p: p
+        with _point_lock:
+            if _point_converter is None:
+                try:
+                    _point_converter = lambda p: QPointF(p[0], p[1])
+                except ImportError:
+                    _point_converter = lambda p: p
     return _point_converter(pos)

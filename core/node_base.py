@@ -28,6 +28,8 @@ from enum import Enum, auto
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Callable
 
+from contextlib import contextmanager
+
 from core.data_packet import FlowableResult, FlowableInvokeMode
 from core.events import EventType, event_system
 
@@ -324,9 +326,28 @@ class NodeBase(ABC):
         # 调用所有注册的回调函数
         for cb in self._property_callbacks.get(name, []):
             cb(name, old_value, new_value)
-        # 发布属性变更事件
-        event_system.publish(EventType.NODE_PROPERTY_CHANGED,
-                            sender=self, name=name, old=old_value, new=new_value)
+        # 批量更新模式下跳过事件发布，避免逐个属性变更时洪水式发布
+        if not getattr(self, '_batch_updating', False):
+            event_system.publish(EventType.NODE_PROPERTY_CHANGED,
+                                sender=self, name=name, old=old_value, new=new_value)
+
+    @contextmanager
+    def batch_updates(self):
+        """批量属性更新上下文管理器。
+
+        在此上下文中修改多个属性时，不会逐个发布 NODE_PROPERTY_CHANGED 事件。
+        退出上下文时发布一次汇总事件。
+        用于 restore_from_dict 等批量恢复场景。
+        """
+        was_batching = getattr(self, '_batch_updating', False)
+        self._batch_updating = True
+        try:
+            yield
+        finally:
+            self._batch_updating = was_batching
+            if not was_batching:
+                event_system.publish(EventType.NODE_PROPERTY_CHANGED,
+                                    sender=self, name="*", old=None, new=None)
 
     def on_property_changed(self, name: str, callback: Callable):
         """注册属性变更回调函数"""
@@ -602,40 +623,41 @@ class NodeBase(ABC):
 
     def restore_from_dict(self, data: dict) -> "NodeBase":
         """从序列化的项目数据恢复节点状态"""
-        self._id = data.get("id", self._id)
-        self.name = data.get("name", self.name)
-        self._title = data.get("title", "")
-        self._text = data.get("text", "")
-        self.width = data.get("width", 120.0)
-        self.height = data.get("height", 35.0)
-        self._pos_x = data.get("pos_x", 0.0)
-        self._pos_y = data.get("pos_y", 0.0)
+        with self.batch_updates():
+            self._id = data.get("id", self._id)
+            self.name = data.get("name", self.name)
+            self._title = data.get("title", "")
+            self._text = data.get("text", "")
+            self.width = data.get("width", 120.0)
+            self.height = data.get("height", 35.0)
+            self._pos_x = data.get("pos_x", 0.0)
+            self._pos_y = data.get("pos_y", 0.0)
 
-        # 恢复执行模式
-        invoke_mode_name = data.get("invoke_mode", "SEQUENTIAL")
-        try:
-            self.invoke_mode = FlowableInvokeMode[invoke_mode_name]
-        except KeyError:
-            self.invoke_mode = FlowableInvokeMode.SEQUENTIAL
-
-        # 恢复端口
-        ports_data = data.get("ports", [])
-        if ports_data:
-            self.ports = [Port.from_dict(port_data) for port_data in ports_data]
-        else:
-            for port in self.ports:
-                port.node_id = self._id
-
-        # 恢复属性值
-        serialized_properties = data.get("properties", {})
-        property_map = dict(self.get_property_descriptors())
-        for name, raw_value in serialized_properties.items():
-            if name not in property_map:
-                continue
+            # 恢复执行模式
+            invoke_mode_name = data.get("invoke_mode", "SEQUENTIAL")
             try:
-                setattr(self, name, self._deserialize_property_value(raw_value))
-            except Exception:
-                continue
+                self.invoke_mode = FlowableInvokeMode[invoke_mode_name]
+            except KeyError:
+                self.invoke_mode = FlowableInvokeMode.SEQUENTIAL
+
+            # 恢复端口
+            ports_data = data.get("ports", [])
+            if ports_data:
+                self.ports = [Port.from_dict(port_data) for port_data in ports_data]
+            else:
+                for port in self.ports:
+                    port.node_id = self._id
+
+            # 恢复属性值
+            serialized_properties = data.get("properties", {})
+            property_map = dict(self.get_property_descriptors())
+            for name, raw_value in serialized_properties.items():
+                if name not in property_map:
+                    continue
+                try:
+                    setattr(self, name, self._deserialize_property_value(raw_value))
+                except Exception:
+                    continue
 
         return self
 
@@ -660,7 +682,7 @@ class NodeBase(ABC):
     def from_dict(cls, data: dict) -> "NodeBase":
         """从字典反序列化节点"""
         node = cls.__new__(cls)
-        NodeBase.__init__(node)
+        cls.__init__(node)  # 调用完整 __init__ 链，确保子类状态正确初始化
         node._id = data.get("id", node._id)
         node.name = data.get("name", node.name)
         node._title = data.get("title", "")

@@ -63,6 +63,8 @@ class EventSystem:
         # 回调函数字典，键为事件类型，值为可调用对象的列表，支持一个事件触发多个处理函数
         # 使用 defaultdict(list) 确保访问不存在的键时自动返回空列表
         self._handlers: dict[EventType, list[Callable]] = defaultdict(list)
+        # 防止 MESSAGE_ERROR 处理器自身异常导致无限递归
+        self._in_error_publish: bool = False
 
     # 定义订阅方法
     def subscribe(self, event_type: EventType, handler: Callable):
@@ -94,10 +96,14 @@ class EventSystem:
                 handler(sender, **kwargs)
             # 如果执行过程中发生异常
             except Exception as e:
-                # 让错误传播但不停用其他处理函数
-                # 发布一个错误消息事件来报告处理函数错误
-                self.publish(EventType.MESSAGE_ERROR, sender=None,
-                            message=f"事件处理函数错误: {e}")
+                # 防止 MESSAGE_ERROR 处理器自身异常导致无限递归
+                if event_type != EventType.MESSAGE_ERROR and not self._in_error_publish:
+                    self._in_error_publish = True
+                    try:
+                        self.publish(EventType.MESSAGE_ERROR, sender=None,
+                                    message=f"事件处理函数错误: {e}")
+                    finally:
+                        self._in_error_publish = False
 
     # 定义清空方法
     def clear(self):
