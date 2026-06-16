@@ -61,6 +61,10 @@ class OnnxNodeDataBase(OpenCVNodeDataBase, IOpenCVDnnNode):
             means = means * 3
         elif len(means) == 0:
             means = [0.0, 0.0, 0.0]
+        elif len(means) == 2:
+            means = means + [0.0]  # 补齐到 3 通道
+        elif len(means) > 3:
+            means = means[:3]
         blob = cv2.dnn.blobFromImage(max_image, 1.0 / self.blob_scale_factor,
                                       (self.input_width, self.input_height),
                                       tuple(means), swapRB=True, crop=False)

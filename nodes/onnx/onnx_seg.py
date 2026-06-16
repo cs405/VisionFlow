@@ -54,6 +54,9 @@ class OnnxSegNode(OnnxNodeDataBase):
                 mask = (mask * 255).astype(np.uint8)
                 mask = cv2.resize(mask, (img_w, img_h), interpolation=cv2.INTER_LINEAR)
                 _, mask = cv2.threshold(mask, 128, 255, cv2.THRESH_BINARY)
+                # 确保 result 是 3 通道，避免灰度图赋值 RGB 元组崩溃
+                if len(result.shape) == 2:
+                    result = cv2.cvtColor(result, cv2.COLOR_GRAY2BGR)
                 color_overlay = np.zeros_like(result)
                 color_overlay[mask > 0] = (0, 255, 0)
                 result = cv2.addWeighted(result, 1 - self.alpha, color_overlay, self.alpha, 0)

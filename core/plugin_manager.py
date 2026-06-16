@@ -137,14 +137,17 @@ class PluginManager:
         """
         import importlib.util
         module_name = os.path.splitext(os.path.basename(path))[0]
-        # 创建模块加载规格
-        spec = importlib.util.spec_from_file_location(module_name, path)
-        if spec and spec.loader:
-            # 加载模块
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            # 注册模块中的节点类
-            self._register_module_classes(module)
+        try:
+            spec = importlib.util.spec_from_file_location(module_name, path)
+            if spec and spec.loader:
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                self._register_module_classes(module)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).error(
+                "加载插件模块失败: %s", path, exc_info=True)
+            self._unregister_module_classes(module_name)
 
     def get_node_info(self) -> list[dict]:
         """获取所有已发现的节点信息，用于工具箱UI。"""

@@ -41,7 +41,7 @@ class CameraCaptureNodeData(SrcFilesVisionNodeData, OpenCVNodeDataBase):
     def _on_workflow_stopped(self, sender, **kwargs):
         """流程停止时立即释放摄像头硬件资源"""
         # 如果摄像头对象存在
-        if self._cap is not None:
+        if hasattr(self, '_cap') and self._cap is not None:
             self._cap.release()  # 关闭摄像头，释放硬件
             self._cap = None
 

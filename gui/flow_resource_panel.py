@@ -358,8 +358,13 @@ class FlowResourcePanel(QWidget):
         self._thumbnails: dict[str, ThumbnailButton] = {}
         # 像素图字典：键为文件路径，值为QPixmap对象
         self._pixmaps: dict[str, QPixmap] = {}
+        # LRU 缓存：最大缩略图数量
+        self._pixmap_cache_max = 500
+        self._pixmap_cache_order: list[str] = []
         # 缩略图加载器，初始为None
         self._loader: ThumbnailLoader | None = None
+        # 增量加载器列表（用于追踪并停止）
+        self._incremental_loaders: list[ThumbnailLoader] = []
         # 当前选中的文件路径
         self._selected_path: str = ""
 
@@ -596,7 +601,7 @@ class FlowResourcePanel(QWidget):
 
         self._page_right_btn.setParent(self._scroll_area)
         # 延迟100毫秒后重新定位按钮（等待布局完成）
-        QTimer.singleShot(100, self._reposition_page_buttons)
+        QTimer.singleShot(100, lambda: self._reposition_page_buttons())
         # 显示按钮
         self._page_right_btn.show()
 
@@ -874,14 +879,18 @@ class FlowResourcePanel(QWidget):
         QTimer.singleShot(0, self._update_container_size)
 
     def _stop_loader(self):
-        """停止缩略图加载器"""
-        # 如果加载器存在且正在运行
+        """停止所有缩略图加载器（主加载器和增量加载器）"""
+        # 停止增量加载器
+        for loader in self._incremental_loaders:
+            if loader.isRunning():
+                loader.stop()
+                loader.wait(1000)
+        self._incremental_loaders.clear()
+
+        # 停止主加载器
         if self._loader and self._loader.isRunning():
-            # 发送停止信号
             self._loader.stop()
-            # 等待线程结束（最多1秒）
             self._loader.wait(1000)
-        # 清空加载器引用
         self._loader = None
 
     def _on_thumbnail_ready(self, file_path: str, qimg: QImage):
@@ -893,7 +902,13 @@ class FlowResourcePanel(QWidget):
         """
         # 将QImage转换为QPixmap
         pixmap = QPixmap.fromImage(qimg)
-        # 保存到像素图字典
+        # 保存到像素图字典（LRU 淘汰）
+        if file_path in self._pixmap_cache_order:
+            self._pixmap_cache_order.remove(file_path)
+        self._pixmap_cache_order.append(file_path)
+        while len(self._pixmap_cache_order) > self._pixmap_cache_max:
+            evict = self._pixmap_cache_order.pop(0)
+            self._pixmaps.pop(evict, None)
         self._pixmaps[file_path] = pixmap
         # 获取对应的缩略图按钮
         btn = self._thumbnails.get(file_path)
@@ -1297,13 +1312,14 @@ class FlowResourcePanel(QWidget):
 
         # 如果有新文件，启动加载器加载它们的缩略图
         if new_paths:
-            # 创建新加载器
+            # 创建新加载器并追踪
             loader = ThumbnailLoader(self)
-            # 设置文件路径
             loader.set_paths(new_paths)
-            # 连接就绪信号
             loader.thumbnail_ready.connect(self._on_thumbnail_ready)
-            # 启动线程
+            self._incremental_loaders.append(loader)
+            # 加载完成时自动从列表移除
+            loader.finished.connect(lambda l=loader: self._incremental_loaders.remove(l)
+                                    if l in self._incremental_loaders else None)
             loader.start()
 
     # ── 按钮状态管理 ──────────────

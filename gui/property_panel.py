@@ -696,6 +696,8 @@ class PropertyPanel(QWidget):
         self._image_viewer = None
         # 属性控件字典
         self._property_widgets: dict[str, QWidget] = {}
+        # 防抖定时器（每个属性名一个）
+        self._debounce_timers: dict[str, QTimer] = {}
         # 分组过滤器
         self._group_filter = group_filter
         # 强制只读标志
@@ -1138,12 +1140,12 @@ class PropertyPanel(QWidget):
 
                 # 保存到控件字典
                 self._property_widgets[prop_name] = container
-                # 连接文本变化信号
-                widget.textChanged.connect(lambda v, n=prop_name: self._set_property_value(n, v))
+                # 连接文本变化信号（300ms 防抖）
+                self._connect_debounced(widget, prop_name)
                 return container
 
-            # 连接文本变化信号
-            widget.textChanged.connect(lambda v, n=prop_name: self._set_property_value(n, v))
+            # 连接文本变化信号（300ms 防抖）
+            self._connect_debounced(widget, prop_name)
             # 保存到控件字典
             self._property_widgets[prop_name] = widget
             # 如果是只读
@@ -1619,6 +1621,22 @@ class PropertyPanel(QWidget):
             if widget.__class__.__name__ == "MainWindow":
                 return widget
         return None
+
+    def _connect_debounced(self, widget, prop_name: str):
+        """连接文本变化信号到防抖的属性写入（300ms 延迟）。"""
+        def on_text_changed(value):
+            timer = self._debounce_timers.get(prop_name)
+            if timer is not None and timer.isActive():
+                timer.stop()
+            new_timer = QTimer(self)
+            new_timer.setSingleShot(True)
+            new_timer.setInterval(300)
+            new_timer.timeout.connect(
+                lambda v=value, n=prop_name: self._set_property_value(n, v)
+            )
+            self._debounce_timers[prop_name] = new_timer
+            new_timer.start()
+        widget.textChanged.connect(on_text_changed)
 
     def _set_property_value(self, prop_name: str, new_value: Any, *, force: bool = False):
         """设置属性值

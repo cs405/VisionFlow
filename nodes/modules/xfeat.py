@@ -20,12 +20,17 @@ class XFeat(nn.Module):
 		It supports inference for both sparse and semi-dense feature extraction & matching.
 	"""
 
-	def __init__(self, weights = r'E:\VisionFlow\assets\models\xfeat.pt', top_k = 4096, detection_threshold=0.05):
+	def __init__(self, weights: str | None = None, top_k=4096, detection_threshold=0.05):
 		super().__init__()
 		self.dev = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 		self.net = XFeatModel().to(self.dev).eval()
 		self.top_k = top_k
 		self.detection_threshold = detection_threshold
+
+		if weights is None:
+			# 默认从项目 assets 目录查找模型文件
+			project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+			weights = os.path.join(project_root, 'assets', 'models', 'xfeat.pt')
 
 		if weights is not None:
 			if isinstance(weights, str):

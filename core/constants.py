@@ -70,7 +70,7 @@ _ALIAS_TO_CHINESE: dict[str, str] = {
 # Group metadata config
 GROUP_META = {
     # Chinese groups
-    "图像数据源": {"color": "#4a9eff", "icon": ICON_CAMERA},
+    "图像数据源": {"color": "#4a9eff", "icon": ICON_PHOTO2},
     "系统数据源": {"color": "#5c6bc0", "icon": ICON_PHOTO2},
     "图像预处理模块": {"color": "#ff8c00", "icon": ICON_COLOR},
     "滤波模块": {"color": "#9c27b0", "icon": ICON_IN_PRIVATE},

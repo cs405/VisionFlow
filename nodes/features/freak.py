@@ -35,6 +35,9 @@ class FreakFeatureDetector(OpenCVNodeDataBase):
                                                   scaleNormalized=self.scale_normalized,
                                                   patternScale=self.pattern_scale, nOctaves=self.n_octaves)
             kp, des = freak.compute(gray, kp)
+        else:
+            # FREAK 已从 OpenCV 主线移除（专利问题），回退到 ORB 描述符
+            pass
         out = cv2.drawKeypoints(mat, kp, None, (0, 255, 0), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
         self.feature_count = len(kp)
         return self.ok(out, f"{len(kp)} 个FREAK特征点")

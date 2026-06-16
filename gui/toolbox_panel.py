@@ -1473,8 +1473,15 @@ class ToolboxPanel(QWidget):
             for node_type in group.node_types:
                 # 获取类型名称
                 type_name = node_type.__name__
-                # 显示名称: 优先使用类属性 __display_name__，其次使用类名
-                display_name = getattr(node_type, '__display_name__', None) or type_name
+                # 显示名称: 优先实例化获取中文名称，其次 __display_name__，最后类名
+                display_name = type_name
+                try:
+                    instance = node_type()
+                    candidate = getattr(instance, 'display_name', '') or getattr(instance, 'name', '')
+                    if isinstance(candidate, str) and candidate.strip():
+                        display_name = candidate.strip()
+                except Exception:
+                    display_name = getattr(node_type, '__display_name__', None) or type_name
 
                 # 获取文档字符串作为描述
                 doc = (node_type.__doc__ or '').strip().splitlines()

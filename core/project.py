@@ -402,9 +402,11 @@ class ProjectService:
         """将最近项目列表写入 JSON 文件。"""
         import tempfile
         try:
+            target_dir = os.path.dirname(ProjectService._RECENT_PROJECTS_FILE)
+            os.makedirs(target_dir, exist_ok=True)
             fd, tmp_path = tempfile.mkstemp(
                 suffix=".json", prefix=".tmp_",
-                dir=os.path.dirname(ProjectService._RECENT_PROJECTS_FILE))
+                dir=target_dir)
             try:
                 with os.fdopen(fd, "w", encoding="utf-8") as f:
                     json.dump(paths, f, ensure_ascii=False)

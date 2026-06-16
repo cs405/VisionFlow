@@ -558,8 +558,9 @@ class WorkflowEngine:
                 event_system.publish(EventType.WORKFLOW_STOPPED, sender=self)
                 return FlowableResult.ok(message="流程已停止")
 
-            # 执行完成
-            self.state = WorkflowState.COMPLETED
+            # 执行完成：仅在无错误时设为 COMPLETED
+            if self.state != WorkflowState.ERROR:
+                self.state = WorkflowState.COMPLETED
             event_system.publish(EventType.WORKFLOW_COMPLETED, sender=self, result=last_result)
             return last_result
 
@@ -672,7 +673,13 @@ class WorkflowEngine:
 
         # ── 执行节点本身 ──
         if isinstance(node, VisionNodeData):
-            result = node.invoke(previors, self)
+            try:
+                result = node.invoke(previors, self)
+            except Exception as e:
+                import traceback
+                result = FlowableResult.error(
+                    message=f"节点执行异常: {e}\n{traceback.format_exc()}"
+                )
             # invoke_milliseconds_delay 不再在此处 sleep，帧率由
             # WorkflowRunner._run_continuous 根据起始节点的设置统一控制
         else:
@@ -703,7 +710,8 @@ class WorkflowEngine:
                 results[nid] = future.result()
             except Exception as e:
                 results[nid] = FlowableResult.error(message=str(e))
-        return [results[nid] for nid in node_ids]
+        return [results.get(nid, FlowableResult.error(message=f"节点 {nid} 未找到"))
+                for nid in node_ids]
 
     def _invalidate_levels_cache(self):
         """拓扑变更时使层级缓存失效。"""

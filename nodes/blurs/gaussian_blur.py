@@ -41,8 +41,8 @@ class GaussianBlur(OpenCVNodeDataBase):
         # 如果输入图像为空，返回错误结果
         if mat is None:
             return self.error(None, "无输入图像")
-        # 确保卷积核大小为奇数（高斯卷积核必须为奇数）
-        k = self.ksize if self.ksize % 2 == 1 else self.ksize + 1
+        # 确保卷积核大小为奇数且至少为1（高斯卷积核必须为奇数）
+        k = max(1, self.ksize if self.ksize % 2 == 1 else self.ksize + 1)
         # 调用OpenCV的GaussianBlur进行高斯模糊处理
         result = cv2.GaussianBlur(mat, (k, k), self.sigma_x, self.sigma_y)
         # 返回成功结果

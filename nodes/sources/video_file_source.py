@@ -65,8 +65,8 @@ class SrcVideoFilesNodeData(SrcFilesVisionNodeData, OpenCVNodeDataBase):
             if not ret:
                 return self.error(None, "无法读取视频帧")
 
-        # 记录当前帧索引
-        self.frame_index = int(self._cap.get(cv2.CAP_PROP_POS_FRAMES))
+        # 记录当前帧索引（CAP_PROP_POS_FRAMES 返回下一次读取的帧号，需减1）
+        self.frame_index = max(0, int(self._cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1)
         # 记录图像宽度（像素）
         self.pixel_width = frame.shape[1]
         # 记录图像高度（像素）

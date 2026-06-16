@@ -35,17 +35,17 @@ def numpy_to_qimage(array: np.ndarray) -> QImage:
     h, w = array.shape[:2]
     # 如果是灰度图（2维）
     if len(array.shape) == 2:
-        return QImage(array.data, w, h, w, QImage.Format_Grayscale8)
+        return QImage(array.data, w, h, w, QImage.Format_Grayscale8).copy()
     # 如果是3通道彩色图（BGR格式）
     elif array.shape[2] == 3:
         # BGR转RGB（浅拷贝）
         rgb = array[..., ::-1].copy()
-        return QImage(rgb.data, w, h, w * 3, QImage.Format_RGB888)
+        return QImage(rgb.data, w, h, w * 3, QImage.Format_RGB888).copy()
     # 如果是4通道图像（BGRA格式）
     elif array.shape[2] == 4:
         # BGRA转RGBA
         rgba = array[..., [2, 1, 0, 3]].copy()
-        return QImage(rgba.data, w, h, w * 4, QImage.Format_RGBA8888)
+        return QImage(rgba.data, w, h, w * 4, QImage.Format_RGBA8888).copy()
     # 其他格式返回空QImage
     return QImage()
 

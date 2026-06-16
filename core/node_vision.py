@@ -2,13 +2,9 @@
 VisionNodeData hierarchy - visual processing node classes.
 Extracted from node_base.py, flattened with Mixin pattern.
 
-Original 6-level inheritance:
-    NodeBase -> VisionNodeDataBase -> ShowPropertyNodeDataBase
-             -> HelpNodeDataBase -> DemoNodeDataBase -> VisionNodeData
-
-Flattened to 2-level with Mixins:
+Current structure (2-level with Mixins):
     NodeBase -> VisionNodeData (with PropertyPresenterMixin,
-                                HelpPresenterMixin, DemoParamsMixin)
+                                HelpPresenterMixin + DemoParamsMixin opt-in)
 """
 
 from __future__ import annotations
@@ -178,11 +174,15 @@ class VisionNodeData(HelpPresenterMixin, PropertyPresenterMixin, NodeBase):
 
         # 传递上游的原始图像，使每个节点都能访问未处理的源图像
         if isinstance(from_data, VisionNodeData):
-            upstream_original = getattr(from_data, '_original_mat', None)
-            if upstream_original is not None:
-                self._original_mat = upstream_original
-            elif from_data.mat is not None:
-                self._original_mat = from_data.mat.copy()
+            # 子类（如 ROINodeData）可能已设置 _original_mat，跳过重复拷贝
+            if self._original_mat is not None:
+                pass
+            else:
+                upstream_original = getattr(from_data, '_original_mat', None)
+                if upstream_original is not None:
+                    self._original_mat = upstream_original
+                elif from_data.mat is not None:
+                    self._original_mat = from_data.mat.copy()
 
         # 执行核心处理
         return self._invoke_action(lambda: self.invoke_core(src_data, from_data or src_data, diagram))
@@ -227,8 +227,13 @@ class VisionNodeData(HelpPresenterMixin, PropertyPresenterMixin, NodeBase):
         self._pre_invoke()
         try:
             result = action()
-        except Exception:
+        except Exception as e:
+            import traceback
             self._execution_state = "error"
+            error_result = FlowableResult.error(
+                message=f"{e}\n{traceback.format_exc()}"
+            )
+            self._post_invoke(error_result)
             raise
         self._post_invoke(result)
         return result

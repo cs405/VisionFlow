@@ -237,10 +237,12 @@ class WorkflowRunner:
                     result = self._workflow.start()
                     # 如果执行出错
                     if result.is_error:
+                        self._run_had_error = True
                         # 发布错误消息事件
                         event_system.publish(EventType.MESSAGE_ERROR, sender=self,
                                              message=f"文件 [{i+1}/{total}] 执行出错: {result.message}")
                 except Exception:
+                    self._run_had_error = True
                     # 发生异常时发布错误消息事件
                     event_system.publish(EventType.MESSAGE_ERROR, sender=self,
                                          message=f"文件 [{i+1}/{total}] 执行异常: {traceback.format_exc()}")
@@ -276,6 +278,7 @@ class WorkflowRunner:
                 result = self._workflow.start()
                 # 如果执行出错
                 if result.is_error:
+                    self._run_had_error = True
                     # 发布错误消息事件
                     event_system.publish(EventType.MESSAGE_ERROR, sender=self,
                                          message=f"流程出错: {result.message}")
@@ -294,6 +297,7 @@ class WorkflowRunner:
                     if self._stop_event.wait(remain_ms / 1000.0):
                         break
         except Exception:
+            self._run_had_error = True
             # 发生异常时发布错误消息事件
             event_system.publish(EventType.MESSAGE_ERROR, sender=self,
                                  message=f"流程异常: {traceback.format_exc()}")

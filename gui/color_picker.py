@@ -433,7 +433,11 @@ class ColorPickerDialog(QDialog):
         # 如果没有查看器，返回
         if self._viewer is None:
             return
-        # 连接查看器的颜色拾取信号
+        # 连接查看器的颜色拾取信号（先断开防止重复连接）
+        try:
+            self._viewer.color_picked.disconnect(self._on_viewer_color_picked)
+        except TypeError:
+            pass
         self._viewer.color_picked.connect(self._on_viewer_color_picked)
         # 启用查看器的取色模式
         self._viewer.set_color_pick_mode(True)

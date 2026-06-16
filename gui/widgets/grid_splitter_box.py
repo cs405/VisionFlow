@@ -158,6 +158,8 @@ class GridSplitterBox(QWidget):
         self._drag_start_x = 0
         # 拖拽起始宽度
         self._drag_start_width = 0
+        # 拖拽进行中标志
+        self._is_dragging = False
 
     # ── 公共API ──────────────────────────────────────────────────────────
 
@@ -276,6 +278,8 @@ class GridSplitterBox(QWidget):
             self._drag_start_x = event.globalX()
             # 记录拖拽起始面板宽度
             self._drag_start_width = self.width()
+            # 设置拖拽进行中标志
+            self._is_dragging = True
             # 接受事件
             event.accept()
             return
@@ -285,7 +289,7 @@ class GridSplitterBox(QWidget):
     def mouseMoveEvent(self, event):
         """鼠标移动事件"""
         # 如果正在拖拽中
-        if hasattr(self, '_drag_start_x') and self._drag_start_x:
+        if self._is_dragging:
             # 计算鼠标移动的偏移量
             delta = event.globalX() - self._drag_start_x
             # 计算新的宽度（限制在最小和最大之间）
@@ -318,9 +322,10 @@ class GridSplitterBox(QWidget):
     def mouseReleaseEvent(self, event):
         """鼠标释放事件"""
         # 如果正在拖拽中
-        if hasattr(self, '_drag_start_x') and self._drag_start_x:
-            # 重置拖拽起始X坐标
+        if self._is_dragging:
+            # 重置拖拽状态
             self._drag_start_x = 0
+            self._is_dragging = False
             # 接受事件
             event.accept()
             return

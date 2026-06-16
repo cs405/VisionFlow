@@ -591,24 +591,45 @@ class DiagramEditorWidget(QWidget):
             self.scene.save_to_workflow(self._workflow)
 
     def _on_run(self):
-        """运行工作流"""
-        if self._workflow:
-            # 1) 重置所有节点为 IDLE，清除上次运行残留的执行状态
-            for item in self.scene.get_all_node_items():
-                item.set_state(NodeState.IDLE)
-                nd = item.node_data
-                if isinstance(nd, VisionNodeData):
-                    nd._execution_state = None
-            # 2) 清空状态队列中的残留事件
-            while not self._state_queue.empty():
-                try: self._state_queue.get_nowait()
-                except: break
-            # 3) 执行工作流（阻塞主线程）
-            self._workflow.execute()
-            # 4) 先处理事件队列（让 NODE_ERROR/NODE_COMPLETED 更新到 NodeItem）
-            self._drain_state_queue()
-            # 5) 再以 _execution_state 为准做最终同步（事件可能丢失，执行状态是权威来源）
-            self._sync_states_from_data()
+        """运行工作流（后台线程执行，不阻塞 UI）"""
+        if not self._workflow:
+            return
+
+        # 1) 重置所有节点为 IDLE，清除上次运行残留的执行状态
+        for item in self.scene.get_all_node_items():
+            item.set_state(NodeState.IDLE)
+            nd = item.node_data
+            if isinstance(nd, VisionNodeData):
+                nd._execution_state = None
+        # 2) 清空状态队列中的残留事件
+        while not self._state_queue.empty():
+            try:
+                self._state_queue.get_nowait()
+            except Exception:
+                break
+        # 3) 后台线程执行工作流，通过事件系统异步更新 UI
+        import threading
+        wf = self._workflow
+
+        def run_and_sync():
+            try:
+                wf.execute()
+            finally:
+                # 执行完成后立即排空状态队列（在主线程中通过 QTimer 触发）
+                pass
+
+        t = threading.Thread(target=run_and_sync, daemon=True)
+        t.start()
+        # 4) 启动定时器轮询状态队列，工作流结束后做最终同步
+        self._state_poll.start()
+        # 在适当延迟后做最终同步（等待事件传播）
+        QTimer.singleShot(100, self._finalize_after_run)
+
+    def _finalize_after_run(self):
+        """工作流执行完成后的最终同步"""
+        self._drain_state_queue()
+        self._sync_states_from_data()
+        self._state_poll.stop()
 
     def _on_stop(self):
         """停止工作流"""
@@ -703,6 +724,11 @@ class DiagramEditorWidget(QWidget):
         event_system.unsubscribe(EventType.PORT_STARTED, self._on_port_started)
         # 取消订阅端口完成事件
         event_system.unsubscribe(EventType.PORT_COMPLETED, self._on_port_completed)
+
+    def closeEvent(self, event):
+        """关闭时取消事件订阅，防止回调悬空"""
+        self._unsubscribe_workflow_events()
+        super().closeEvent(event)
 
     def _belongs_to_bound_workflow(self, sender) -> bool:
         """检查发送者是否属于绑定的工作流"""

@@ -24,6 +24,9 @@ import importlib
 import inspect
 import logging
 
+# 确保项目根目录在路径中（必须在本地导入之前）
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 from core.node_base import NodeBase
 from gui.theme import theme_manager
 from services.app_context import AppContext, set_app_context
@@ -32,9 +35,6 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QApplication
 
-
-# 确保项目根目录在路径中
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
 def setup_logging():

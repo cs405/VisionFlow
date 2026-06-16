@@ -174,33 +174,33 @@ class Scannet1500:
         names = gt_poses['name']
         
         for i in range(len(names)):
-                scene_id = names[i, 0]
-                scene_idx = names[i, 1]
-                scene = f'scene{scene_id:04d}_{scene_idx:02d}'
-            
-                image0 = str(int(names[i, 2]))
-                image1 = str(int(names[i, 3]))
-                
-                K0 = np.loadtxt(
-                    os.path.join(self.config['scannet_path'], 'scannet_test_1500', scene,  'intrinsic/intrinsic_color.txt')
-                )
-                K1 = K0
+            scene_id = names[i, 0]
+            scene_idx = names[i, 1]
+            scene = f'scene{scene_id:04d}_{scene_idx:02d}'
 
-                pose_0 = np.loadtxt(
-                    os.path.join(self.config['scannet_path'], 'scannet_test_1500', scene, 'pose', image0 + '.txt')
-                )
-                pose_1 = np.loadtxt(
-                    os.path.join(self.config['scannet_path'], 'scannet_test_1500', scene, 'pose', image1 + '.txt')
-                )
-                T_0to1 = get_relative_transform(pose_0, pose_1)
-                
-                pairs.append({
+            image0 = str(int(names[i, 2]))
+            image1 = str(int(names[i, 3]))
+
+            K0 = np.loadtxt(
+                os.path.join(self.config['scannet_path'], 'scannet_test_1500', scene, 'intrinsic/intrinsic_color.txt')
+            )
+            K1 = K0
+
+            pose_0 = np.loadtxt(
+                os.path.join(self.config['scannet_path'], 'scannet_test_1500', scene, 'pose', image0 + '.txt')
+            )
+            pose_1 = np.loadtxt(
+                os.path.join(self.config['scannet_path'], 'scannet_test_1500', scene, 'pose', image1 + '.txt')
+            )
+            T_0to1 = get_relative_transform(pose_0, pose_1)
+
+            pairs.append({
                     'image0': os.path.join(self.config['scannet_path'], 'scannet_test_1500', scene, 'color', image0 + '.jpg'),
                     'image1': os.path.join(self.config['scannet_path'], 'scannet_test_1500', scene, 'color', image1 + '.jpg'),
-                    'K0': K0,
-                    'K1': K1,
-                    'T_0to1': T_0to1,
-                })
+                'K0': K0,
+                'K1': K1,
+                'T_0to1': T_0to1,
+            })
 
         return pairs
 

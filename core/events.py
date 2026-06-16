@@ -62,7 +62,7 @@ class EventSystem:
     # 定义构造函数
     def __init__(self):
         self._handlers: dict[EventType, list[Callable]] = defaultdict(list)
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
     def subscribe(self, event_type: EventType, handler: Callable):
         """订阅事件类型。处理函数签名: handler(sender, **kwargs)"""
@@ -94,8 +94,10 @@ class EventSystem:
                     try:
                         self.publish(EventType.MESSAGE_ERROR, sender=None,
                                     message=f"事件处理函数错误: {e}")
-                    except Exception:
-                        pass
+                    except Exception as e2:
+                        import logging
+                        logging.getLogger(__name__).error(
+                            "无法发布 MESSAGE_ERROR: %s", e2, exc_info=True)
 
     # 定义清空方法
     def clear(self):

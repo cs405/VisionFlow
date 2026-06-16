@@ -2,20 +2,23 @@
 节点基类层次结构
 定义所有视觉处理节点的完整继承链
 
-继承关系（自上而下）:
-    NodeBase  （端口、样式、图表数据）                              ← node_base.py
-      -> VisionNodeDataBase  （流程延迟）                           ← node_vision.py
-        -> ShowPropertyNodeDataBase  （属性展示器）
-          -> HelpNodeDataBase  （帮助 URL）
-            -> DemoNodeDataBase  （示例参数）
-              -> VisionNodeData  （Mat、ResultImages、调用生命周期）
-                -> ROINodeData  （DrawROI / FromROI / InputROI）    ← node_roi.py
-                -> SelectableResultImageNodeData  （选择上游结果）   ← node_selectable.py
-                  -> OpenCVNodeDataBase  （OpenCV 特有的 Mat 处理）
-                -> SrcFilesVisionNodeData （基于文件的图像源）
-                -> Base64MatchingNodeData  （模板匹配）
-                -> ConditionNodeData  （条件分支）                  ← node_condition.py
-                -> WaitAllParallelNodeData  （并行同步屏障）
+已从 6 层深继承重构为 Mixin 扁平化模式（见 node_vision.py）:
+
+    NodeBase  （端口、样式、图表数据、属性系统）                     ← node_base.py
+      └─ VisionNodeData  （+ HelpPresenterMixin, PropertyPresenterMixin）
+           ├─ ROINodeData  （DrawROI / FromROI / InputROI）         ← node_roi.py
+           ├─ SelectableResultImageNodeData  （选择上游结果）        ← node_selectable.py
+           │    └─ OpenCVNodeDataBase  （OpenCV 特有的 Mat 处理）
+           ├─ SrcFilesVisionNodeData （基于文件的图像源）
+           ├─ Base64MatchingNodeData  （模板匹配）
+           ├─ ConditionNodeData  （条件分支）                        ← node_condition.py
+           └─ WaitAllParallelNodeData  （并行同步屏障）
+
+向后兼容别名（定义于 node_vision.py）:
+    VisionNodeDataBase = NodeBase
+    ShowPropertyNodeDataBase = PropertyPresenterMixin
+    HelpNodeDataBase = HelpPresenterMixin
+    DemoNodeDataBase = DemoParamsMixin
 
 """
 
@@ -106,12 +109,22 @@ class Property:
 
     def __set__(self, obj, value):
         """描述符协议：设置属性值时被调用"""
+        import numpy as np
         # 获取旧值
         old = getattr(obj, self.attr_name, self.default)
         # 设置新值
         setattr(obj, self.attr_name, value)
         # 如果值发生变化，通知属性变更
-        if old != value:
+        # 对 numpy 数组使用 array_equal 避免 ambiguity 错误
+        changed = False
+        if isinstance(old, np.ndarray) and isinstance(value, np.ndarray):
+            changed = not np.array_equal(old, value)
+        elif old is not value:
+            try:
+                changed = (old != value)
+            except (ValueError, TypeError):
+                changed = True
+        if changed:
             obj._notify_property_changed(self.public_name, old, value)
 
 
@@ -292,6 +305,8 @@ class NodeBase(ABC):
 
         # 属性更改回调字典，键为属性名，值为回调函数列表
         self._property_callbacks: dict[str, list[Callable]] = {}
+        # 批量更新标志
+        self._batch_updating: bool = False
 
         # 样式属性
         self.width: float = 120.0      # 节点宽度
@@ -592,12 +607,20 @@ class NodeBase(ABC):
             except Exception:
                 return value
 
-        # 恢复 numpy 数组
+        # 恢复 numpy 数组（含大小校验防止恶意数据导致 OOM）
         if "__ndarray__" in value:
             import base64
             data = base64.b64decode(value["__ndarray__"])
-            arr = np.frombuffer(data, dtype=np.dtype(value.get("__ndarray_dtype__", "float64")))
-            return arr.reshape(value.get("__ndarray_shape__", (-1,)))
+            dtype = np.dtype(value.get("__ndarray_dtype__", "float64"))
+            shape = value.get("__ndarray_shape__", (-1,))
+            expected = dtype.itemsize
+            for dim in shape:
+                if dim > 0:
+                    expected *= dim
+            if expected > 512 * 1024 * 1024:  # 最大 512 MB
+                raise ValueError(f"numpy 数组过大: {expected} 字节")
+            arr = np.frombuffer(data, dtype=dtype)
+            return arr.reshape(shape)
 
         # 恢复自定义对象（通过注册表）
         if "__type__" in value:
@@ -685,6 +708,9 @@ class NodeBase(ABC):
         node._skip_load_default = True
         cls.__init__(node)  # _skip_load_default 已设置，load_default() 被跳过
         node._id = data.get("id", node._id)
+        # 同步端口的 node_id
+        for port in node.ports:
+            port.node_id = node._id
         node.name = data.get("name", node.name)
         node._title = data.get("title", "")
         node._text = data.get("text", "")

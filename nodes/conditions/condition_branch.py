@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 class OpenCVConditionNode(ConditionNodeData, OpenCVNodeDataBase, LogicModuleNode):
     """通用条件分支节点
 
-    通过 ConditionsPrensenter 评估上游节点属性条件，动态选择输出端口。
+    通过 ConditionsPresenter 评估上游节点属性条件，动态选择输出端口。
     """
 
     __group__ = "逻辑模块"

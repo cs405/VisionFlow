@@ -84,6 +84,8 @@ class MegaDepthDataset(Dataset):
         return len(self.pair_infos)
 
     def __getitem__(self, idx):
+        if len(self) == 0:
+            raise IndexError("数据集为空：没有满足 overlap 条件的 pair")
         (idx0, idx1), overlap_score, central_matches = self.pair_infos[idx % len(self)]
 
         # read grayscale image and mask. (1, h, w) and (h, w)

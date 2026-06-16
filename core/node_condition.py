@@ -151,6 +151,9 @@ class ConditionNodeData(VisionNodeData):
     def invoke(self, previors: LinkData | None, diagram: "WorkflowEngine") -> FlowableResult:
         """执行条件分支逻辑。委托给 ConditionsPresenter 评估。
         实际路由由 get_flowable_output_links() 控制。
+
+        注意：不调用 super().invoke() 因为需要先通过 conditions_presenter 加载节点数据。
+        任何 VisionNodeData.invoke() 的变更也需同步到此方法。
         """
         from_node = None
         for n in self.from_node_datas:
@@ -300,8 +303,9 @@ class VisionPropertyCondition:
 class WaitAllParallelNodeData(VisionNodeData, LogicModuleNode):
     """等待所有并行上游节点完成后才继续执行的同步屏障节点。
 
-    作为同步屏障：统计来自并行分支的调用次数，
-    只有当所有并行前驱节点都完成后才继续执行。
+    工作流引擎按拓扑层级执行：同层级节点全部完成后才会执行下一层。
+    因此本节点被调用时，所有并行上游已执行完毕，
+    只需在单次 invoke() 中聚合所有上游数据。
     """
     # 节点分组（用于UI分类）
     __group__ = "逻辑模块"
@@ -310,52 +314,33 @@ class WaitAllParallelNodeData(VisionNodeData, LogicModuleNode):
         super().__init__()
         # 节点显示名称
         self.name = "并行等待"
-        # 已完成的并行分支计数
-        self._result_count = 0
-        self._cached_parallel_count: int = 0
-        self._parallel_count_cached: bool = False
-        self._result_lock = threading.Lock()
 
     def invoke(self, previors: LinkData | None, diagram: "WorkflowEngine") -> FlowableResult:
-        """统计并行调用次数。只有当所有分支都完成时才继续执行。"""
-        # 获取第一个上游节点
-        from_node = None
-        for n in self.from_node_datas:
-            if isinstance(n, VisionNodeData):
-                from_node = n
-                break
-
+        """聚合所有并行上游节点的结果。"""
         # 查找源节点
         src_data = self._find_source_node(diagram)
 
-        # 调用每个并行分支完成时的处理
-        self.on_parallel_from_invoked(src_data, from_node, diagram)
+        # 聚合所有有效上游节点的数据
+        all_mats = []
+        for n in self.from_node_datas:
+            if isinstance(n, VisionNodeData) and n.mat is not None:
+                all_mats.append(n.mat)
+                self.on_parallel_from_invoked(src_data, n, diagram)
 
-        # 增加完成计数并检查（锁内原子操作，消除 TOCTOU 竞态）
-        with self._result_lock:
-            self._result_count += 1
-            if not self._parallel_count_cached:
-                # 统计所有标记为 PARALLEL 的上游节点（不含 error 状态的）
-                parallel_count = 0
-                for n in self.from_node_datas:
-                    if hasattr(n, 'invoke_mode') and n.invoke_mode == FlowableInvokeMode.PARALLEL:
-                        if getattr(n, '_execution_state', None) != 'error':
-                            parallel_count += 1
-                # 如果没有显式的 PARALLEL 节点，则统计所有上游节点数
-                if parallel_count == 0:
-                    parallel_count = max(1, len(self.from_node_datas))
-                self._cached_parallel_count = parallel_count
-                self._parallel_count_cached = True
-            all_done = self._result_count >= self._cached_parallel_count
-            if all_done:
-                self._result_count = 0
-                self._parallel_count_cached = False
-        if all_done:
-            # 调用所有并行分支完成时的处理
-            return self._invoke_action(lambda: self.on_all_parallels_invoked(src_data, from_node, diagram))
-        else:
-            # 还有分支未完成，中断等待
-            return self.break_(from_node.mat if from_node else None, "等待其他并行分支完成")
+        if not all_mats:
+            return self.break_(None, "没有有效的上游数据")
+
+        # 使用最后一个上游节点作为 from_node
+        from_node = next(
+            (n for n in self.from_node_datas if isinstance(n, VisionNodeData)),
+            None
+        )
+        return self._invoke_action(
+            lambda: self.on_all_parallels_invoked(src_data, from_node, diagram)
+        )
+
+    def _update_result_image_source(self):
+        self._result_image_source = self._mat
 
     def on_parallel_from_invoked(self, src_image_node_data, from_node, diagram):
         """每个并行分支完成时调用。子类可重写以累积结果。"""

@@ -88,9 +88,14 @@ class PanelState:
     GRP = "PanelState"  # QSettings 中的分组名称
 
     def __init__(self):
-        """初始化面板状态管理器"""
-        # 创建 QSettings 对象
-        self.s = QSettings()
+        """初始化面板状态管理器（惰性创建 QSettings，确保在 QApplication 之后）"""
+        self._settings = None
+
+    @property
+    def s(self):
+        if self._settings is None:
+            self._settings = QSettings()
+        return self._settings
 
     def _k(self, key):
         """生成完整的键名

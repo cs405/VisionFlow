@@ -62,6 +62,7 @@ class LogPanel(QWidget):
             parent: 父对象
         """
         # 调用父类QWidget的构造函数
+        self._event_handlers: list[tuple] = []  # 存储 (event_type, handler) 用于取消订阅
         super().__init__(parent)
         # 原始日志条目列表（用于导出）
         self._log_entries: list[dict] = []
@@ -287,54 +288,84 @@ class LogPanel(QWidget):
     # ── 事件连接 ─────────────────────────────────────────────────────────────
 
     def _connect_events(self):
-        """连接事件系统的各种事件"""
+        """连接事件系统的各种事件，并保存处理函数引用以便取消订阅"""
         # 节点开始事件
-        event_system.subscribe(EventType.NODE_STARTED,
-                               lambda s, **kw: self.info(
-                                   f"节点开始: {self._node_label(s)}", source=self._node_source(s)))
+        h1 = lambda s, **kw: self.info(
+            f"节点开始: {self._node_label(s)}", source=self._node_source(s))
+        event_system.subscribe(EventType.NODE_STARTED, h1)
+        self._event_handlers.append((EventType.NODE_STARTED, h1))
+
         # 节点完成事件
-        event_system.subscribe(EventType.NODE_COMPLETED,
-                               lambda s, **kw: self.success(
-                                   f"节点完成: {self._node_label(s)}", source=self._node_source(s)))
+        h2 = lambda s, **kw: self.success(
+            f"节点完成: {self._node_label(s)}", source=self._node_source(s))
+        event_system.subscribe(EventType.NODE_COMPLETED, h2)
+        self._event_handlers.append((EventType.NODE_COMPLETED, h2))
+
         # 节点错误事件
-        event_system.subscribe(EventType.NODE_ERROR,
-                               lambda s, **kw: self.error(
-                                   f"节点错误: {self._node_label(s)} - {kw.get('result', '')}",
-                                   source=self._node_source(s)))
+        h3 = lambda s, **kw: self.error(
+            f"节点错误: {self._node_label(s)} - {kw.get('result', '')}",
+            source=self._node_source(s))
+        event_system.subscribe(EventType.NODE_ERROR, h3)
+        self._event_handlers.append((EventType.NODE_ERROR, h3))
+
         # 工作流开始事件
-        event_system.subscribe(EventType.WORKFLOW_STARTED,
-                               lambda s, **kw: self.info("流程开始", source={"type": "workflow"}))
+        h4 = lambda s, **kw: self.info("流程开始", source={"type": "workflow"})
+        event_system.subscribe(EventType.WORKFLOW_STARTED, h4)
+        self._event_handlers.append((EventType.WORKFLOW_STARTED, h4))
+
         # 工作流完成事件
-        event_system.subscribe(EventType.WORKFLOW_COMPLETED,
-                               lambda s, **kw: self.success("流程完成", source={"type": "workflow"}))
+        h5 = lambda s, **kw: self.success("流程完成", source={"type": "workflow"})
+        event_system.subscribe(EventType.WORKFLOW_COMPLETED, h5)
+        self._event_handlers.append((EventType.WORKFLOW_COMPLETED, h5))
+
         # 工作流错误事件
-        event_system.subscribe(EventType.WORKFLOW_ERROR,
-                               lambda s, **kw: self.error(
-                                   f"流程错误: {kw.get('result', '')}", source={"type": "workflow"}))
+        h6 = lambda s, **kw: self.error(
+            f"流程错误: {kw.get('result', '')}", source={"type": "workflow"})
+        event_system.subscribe(EventType.WORKFLOW_ERROR, h6)
+        self._event_handlers.append((EventType.WORKFLOW_ERROR, h6))
+
         # 信息消息事件
-        event_system.subscribe(EventType.MESSAGE_INFO,
-                               lambda s, **kw: self.info(
-                                   kw.get("message", ""),
-                                   source=kw.get("source", {"type": "system"}),
-                                   node_id=kw.get("node_id", "")))
+        h7 = lambda s, **kw: self.info(
+            kw.get("message", ""),
+            source=kw.get("source", {"type": "system"}),
+            node_id=kw.get("node_id", ""))
+        event_system.subscribe(EventType.MESSAGE_INFO, h7)
+        self._event_handlers.append((EventType.MESSAGE_INFO, h7))
+
         # 警告消息事件
-        event_system.subscribe(EventType.MESSAGE_WARN,
-                               lambda s, **kw: self.warning(
-                                   kw.get("message", ""),
-                                   source=kw.get("source", {"type": "system"}),
-                                   node_id=kw.get("node_id", "")))
+        h8 = lambda s, **kw: self.warning(
+            kw.get("message", ""),
+            source=kw.get("source", {"type": "system"}),
+            node_id=kw.get("node_id", ""))
+        event_system.subscribe(EventType.MESSAGE_WARN, h8)
+        self._event_handlers.append((EventType.MESSAGE_WARN, h8))
+
         # 错误消息事件
-        event_system.subscribe(EventType.MESSAGE_ERROR,
-                               lambda s, **kw: self.error(
-                                   kw.get("message", ""),
-                                   source=kw.get("source", {"type": "system"}),
-                                   node_id=kw.get("node_id", "")))
+        h9 = lambda s, **kw: self.error(
+            kw.get("message", ""),
+            source=kw.get("source", {"type": "system"}),
+            node_id=kw.get("node_id", ""))
+        event_system.subscribe(EventType.MESSAGE_ERROR, h9)
+        self._event_handlers.append((EventType.MESSAGE_ERROR, h9))
+
         # 成功消息事件
-        event_system.subscribe(EventType.MESSAGE_SUCCESS,
-                               lambda s, **kw: self.success(
-                                   kw.get("message", ""),
-                                   source=kw.get("source", {"type": "system"}),
-                                   node_id=kw.get("node_id", "")))
+        h10 = lambda s, **kw: self.success(
+            kw.get("message", ""),
+            source=kw.get("source", {"type": "system"}),
+            node_id=kw.get("node_id", ""))
+        event_system.subscribe(EventType.MESSAGE_SUCCESS, h10)
+        self._event_handlers.append((EventType.MESSAGE_SUCCESS, h10))
+
+    def _disconnect_events(self):
+        """取消所有事件订阅"""
+        for event_type, handler in self._event_handlers:
+            event_system.unsubscribe(event_type, handler)
+        self._event_handlers.clear()
+
+    def closeEvent(self, event):
+        """关闭时取消所有事件订阅"""
+        self._disconnect_events()
+        super().closeEvent(event)
 
     @staticmethod
     def _node_label(sender) -> str:

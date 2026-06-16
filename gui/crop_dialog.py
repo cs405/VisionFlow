@@ -396,8 +396,8 @@ class CropDialog(QDialog):
         resized = cv2.resize(rgb, (nw, nh))
         # 转换为字节数据
         h_bytes = resized.tobytes()
-        # 创建QImage
-        qimg = QImage(h_bytes, nw, nh, nw * 3, QImage.Format_RGB888)
+        # 创建QImage并深拷贝（避免缓冲区生命周期问题）
+        qimg = QImage(h_bytes, nw, nh, nw * 3, QImage.Format_RGB888).copy()
         # 设置预览标签的像素图
         self._preview_label.setPixmap(QPixmap.fromImage(qimg).scaled(120, 120, Qt.KeepAspectRatio, Qt.SmoothTransformation))
 

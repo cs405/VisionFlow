@@ -35,10 +35,10 @@ class Blur(OpenCVNodeDataBase):
         # 如果输入图像为空，返回错误结果
         if mat is None:
             return self.error(None, "无输入图像")
-        # 确保卷积核大小为奇数
-        k = self.ksize if self.ksize % 2 == 1 else self.ksize + 1
+        # 确保卷积核大小为奇数且至少为1
+        k = max(1, self.ksize if self.ksize % 2 == 1 else self.ksize + 1)
         # 调用OpenCV的blur进行均值模糊处理
-        return self.ok(cv2.blur(mat, (kw, kh)))
+        return self.ok(cv2.blur(mat, (k, k)))
 
     def _update_result_image_source(self):
         """更新结果图像源"""
