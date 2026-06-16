@@ -473,6 +473,10 @@ class WorkflowEngine:
             node._execution_state = None
             if hasattr(node, '_reset_for_new_execution'):
                 node._reset_for_new_execution()
+            if hasattr(node, '_mat'):
+                node._mat = None
+            if hasattr(node, '_result_image_source'):
+                node._result_image_source = None
 
         event_system.publish(EventType.WORKFLOW_STARTED, sender=self)
 
@@ -512,20 +516,15 @@ class WorkflowEngine:
                     if last_result.is_error:
                         self.state = WorkflowState.ERROR
                         event_system.publish(EventType.WORKFLOW_ERROR, sender=self, result=last_result)
-                        return last_result
+                        # 不 return，继续执行后续层级，让条件分支决定路由
                     self._apply_port_routing(node, _disabled_node_ids)
                 else:
                     # 并行执行一组节点
                     results = self._execute_parallel(executable)
-                    has_error = False
                     for r in results:
                         if r.is_error:
                             last_result = r
-                            has_error = True
-                    if has_error:
-                        self.state = WorkflowState.ERROR
-                        event_system.publish(EventType.WORKFLOW_ERROR, sender=self, result=last_result)
-                        return last_result
+                    # 不因个别节点error终止，继续后续层级，让条件分支处理
                     # 条件端口路由：并行执行后，对每个节点应用端口路由
                     for nid in executable:
                         if nid not in _disabled_node_ids:

@@ -4,7 +4,7 @@
   "description": "",
   "author": "",
   "created_at": "2026-06-15T16:22:26.718503",
-  "modified_at": "2026-06-16T10:10:08.730314",
+  "modified_at": "2026-06-16T11:05:03.846511",
   "selected_diagram_index": 0,
   "diagrams": [
     {
@@ -1836,7 +1836,7 @@
               "selected_index": -1,
               "branches": [
                 {
-                  "branch_id": "204b38cf",
+                  "branch_id": "ec1fb931",
                   "selected_input_node_id": "4968bd80",
                   "selected_output_node_id": "e026b667",
                   "condition_operate": "ALL",
@@ -1849,10 +1849,10 @@
                   ]
                 },
                 {
-                  "branch_id": "b80c5eee",
+                  "branch_id": "43dbb82e",
                   "selected_input_node_id": "4968bd80",
                   "selected_output_node_id": "b9bd36de",
-                  "condition_operate": "ANY_NOT",
+                  "condition_operate": "ALL",
                   "conditions": [
                     {
                       "property_name": "数据收集.matched",

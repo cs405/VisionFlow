@@ -1228,11 +1228,11 @@ class ROINodeData(VisionNodeData):
         upstream_offset = getattr(from_data, '_crop_chain_offset', (0, 0, 0, 0))
 
         # 根据图像源模式确定有效的输入图像
-        if from_data is not None and from_data.mat is not None:
-            if hasattr(self, 'image_source_mode') and self.image_source_mode == "原图":
-                input_mat = self._original_mat
-            else:
-                input_mat = from_data.mat
+        # "原图"模式优先：即使上游mat为None，也能用完整原图
+        if hasattr(self, 'image_source_mode') and self.image_source_mode == "原图" and self._original_mat is not None:
+            input_mat = self._original_mat
+        elif from_data is not None and from_data.mat is not None:
+            input_mat = from_data.mat
         else:
             input_mat = None
 
