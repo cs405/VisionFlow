@@ -1,14 +1,14 @@
 """
 VisionNodeData hierarchy - visual processing node classes.
-Extracted from node_base.py.
+Extracted from node_base.py, flattened with Mixin pattern.
 
-Inheritance chain:
-    NodeBase (node_base.py)
-      -> VisionNodeDataBase (flow delay)
-        -> ShowPropertyNodeDataBase (property presenter)
-          -> HelpNodeDataBase (help URL)
-            -> DemoNodeDataBase (demo parameters)
-              -> VisionNodeData (Mat, ResultImages, invoke lifecycle)
+Original 6-level inheritance:
+    NodeBase -> VisionNodeDataBase -> ShowPropertyNodeDataBase
+             -> HelpNodeDataBase -> DemoNodeDataBase -> VisionNodeData
+
+Flattened to 2-level with Mixins:
+    NodeBase -> VisionNodeData (with PropertyPresenterMixin,
+                                HelpPresenterMixin, DemoParamsMixin)
 """
 
 from __future__ import annotations
@@ -28,64 +28,39 @@ if TYPE_CHECKING:
 
 
 # =============================================================================
-# VisionNodeDataBase - 流延迟参数
+# Mixins — 扁平化替代深层继承链
 # =============================================================================
 
-class VisionNodeDataBase(NodeBase):
-    """
-    添加流程控制延迟参数的节点基类。
-    """
-
-
-# =============================================================================
-# ShowPropertyNodeDataBase - 属性展示器
-# =============================================================================
-
-class ShowPropertyNodeDataBase(VisionNodeDataBase):
-    """为属性面板提供属性展示器的基类。"""
+class PropertyPresenterMixin:
+    """为属性面板提供属性展示器（原 ShowPropertyNodeDataBase）。"""
 
     def get_property_presenter(self) -> Any:
         """返回在属性面板中显示的对象。默认返回自身。"""
         return self
 
-# =============================================================================
-# HelpNodeDataBase - 帮助/文档URL
-# =============================================================================
 
-class HelpNodeDataBase(ShowPropertyNodeDataBase):
-    """提供带文档URL的帮助展示器的基类。"""
+class HelpPresenterMixin:
+    """提供带文档URL的帮助展示器（原 HelpNodeDataBase）。"""
 
     def create_help_presenter(self) -> dict:
         """返回帮助面板所需的帮助信息。子类可重写以自定义。"""
-        # 获取当前节点的类
         cls = type(self)
-        # 获取类的文档字符串，取第一行作为简短描述
         doc = (cls.__doc__ or "").strip().split("\n")[0] if cls.__doc__ else ""
         return {
-            # 帮助文档URL（使用类名作为路径）
             "url": f"https://github.com/cs405/visionflow/{cls.__name__}",
-            # 节点名称
             "name": self.name,
-            # 节点描述
             "description": doc or f"{self.name} - {cls.__name__}",
-            # 源代码文件路径
             "source": inspect.getfile(cls),
         }
 
-# =============================================================================
-# DemoNodeDataBase - 示例/演示参数
-# =============================================================================
 
-class DemoNodeDataBase(HelpNodeDataBase):
-    """添加演示/示例参数以展示参数系统模式的基类。"""
+class DemoParamsMixin:
+    """添加演示/示例参数（原 DemoNodeDataBase）。"""
 
-    # 示例：基本参数（用于演示如何在基本参数分组中添加参数）
     demo_base_parameter1 = Property("", name="示例：基本参数", group=PropertyGroupNames.BASE_PARAMETERS,
                                     description="用来演示如何增加基本参数", order=9999)
-    # 示例：运行参数（用于演示如何在运行参数分组中添加参数）
     demo_run_parameter1 = Property("", name="示例：运行参数", group=PropertyGroupNames.RUN_PARAMETERS,
                                    description="用来演示如何增加结果参数", order=9999)
-    # 示例：结果参数（只读，用于演示结果参数分组）
     demo_result1 = Property("", name="示例：结果参数", group=PropertyGroupNames.RESULT_PARAMETERS,
                             description="用来演示如何增加结果参数", readonly=True, order=9999)
 
@@ -95,10 +70,20 @@ class DemoNodeDataBase(HelpNodeDataBase):
 
 
 # =============================================================================
+# Backward compatibility aliases（保持旧类名可用）
+# =============================================================================
+
+VisionNodeDataBase = NodeBase           # 原空标记类，现等同于 NodeBase
+ShowPropertyNodeDataBase = PropertyPresenterMixin
+HelpNodeDataBase = HelpPresenterMixin
+DemoNodeDataBase = DemoParamsMixin
+
+
+# =============================================================================
 # VisionNodeData - 核心视觉处理节点
 # =============================================================================
 
-class VisionNodeData(DemoNodeDataBase):
+class VisionNodeData(DemoParamsMixin, HelpPresenterMixin, PropertyPresenterMixin, NodeBase):
     """
     核心通用视觉处理节点。
     这是核心类——大多数视觉节点都继承自它。
