@@ -4,6 +4,9 @@
 ROI区域上进行。本节点自动查找上游所有ROI矩形参数，将各分支处理后的ROI图像
 贴回原始图像对应位置。
 
+同时自动叠加模板匹配节点（如XFeat）的匹配偏移量，
+确保匹配目标区域被正确放回原图中的绝对位置。
+
 两种模式自动适配：
 - 单ROI：上游链中只有1个ROI → 使用 from_node 的完整处理结果
 - 多ROI：上游有多个并行ROI分支 → 找出所有ROI及其分支处理结果，合并到原图
@@ -26,7 +29,8 @@ if TYPE_CHECKING:
 class ROIMapBackNode(OpenCVNodeDataBase):
     """ROI映射回原图节点：将上游所有ROI区域的处理结果映射回完整原始图像。
 
-    自动通过BFS搜索上游节点图中所有设置了 DrawROI 或 InputROI 的节点。
+    自动通过BFS搜索上游节点图中所有设置了 DrawROI 或 InputROI 的节点，
+    并叠加匹配节点（XFeat等）的 match_x/y 偏移量计算绝对坐标。
     - 单个ROI：使用上游链的最终处理结果贴回原图
     - 多个ROI：找出各分支的处理结果，全部合并到同一张原图上
 
@@ -48,17 +52,17 @@ class ROIMapBackNode(OpenCVNodeDataBase):
         if original is None:
             return self.ok(processed_input, "无原始图像，透传上游结果")
 
-        # 收集所有上游ROI节点及其对应的处理结果
+        # 收集所有上游ROI及其匹配偏移调整后的映射
         all_mappings = self._collect_all_roi_mappings()
 
         if not all_mappings:
             return self.ok(processed_input, "未找到上游ROI，透传上游结果")
 
-        # 单ROI：使用上游链路完整处理后的图像（from_node.mat）
+        # 单ROI：使用上游链完整处理后的图像（from_node.mat）
         if len(all_mappings) == 1:
             roi_rect, _ = all_mappings[0]
             patches = [(roi_rect, processed_input)]
-            desc = f"ROI映射: 1个区域"
+            desc = "ROI映射: 1个区域"
         else:
             # 多ROI：使用各分支自身的处理结果，全部合并到原图
             patches = [(rect, mat) for rect, mat in all_mappings if mat is not None]
@@ -74,7 +78,6 @@ class ROIMapBackNode(OpenCVNodeDataBase):
             w = min(w, ow - x)
             h = min(h, oh - y)
 
-            # 处理通道数不匹配
             patch = roi_patch
             if len(result.shape) != len(patch.shape):
                 if len(patch.shape) == 2:
@@ -96,9 +99,38 @@ class ROIMapBackNode(OpenCVNodeDataBase):
     def _collect_all_roi_mappings(self) -> list[tuple[tuple, "np.ndarray"]]:
         """BFS遍历上游图，找出所有 (ROI矩形, 分支处理结果) 配对。
 
-        对于每个ROI节点，使用其下游第一个节点（也在上游图中）的输出mat
-        作为该分支的处理结果。在典型的多ROI管道中，这就是XFeat等匹配节点的输出。
+        对于每个ROI节点（CropNode），取其下游第一个节点的输出mat
+        作为该分支的处理结果。同时叠加匹配节点（如XFeat）的
+        match_x/y 偏移量，计算在原始图像中的绝对坐标。
         """
+        upstream_ids, all_nodes = self._bfs_upstream()
+
+        mappings: list[tuple[tuple, "np.ndarray"]] = []
+        for node in all_nodes:
+            if not isinstance(node, ROINodeData):
+                continue
+            rect = self._get_roi_rect(node)
+            if rect is None:
+                continue
+
+            # 取该ROI节点下游的第一个分支节点（也在上游图中）的输出
+            branch_mat = node.mat
+            child = None
+            for c in node.to_node_datas:
+                if c.node_id in upstream_ids and c.mat is not None:
+                    child = c
+                    branch_mat = c.mat
+                    break
+
+            if branch_mat is not None:
+                # 叠加匹配节点的偏移量（match_x, match_y 是ROI内的相对坐标）
+                adjusted_rect = self._adjust_by_match_offset(rect, child)
+                mappings.append((adjusted_rect, branch_mat))
+
+        return mappings
+
+    def _bfs_upstream(self) -> tuple[set[str], list]:
+        """BFS遍历上游图，返回 (上游节点ID集合, 所有上游节点列表)。"""
         upstream_ids: set[str] = set()
         all_nodes: list = []
         queue = deque(self.from_node_datas)
@@ -111,25 +143,27 @@ class ROIMapBackNode(OpenCVNodeDataBase):
             all_nodes.append(node)
             queue.extend(node.from_node_datas)
 
-        mappings: list[tuple[tuple, "np.ndarray"]] = []
-        for node in all_nodes:
-            if not isinstance(node, ROINodeData):
-                continue
-            rect = self._get_roi_rect(node)
-            if rect is None:
-                continue
+        return upstream_ids, all_nodes
 
-            # 取该ROI节点下游的第一个分支节点（也在上游图中）的输出
-            branch_mat = node.mat
-            for child in node.to_node_datas:
-                if child.node_id in upstream_ids and child.mat is not None:
-                    branch_mat = child.mat
-                    break
+    @staticmethod
+    def _adjust_by_match_offset(rect: tuple, child) -> tuple:
+        """如果child是匹配节点(XFeat等)且匹配成功，叠加match_x/y偏移量。
 
-            if branch_mat is not None:
-                mappings.append((rect, branch_mat))
-
-        return mappings
+        match_x/y 是匹配目标在ROI区域内的相对坐标。
+        叠加后得到在原始图像中的绝对坐标。
+        """
+        if child is None:
+            return rect
+        matched = getattr(child, 'matched', False)
+        if not matched:
+            return rect
+        mx = int(getattr(child, 'match_x', 0))
+        my = int(getattr(child, 'match_y', 0))
+        mw = int(getattr(child, 'match_w', 0))
+        mh = int(getattr(child, 'match_h', 0))
+        if mw > 0 and mh > 0:
+            return (rect[0] + mx, rect[1] + my, mw, mh)
+        return rect
 
     @staticmethod
     def _get_roi_rect(node: ROINodeData) -> tuple | None:

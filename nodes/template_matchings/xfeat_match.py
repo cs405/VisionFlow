@@ -186,7 +186,11 @@ class XFeatMatchingNode(Base64MatchingNodeData, OpenCVNodeDataBase,
         self.matched = len(results) > 0
         self.match_x, self.match_y, self.match_w, self.match_h = best_rect
         if self.matched:
-            return self.ok(out, f"匹配 {len(results)} 处 (最高: {best:.0f})")
+            x, y, bw, bh = best_rect
+            if bw > 0 and bh > 0:
+                matched_region = mat[y:y + bh, x:x + bw].copy()
+                return self.ok(matched_region, f"匹配 {len(results)} 处 (最高: {best:.0f})")
+            return self.error(None, "匹配区域无效")
         else:
             return self.error(None, f"错误: 未匹配到目标")
 
