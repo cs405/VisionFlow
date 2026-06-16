@@ -138,7 +138,7 @@ class DrawContoursNode(OpenCVNodeDataBase):
         if len(canvas.shape) == 2:
             canvas = cv2.cvtColor(canvas, cv2.COLOR_GRAY2BGR)
         for c, area, (x, y, bw, bh) in candidates:
-            cv2.rectangle(canvas, (x, y), (x + bw, y + bh), (0, 0, 255), 2)
+            cv2.rectangle(canvas, (x, y), (x + bw, y + bh), (0, 0, 255), 4)
 
         count = len(candidates)
         self.drawn_count = count

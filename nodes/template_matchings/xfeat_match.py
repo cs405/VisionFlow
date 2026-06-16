@@ -177,7 +177,7 @@ class XFeatMatchingNode(Base64MatchingNodeData, OpenCVNodeDataBase,
             x, y, bw, bh = int(r["x"]), int(r["y"]), int(r["w"]), int(r["h"])
             if r["score"] >= best:
                 best_rect = (x, y, bw, bh)
-            cv2.rectangle(out, (x, y), (x + bw, y + bh), (0, 255, 0), 2)
+            cv2.rectangle(out, (x, y), (x + bw, y + bh), (0, 255, 0), 3)
             cv2.putText(out, f"{r['score']:.0f}% in:{r['inliers']}",
                         (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
 
@@ -188,7 +188,8 @@ class XFeatMatchingNode(Base64MatchingNodeData, OpenCVNodeDataBase,
         if self.matched:
             x, y, bw, bh = best_rect
             if bw > 0 and bh > 0:
-                matched_region = mat[y:y + bh, x:x + bw].copy()
+                # 从带框的图上裁剪，保留匹配框（厚度3）
+                matched_region = out[y:y + bh, x:x + bw].copy()
                 return self.ok(matched_region, f"匹配 {len(results)} 处 (最高: {best:.0f})")
             return self.error(None, "匹配区域无效")
         else:
