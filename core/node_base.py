@@ -1785,6 +1785,14 @@ class ConditionNodeData(VisionNodeData):
                 from_node = n
                 break
 
+        # 传播上游 _original_mat（ROINodeData.invoke 的正常行为，条件分支也需要）
+        if isinstance(from_node, VisionNodeData):
+            upstream_original = getattr(from_node, '_original_mat', None)
+            if upstream_original is not None:
+                self._original_mat = upstream_original
+            elif from_node.mat is not None:
+                self._original_mat = from_node.mat.copy()
+
         src_data = self._find_source_node(diagram)
 
         # 加载节点数据到 presenter（恢复节点引用）
