@@ -5,20 +5,29 @@ from core.events import EventSystem, event_system
 from core.data_packet import DataPacket, FlowableResult, FlowableResultState
 from core.node_base import (
     NodeBase,
-    VisionNodeDataBase,
-    VisionNodeData,
-    ROINodeData,
-    SelectableResultImageNodeData,
-    SrcFilesVisionNodeData,
-    Base64MatchingNodeData,
-    ConditionNodeData,
-    WaitAllParallelNodeData,
-    OpenCVNodeDataBase,
     Property,
     Port,
     PortType,
     PortDock,
     PropertyGroupNames,
+)
+from core.node_vision import (
+    VisionNodeDataBase,
+    VisionNodeData,
+    ShowPropertyNodeDataBase,
+    HelpNodeDataBase,
+    DemoNodeDataBase,
+)
+from core.node_roi import ROINodeData
+from core.node_selectable import (
+    SelectableResultImageNodeData,
+    SrcFilesVisionNodeData,
+    Base64MatchingNodeData,
+    OpenCVNodeDataBase,
+)
+from core.node_condition import (
+    ConditionNodeData,
+    WaitAllParallelNodeData,
 )
 from core.node_group import NodeGroup, NodeDataGroupBase
 from core.registry import NodeRegistry, node_registry
@@ -30,6 +39,6 @@ from core.conditions import (
     FilterOperate,
     PropertyCondition,
     ConditionBranch,
-    ConditionsPrensenter,
-    ConditionsPresenter,  # 正确拼写（ConditionsPrensenter 保留向后兼容）
+    ConditionsPresenter,
+    ConditionsPrensenter,  # 向后兼容别名（已弃用）
 )

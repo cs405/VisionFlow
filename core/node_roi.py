@@ -30,6 +30,11 @@ class ROIBase:
         super().__init_subclass__(**kwargs)
         ROIBase._roi_registry[cls.__name__] = cls
 
+    @classmethod
+    def unregister(cls, name: str):
+        """从注册表中移除一个 ROI 类型。"""
+        cls._roi_registry.pop(name, None)
+
     def __init__(self, roi_type: str = ""):
         self.name = roi_type or self.__class__.__name__
 
@@ -42,7 +47,8 @@ class ROIBase:
         roi_cls = cls._roi_registry.get(roi_type, FromROI)
         roi = roi_cls()
         if roi_type == "DrawROI":
-            roi.rect = tuple(data.get("rect", roi.rect))
+            raw = data.get("rect")
+            roi.rect = tuple(raw) if raw else None
         elif roi_type == "InputROI":
             roi.x = int(data.get("x", roi.x))
             roi.y = int(data.get("y", roi.y))
@@ -116,6 +122,18 @@ class NoROI(ROIBase):
     def __init__(self):
         # 调用父类构造函数，设置ROI名称为"无"
         super().__init__("无")
+
+
+# Sentinel for old-format DrawROI default rect (distinct from legitimate user input)
+_DRAW_ROI_LEGACY_DEFAULT = (0, 0, 100, 100)
+
+# Register ROI types for property deserialization
+from core.node_base import NodeBase as _NodeBase
+_NodeBase.register_deserializer("ROIBase", ROIBase.from_dict)
+_NodeBase.register_deserializer("FromROI", ROIBase.from_dict)
+_NodeBase.register_deserializer("DrawROI", ROIBase.from_dict)
+_NodeBase.register_deserializer("InputROI", ROIBase.from_dict)
+_NodeBase.register_deserializer("NoROI", ROIBase.from_dict)
 
 
 class ROINodeData(VisionNodeData):
@@ -261,7 +279,7 @@ class ROINodeData(VisionNodeData):
             self._roi = self.no_roi
         elif isinstance(self._roi, DrawROI):
             r = tuple(self._roi.rect) if self._roi.rect else None
-            if r == (0, 0, 100, 100):
+            if r == _DRAW_ROI_LEGACY_DEFAULT:
                 r = None  # 忽略旧版预设值
             self.draw_roi.rect = r
             self._roi = self.draw_roi

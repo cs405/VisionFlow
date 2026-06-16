@@ -84,6 +84,13 @@ class DataPacket:
     metadata: dict[str, Any] = field(default_factory=dict)  # 元数据字典
     result_objects: list[Any] = field(default_factory=list)  # 结果对象列表
 
+    def __post_init__(self):
+        if self.image is not None and self.images:
+            import logging
+            logging.getLogger(__name__).warning(
+                "DataPacket: image and images are mutually exclusive; images cleared")
+            self.images = []
+
     @property
     def has_image(self) -> bool:
         """是否包含图像数据"""

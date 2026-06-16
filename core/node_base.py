@@ -144,16 +144,16 @@ class Port:
     def __init__(self, node_id: str, port_type: PortType, dock: PortDock,
                  port_id: str = None, name: str = ""):
 
-        self.port_id = port_id or str(uuid.uuid4())[:8]  # 端口唯一标识符，未提供时自动生成8位UUID
-        self.node_id = node_id  # 所属节点的ID
-        self.port_type = port_type  # 端口类型（输入/输出/双向）
-        self.dock = dock  # 端口停靠位置（上/下/左/右）
-        self.name = name  # 端口显示名称
-        self.width = 6  # 端口的视觉宽度（像素）
-        self.height = 6  # 端口的视觉高度（像素）
-        self.fill_color = "#FFFFFF"  # 端口填充颜色
-        self.link_color = "#FF8C00"  # 连接线颜色，橙色，与 OpenCVFlowablePortData 保持一致
-        self.connected_links: list["LinkData"] = []  # 与该端口相连的所有连接线列表
+        self.port_id = port_id or str(uuid.uuid4())[:8]
+        self.node_id = node_id
+        self.port_type = port_type
+        self.dock = dock
+        self.name = name
+        self.width = 6
+        self.height = 6
+        self.fill_color = "#FFFFFF"
+        self.link_color = "#FF8C00"
+        self.connected_links: list["LinkData"] = []
 
     @property
     def is_input(self) -> bool:
@@ -213,13 +213,13 @@ class LinkData:
                  to_node_id: str = "", to_port_id: str = "",
                  text: str = ""):
 
-        self.link_id = str(uuid.uuid4())[:8]  # 连线唯一标识符，自动生成8位UUID
-        self.from_node_id = from_node_id  # 源节点ID
-        self.from_port_id = from_port_id  # 源端口ID
-        self.to_node_id = to_node_id  # 目标节点ID
-        self.to_port_id = to_port_id  # 目标端口ID
-        self.text = text  # 连线上的文本标签
-        self.stroke_color = "#FF8C00"  # 连线颜色，橙色
+        self.link_id = str(uuid.uuid4())[:8]
+        self.from_node_id = from_node_id
+        self.from_port_id = from_port_id
+        self.to_node_id = to_node_id
+        self.to_port_id = to_port_id
+        self.text = text
+        self.stroke_color = "#FF8C00"
 
     def to_dict(self) -> dict:
         """将连线对象序列化为字典"""
@@ -273,14 +273,21 @@ class NodeBase(ABC):
     提供：端口、样式、图表数据管理和序列化。
     """
 
+    # 子类可通过 cls.__new__ 将 _skip_load_default 设为 True 来跳过 load_default()
+    _skip_load_default: bool = False
+
+    # 自定义对象反序列化注册表: {type_name: from_dict_callable}
+    _type_deserializers: dict[str, Callable] = {}
+
+    @classmethod
+    def register_deserializer(cls, type_name: str, from_dict: Callable):
+        """注册自定义类型的反序列化器。"""
+        cls._type_deserializers[type_name] = from_dict
+
     def __init__(self):
-        # 节点唯一标识符，自动生成8位UUID
         self._id = str(uuid.uuid4())[:8]
-        # 显示名称，默认为类名
         self._name = self.__class__.__name__
-        # 显示文本
         self._text = ""
-        # 标题
         self._title = ""
 
         # 属性更改回调字典，键为属性名，值为回调函数列表
@@ -318,7 +325,8 @@ class NodeBase(ABC):
         # 工具箱排序顺序
         self.order: int = 0
 
-        self.load_default()
+        if not self._skip_load_default:
+            self.load_default()
 
     # -- 属性变更通知 --
 
@@ -414,14 +422,14 @@ class NodeBase(ABC):
         """获取所有上游节点（迭代 BFS，避免深图递归溢出）。"""
         visited: set[str] = set()
         result: list[NodeBase] = []
-        queue = list(self.from_node_datas)
-        while queue:
-            node = queue.pop()
+        stack = list(self.from_node_datas)
+        while stack:
+            node = stack.pop()
             if node.node_id in visited:
                 continue
             visited.add(node.node_id)
             result.append(node)
-            queue.extend(node.from_node_datas)
+            stack.extend(node.from_node_datas)
         return result
 
     def get_all_from_this_node_datas(self) -> list["NodeBase"]:
@@ -527,11 +535,14 @@ class NodeBase(ABC):
         # numpy浮点数转为Python float
         if isinstance(value, (np.floating,)):
             return float(value)
-        # numpy数组转为列表（对大数组使用 ravel 减少内存）
+        # numpy数组 → base64 编码（保证数据完整、体积可控）
         if isinstance(value, np.ndarray):
-            if value.size > 10000:
-                return {"__ndarray_shape__": value.shape, "__ndarray_dtype__": str(value.dtype)}
-            return value.tolist()
+            import base64
+            return {
+                "__ndarray__": base64.b64encode(value.tobytes()).decode("ascii"),
+                "__ndarray_shape__": value.shape,
+                "__ndarray_dtype__": str(value.dtype),
+            }
         # 枚举类型
         if isinstance(value, Enum):
             return {
@@ -581,15 +592,21 @@ class NodeBase(ABC):
             except Exception:
                 return value
 
-        # 恢复自定义对象
+        # 恢复 numpy 数组
+        if "__ndarray__" in value:
+            import base64
+            data = base64.b64decode(value["__ndarray__"])
+            arr = np.frombuffer(data, dtype=np.dtype(value.get("__ndarray_dtype__", "float64")))
+            return arr.reshape(value.get("__ndarray_shape__", (-1,)))
+
+        # 恢复自定义对象（通过注册表）
         if "__type__" in value:
             type_name = value.get("__type__", "")
             data = value.get("data", {})
-            if type_name in {"ROIBase", "FromROI", "DrawROI", "InputROI", "NoROI"}:
-                from core.node_roi import ROIBase
-                return ROIBase.from_dict(data)
-
-        return {k: self._deserialize_property_value(v) for k, v in value.items()}
+            deserializer = self._type_deserializers.get(type_name)
+            if deserializer is not None:
+                return deserializer(data)
+            return {k: self._deserialize_property_value(v) for k, v in value.items()}
 
     def _serialize_properties(self) -> dict[str, Any]:
         """序列化所有 Property 值（可读和可写属性都保存）"""
@@ -663,7 +680,8 @@ class NodeBase(ABC):
         仅初始化必要基础状态。子类应覆盖或使用 restore_from_dict 完成恢复。
         """
         node = cls.__new__(cls)
-        NodeBase.__init__(node)  # 跳过子类 __init__，避免 load_default() 文件扫描
+        node._skip_load_default = True
+        cls.__init__(node)  # _skip_load_default 已设置，load_default() 被跳过
         node._id = data.get("id", node._id)
         node.name = data.get("name", node.name)
         node._title = data.get("title", "")
@@ -685,6 +703,7 @@ class NodeBase(ABC):
 
 # =============================================================================
 # 从子模块重新导出，保持向后兼容
+# 注意：新代码应从子模块直接导入。这些 re-export 可能在未来主版本中移除。
 # =============================================================================
 
 from core.node_vision import (           # noqa: E402, F401

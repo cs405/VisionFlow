@@ -5,7 +5,7 @@
 
 import threading
 from collections import defaultdict
-from enum import Enum, auto
+from enum import Enum
 from typing import Any, Callable
 
 
@@ -13,46 +13,46 @@ from typing import Any, Callable
 class EventType(Enum):
     """工作流系统中的标准事件类型"""
     # 工作流生命周期
-    WORKFLOW_STARTED = auto()      # 工作流启动
-    WORKFLOW_COMPLETED = auto()    # 工作流完成
-    WORKFLOW_STOPPED = auto()      # 工作流停止
-    WORKFLOW_ERROR = auto()        # 工作流错误
+    WORKFLOW_STARTED = 10
+    WORKFLOW_COMPLETED = 11
+    WORKFLOW_STOPPED = 12
+    WORKFLOW_ERROR = 13
 
     # 节点生命周期
-    NODE_STARTED = auto()          # 节点开始执行
-    NODE_COMPLETED = auto()        # 节点执行完成
-    NODE_ERROR = auto()            # 节点执行错误
-    NODE_PROPERTY_CHANGED = auto() # 节点属性变更
-    NODE_SELECTED = auto()         # 节点被选中
-    NODE_DESELECTED = auto()       # 节点取消选中
+    NODE_STARTED = 20
+    NODE_COMPLETED = 21
+    NODE_ERROR = 22
+    NODE_PROPERTY_CHANGED = 23
+    NODE_SELECTED = 24
+    NODE_DESELECTED = 25
 
     # 端口/连线生命周期
-    PORT_STARTED = auto()          # 端口开始执行
-    PORT_COMPLETED = auto()        # 端口执行完成
-    LINK_STARTED = auto()          # 连线开始执行
-    LINK_COMPLETED = auto()        # 连线执行完成
+    PORT_STARTED = 30
+    PORT_COMPLETED = 31
+    LINK_STARTED = 32
+    LINK_COMPLETED = 33
 
     # 图表事件
-    DIAGRAM_CHANGED = auto()       # 图表变更
-    NODE_ADDED = auto()            # 节点添加
-    NODE_REMOVED = auto()          # 节点移除
-    LINK_ADDED = auto()            # 连线添加
-    LINK_REMOVED = auto()          # 连线移除
+    DIAGRAM_CHANGED = 40
+    NODE_ADDED = 41
+    NODE_REMOVED = 42
+    LINK_ADDED = 43
+    LINK_REMOVED = 44
 
     # 消息事件
-    MESSAGE_INFO = auto()          # 信息消息
-    MESSAGE_WARN = auto()          # 警告消息
-    MESSAGE_ERROR = auto()         # 错误消息
-    MESSAGE_SUCCESS = auto()       # 成功消息
+    MESSAGE_INFO = 50
+    MESSAGE_WARN = 51
+    MESSAGE_ERROR = 52
+    MESSAGE_SUCCESS = 53
 
     # 项目事件
-    PROJECT_LOADED = auto()        # 项目加载
-    PROJECT_SAVED = auto()         # 项目保存
-    PROJECT_CHANGED = auto()       # 项目变更
+    PROJECT_LOADED = 60
+    PROJECT_SAVED = 61
+    PROJECT_CHANGED = 62
 
     # 文件迭代事件
-    FILE_ITERATION_NEXT = auto()       # 在运行全部循环中，每个文件处理前触发
-    FILE_ITERATION_COMPLETED = auto()  # 整个运行全部循环完成时触发
+    FILE_ITERATION_NEXT = 70
+    FILE_ITERATION_COMPLETED = 71
 
 
 # 定义事件系统类
@@ -62,7 +62,6 @@ class EventSystem:
     # 定义构造函数
     def __init__(self):
         self._handlers: dict[EventType, list[Callable]] = defaultdict(list)
-        self._in_error_publish: bool = False
         self._lock = threading.Lock()
 
     def subscribe(self, event_type: EventType, handler: Callable):
@@ -78,24 +77,26 @@ class EventSystem:
                 handlers.remove(handler)
 
     def publish(self, event_type: EventType, sender: Any = None, **kwargs):
-        """发布事件给所有订阅者（线程安全）"""
+        """发布事件给所有订阅者（线程安全）。
+
+        如果 handler 抛出异常且 event_type 不是 MESSAGE_ERROR，
+        发布一条 MESSAGE_ERROR 事件通知 UI，但同一 publish 调用
+        中只报告第一个错误，避免重复。
+        """
         with self._lock:
             handlers = list(self._handlers.get(event_type, []))
+        error_reported = False
         for handler in handlers:
-            # 尝试执行处理函数
             try:
-                # 调用处理函数，传入发送者和关键字参数
                 handler(sender, **kwargs)
-            # 如果执行过程中发生异常
             except Exception as e:
-                # 防止 MESSAGE_ERROR 处理器自身异常导致无限递归
-                if event_type != EventType.MESSAGE_ERROR and not self._in_error_publish:
-                    self._in_error_publish = True
+                if event_type != EventType.MESSAGE_ERROR and not error_reported:
+                    error_reported = True
                     try:
                         self.publish(EventType.MESSAGE_ERROR, sender=None,
                                     message=f"事件处理函数错误: {e}")
-                    finally:
-                        self._in_error_publish = False
+                    except Exception:
+                        pass
 
     # 定义清空方法
     def clear(self):

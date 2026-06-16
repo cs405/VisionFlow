@@ -6,12 +6,9 @@
 import inspect
 import logging
 import threading
-from typing import Any, Callable, TypeVar
+from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
-
-# 创建类型变量 T，用于泛型（未实际使用，但为类型注解保留）
-T = TypeVar("T")
 
 _BUILTIN_MODULES = frozenset({
     "builtins", "typing", "abc", "enum", "datetime", "decimal",

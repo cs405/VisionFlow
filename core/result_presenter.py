@@ -12,7 +12,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import numpy as np
+    from core.node_vision import VisionNodeData
 
 
 class ResultItemType(Enum):
@@ -56,10 +60,7 @@ class RectangleResultItem(ResultItem):
     y: float = 0.0        # 左上角 Y 坐标
     width: float = 0.0    # 宽度
     height: float = 0.0   # 高度
-
-    def __post_init__(self):
-        """初始化后设置类型为矩形"""
-        self.item_type = ResultItemType.RECTANGLE
+    item_type: ResultItemType = field(default=ResultItemType.RECTANGLE)
 
     @property
     def rect(self) -> tuple[float, float, float, float]:
@@ -80,10 +81,7 @@ class LineResultItem(ResultItem):
     y1: float = 0.0   # 起点 Y 坐标
     x2: float = 0.0   # 终点 X 坐标
     y2: float = 0.0   # 终点 Y 坐标
-
-    def __post_init__(self):
-        """初始化后设置类型为线段"""
-        self.item_type = ResultItemType.LINE
+    item_type: ResultItemType = field(default=ResultItemType.LINE)
 
     @property
     def points(self) -> tuple[float, float, float, float]:
@@ -101,10 +99,7 @@ class LineResultItem(ResultItem):
 class ScoreRectangleResultItem(RectangleResultItem):
     """带置信度分数的边界框。"""
     score: float = 0.0    # 置信度分数（0-1）
-
-    def __post_init__(self):
-        """初始化后设置类型为带分数的矩形"""
-        self.item_type = ResultItemType.SCORE_RECTANGLE
+    item_type: ResultItemType = field(default=ResultItemType.SCORE_RECTANGLE)
 
     def to_dict(self) -> dict:
         """序列化为字典"""
@@ -118,10 +113,7 @@ class ImageResultItem(ResultItem):
     """结果图像的引用。"""
     image_shape: tuple = field(default_factory=tuple)  # 图像形状 (H, W, C)
     image_path: str = ""                               # 图像文件路径
-
-    def __post_init__(self):
-        """初始化后设置类型为图像"""
-        self.item_type = ResultItemType.IMAGE
+    item_type: ResultItemType = field(default=ResultItemType.IMAGE)
 
 
 @dataclass
@@ -129,10 +121,7 @@ class TableResultItem(ResultItem):
     """带行列的表格结果。"""
     columns: list[str] = field(default_factory=list)     # 列名列表
     rows: list[list[Any]] = field(default_factory=list)  # 行数据列表
-
-    def __post_init__(self):
-        """初始化后设置类型为表格"""
-        self.item_type = ResultItemType.TABLE
+    item_type: ResultItemType = field(default=ResultItemType.TABLE)
 
 
 # ── 结果集合 ──────────────────────────────────────────────────────
@@ -151,9 +140,9 @@ class VisionMessage:
     type_name: str = ""               # 模块名称
     message: str = ""                 # 结果文本
     state: str = "Success"            # "Success" / "Error" / "Running"
-    result_image_source: Any = None   # 用于图像显示的 numpy 数组
+    result_image_source: np.ndarray | None = None   # 用于图像显示的 numpy 数组
     src_file_path: str = ""           # 执行时的源文件路径
-    result_node_data: Any = None      # VisionNodeData 的引用
+    result_node_data: VisionNodeData | None = None  # VisionNodeData 的引用
 
 
 @dataclass

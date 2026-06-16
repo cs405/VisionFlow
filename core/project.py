@@ -17,9 +17,7 @@ from core.events import EventType, event_system
 from core.workflow import WorkflowEngine
 from core.node_base import NodeBase
 
-# TODO(arch): QSettings 是 PyQt5 类型，core 层不应依赖 GUI 框架。
-# 迁移路径：用 JSON 文件或抽象 KeyValueStore 接口替代 QSettings。
-from PyQt5.QtCore import QSettings
+# 使用 JSON 文件持久化最近项目列表，避免直接依赖 GUI 框架
 
 # 模板文件命名模式: NNN_name.json
 _TEMPLATE_FILE_RE = re.compile(r'^\d{3}_.*\.json$')
@@ -154,21 +152,41 @@ class ProjectItem:
         return _get_templates_dir()
 
     def _persist_templates(self):
-        """将模板列表持久化到目录（仅清理模板文件，保留其他 JSON 文件）。"""
+        """将模板列表持久化到目录（原子替换：先写临时文件，成功后再清理旧文件）。"""
+        import tempfile
         tmpl_dir = self._templates_dir
-        # 只删除与模板命名模式匹配的文件，避免误删用户文件
-        for fname in os.listdir(tmpl_dir):
-            if _TEMPLATE_FILE_RE.match(fname):
+        new_files: list[str] = []
+        try:
+            for i, t in enumerate(self._templates):
+                name = re.sub(r'[\\/:*?"<>|]', '_', t.name or f"template_{i}")
+                fd, tmp_path = tempfile.mkstemp(
+                    suffix=".json", prefix=".tmp_tmpl_", dir=tmpl_dir)
                 try:
-                    os.remove(os.path.join(tmpl_dir, fname))
+                    json_str = json.dumps(t.to_dict(), ensure_ascii=False, indent=2, default=str)
+                    with os.fdopen(fd, "w", encoding="utf-8") as f:
+                        f.write(json_str)
+                except Exception:
+                    os.remove(tmp_path)
+                    raise
+                final_path = os.path.join(tmpl_dir, f"{i:03d}_{name}.json")
+                os.replace(tmp_path, final_path)
+                new_files.append(final_path)
+        except Exception:
+            for f in new_files:
+                try:
+                    os.remove(f)
                 except OSError:
                     pass
-        for i, t in enumerate(self._templates):
-            name = re.sub(r'[\\/:*?"<>|]', '_', t.name or f"template_{i}")
-            fpath = os.path.join(tmpl_dir, f"{i:03d}_{name}.json")
-            json_str = json.dumps(t.to_dict(), ensure_ascii=False, indent=2, default=str)
-            with open(fpath, "w", encoding="utf-8") as f:
-                f.write(json_str)
+            raise
+
+        # 清理不在新文件列表中的旧模板文件
+        for fname in os.listdir(tmpl_dir):
+            fpath = os.path.join(tmpl_dir, fname)
+            if _TEMPLATE_FILE_RE.match(fname) and fpath not in new_files:
+                try:
+                    os.remove(fpath)
+                except OSError:
+                    pass
 
     # -- 图表管理 --
 
@@ -353,22 +371,49 @@ class ProjectService:
 
     FILE_EXTENSION = ".json"
     FILE_FILTER = "VisionFlow 项目文件 (*.json)"
-    SETTINGS_GROUP = "Project"
-    RECENT_PROJECTS_KEY = "recentProjects"
     MAX_RECENT_PROJECTS = 10
+
+    # JSON 文件路径用于持久化最近项目列表（替代 QSettings）
+    _RECENT_PROJECTS_FILE = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), ".recent_projects.json")
 
     def __init__(self):
         # 当前打开的项目
         self.current_project: ProjectItem | None = None
         # 最近项目列表
         self._recent_projects: list[str] = []
-        # QSettings 实例
-        self._settings = QSettings()
-        # 加载最近项目列表（注意：cleanup_recent_projects 会写入 QSettings，
-        # 仅在构造时执行一次清理，后续通过正常流程写入）
-        self._load_recent_projects()
+        # 最近项目列表（惰性加载，避免构造时 I/O）
+        self._recent_projects_loaded: bool = False
         # 模板列表
         self._templates: list[DiagramData] = []
+
+    @staticmethod
+    def _read_settings_file() -> list[str]:
+        """从 JSON 文件读取最近项目列表。"""
+        try:
+            with open(ProjectService._RECENT_PROJECTS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data if isinstance(data, list) else []
+        except (FileNotFoundError, json.JSONDecodeError):
+            return []
+
+    @staticmethod
+    def _write_settings_file(paths: list[str]):
+        """将最近项目列表写入 JSON 文件。"""
+        import tempfile
+        try:
+            fd, tmp_path = tempfile.mkstemp(
+                suffix=".json", prefix=".tmp_",
+                dir=os.path.dirname(ProjectService._RECENT_PROJECTS_FILE))
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(paths, f, ensure_ascii=False)
+                os.replace(tmp_path, ProjectService._RECENT_PROJECTS_FILE)
+            except Exception:
+                os.remove(tmp_path)
+                raise
+        except OSError:
+            pass
 
     # ── 模板持久化 ──
 
@@ -399,55 +444,65 @@ class ProjectService:
         return templates
 
     def save_templates(self, templates: list[DiagramData]):
-        """将模板列表持久化到 workflow_templates/ 目录（每个模板一个文件）。
-
-        仅清理与模板命名模式匹配的文件，保留目录中的其他 JSON 文件。
-        """
+        """将模板列表持久化到 workflow_templates/ 目录（原子写入）。"""
+        import tempfile
         tmpl_dir = self._templates_dir
-        # 只删除模板文件，避免误删用户放置的其他 JSON 文件
-        for fname in os.listdir(tmpl_dir):
-            if _TEMPLATE_FILE_RE.match(fname):
+        new_files: list[str] = []
+        try:
+            for i, t in enumerate(templates):
+                name = re.sub(r'[\\/:*?"<>|]', '_', t.name or f"template_{i}")
+                fd, tmp_path = tempfile.mkstemp(
+                    suffix=".json", prefix=".tmp_tmpl_", dir=tmpl_dir)
                 try:
-                    os.remove(os.path.join(tmpl_dir, fname))
+                    json_str = json.dumps(t.to_dict(), ensure_ascii=False, indent=2, default=str)
+                    with os.fdopen(fd, "w", encoding="utf-8") as f:
+                        f.write(json_str)
+                except Exception:
+                    os.remove(tmp_path)
+                    raise
+                final_path = os.path.join(tmpl_dir, f"{i:03d}_{name}.json")
+                os.replace(tmp_path, final_path)
+                new_files.append(final_path)
+        except Exception:
+            for f in new_files:
+                try:
+                    os.remove(f)
                 except OSError:
                     pass
-        # 逐个保存
-        for i, t in enumerate(templates):
-            name = re.sub(r'[\\/:*?"<>|]', '_', t.name or f"template_{i}")
-            fpath = os.path.join(tmpl_dir, f"{i:03d}_{name}.json")
-            json_str = json.dumps(t.to_dict(), ensure_ascii=False, indent=2, default=str)
-            with open(fpath, "w", encoding="utf-8") as f:
-                f.write(json_str)
+            raise
+        # 清理不在新文件列表中的旧模板文件
+        for fname in os.listdir(tmpl_dir):
+            fpath = os.path.join(tmpl_dir, fname)
+            if _TEMPLATE_FILE_RE.match(fname) and fpath not in new_files:
+                try:
+                    os.remove(fpath)
+                except OSError:
+                    pass
 
     # -- 最近项目（QSettings 持久化） --
 
     @property
     def recent_projects(self) -> list[str]:
-        """获取最近项目列表"""
+        """获取最近项目列表（首次访问时惰性加载）"""
+        if not self._recent_projects_loaded:
+            self._load_recent_projects()
+            self._recent_projects_loaded = True
         self.cleanup_recent_projects(save=False)
         return list(self._recent_projects)
 
     def _load_recent_projects(self):
-        """从 QSettings 加载最近项目"""
-        self._settings.beginGroup(self.SETTINGS_GROUP)
-        raw = self._settings.value(self.RECENT_PROJECTS_KEY, [], type=list)
-        self._settings.endGroup()
-        # 处理字符串情况
-        if isinstance(raw, str):
-            raw = [raw] if raw else []
+        """从 JSON 文件加载最近项目"""
+        raw = self._read_settings_file()
         self._recent_projects = []
-        for path in (raw or []):
+        for path in raw:
             normalized = self._normalize_path(path)
             if normalized and normalized not in self._recent_projects:
                 self._recent_projects.append(normalized)
         self.cleanup_recent_projects(save=True)
 
     def _save_recent_projects(self):
-        """保存最近项目到 QSettings"""
-        self._settings.beginGroup(self.SETTINGS_GROUP)
-        self._settings.setValue(self.RECENT_PROJECTS_KEY, self._recent_projects)
-        self._settings.endGroup()
-        self._settings.sync()
+        """保存最近项目到 JSON 文件（原子写入）"""
+        self._write_settings_file(self._recent_projects)
 
     def _normalize_path(self, file_path: str) -> str:
         """标准化文件路径"""

@@ -24,7 +24,7 @@ from core.events import EventType, event_system
 from core.node_base import NodeBase, Property, PropertyGroupNames, Port, LinkData
 
 if TYPE_CHECKING:
-    from core.workflow import WorkflowEngine
+    from core.workflow import WorkflowEngine, WorkflowState
 
 
 # =============================================================================
@@ -76,14 +76,15 @@ class DemoParamsMixin:
 VisionNodeDataBase = NodeBase           # 原空标记类，现等同于 NodeBase
 ShowPropertyNodeDataBase = PropertyPresenterMixin
 HelpNodeDataBase = HelpPresenterMixin
-DemoNodeDataBase = DemoParamsMixin
+DemoNodeDataBase = DemoParamsMixin       # VisionNodeData 不再继承此 Mixin,
+                                         # 仅作为独立 Mixin 供需要演示参数的节点使用
 
 
 # =============================================================================
 # VisionNodeData - 核心视觉处理节点
 # =============================================================================
 
-class VisionNodeData(DemoParamsMixin, HelpPresenterMixin, PropertyPresenterMixin, NodeBase):
+class VisionNodeData(HelpPresenterMixin, PropertyPresenterMixin, NodeBase):
     """
     核心通用视觉处理节点。
     这是核心类——大多数视觉节点都继承自它。
@@ -192,7 +193,8 @@ class VisionNodeData(DemoParamsMixin, HelpPresenterMixin, PropertyPresenterMixin
         if self.diagram_data is None:
             return None
         # 如果工作流正在运行，则不执行
-        if hasattr(self.diagram_data, 'state') and self.diagram_data.state.name == "RUNNING":
+        from core.workflow import WorkflowState
+        if hasattr(self.diagram_data, 'state') and self.diagram_data.state == WorkflowState.RUNNING:
             return None
 
         # 查找源节点
@@ -238,9 +240,6 @@ class VisionNodeData(DemoParamsMixin, HelpPresenterMixin, PropertyPresenterMixin
 
     def _post_invoke(self, result: FlowableResult):
         """invoke 后处理：更新 Mat、图像源、历史记录、发布事件。"""
-        if self._mat is not None and result.value is not self._mat:
-            self._mat = None
-
         self._mat = result.value if result.is_ok else None
         self.message = result.message
         if not result.is_ok:
@@ -324,10 +323,25 @@ class VisionNodeData(DemoParamsMixin, HelpPresenterMixin, PropertyPresenterMixin
     # -- 内部辅助方法 --
 
     def _find_source_node(self, diagram: "WorkflowEngine") -> "VisionNodeData | None":
-        """查找图表中的源节点（数据来源）"""
+        """查找当前节点在拓扑中的真正上游源节点（数据来源）。
+
+        优先级：通过 from_node_datas 追溯 > 返回第一个起始节点
+        """
         if diagram is None:
             return None
-        # 获取所有起始节点
+        # 通过拓扑追溯找到最近的源节点（无上游连接的 VisionNodeData）
+        visited: set[str] = set()
+        stack = list(self.from_node_datas)
+        while stack:
+            node = stack.pop()
+            nid = node.node_id
+            if nid in visited:
+                continue
+            visited.add(nid)
+            if isinstance(node, VisionNodeData) and not node.from_node_datas:
+                return node
+            stack.extend(node.from_node_datas)
+        # 回退：返回第一个起始节点
         starts = diagram.get_start_nodes()
         for node in starts:
             if isinstance(node, VisionNodeData):

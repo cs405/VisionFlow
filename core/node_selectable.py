@@ -315,8 +315,12 @@ class SrcFilesVisionNodeData(ROINodeData):
 # Base64MatchingNodeData - 模板匹配基类
 # =============================================================================
 
-class Base64MatchingNodeData(VisionNodeData):
-    """使用Base64编码模板图像的模板匹配节点的基类。"""
+class Base64MatchingNodeData(ROINodeData):
+    """使用Base64编码模板图像的模板匹配节点的基类。
+
+    继承自 ROINodeData 以提供 ROI 基础设施，下游节点可通过
+    "来自上游" ROI 模式引用匹配结果区域。
+    """
 
     # 匹配数量结果（只读）
     matching_count_result = Property(0, name="匹配数量", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)

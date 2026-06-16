@@ -10,9 +10,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import Any
-# TODO(arch): QPointF 是 PyQt5 类型，与"GUI 框架无关"的声明矛盾。
-# 迁移路径：_to_point 返回 (x, y) 元组，GUI 适配器负责转换为 QPointF。
-from PyQt5.QtCore import QPointF
+import threading
 
 
 # 场景对象类型：GUI 层的 QGraphicsScene 或其适配器。
@@ -96,10 +94,10 @@ class BatchCommand(Command):
             description: 命令描述文本（默认为"批量操作"）
                         用于UI显示（如撤销菜单项显示"撤销 批量操作"）
         """
-        super().__init__()  # 调用父类构造函数
-        self._description = description  # 覆盖命令描述（自定义文本）
-        self._commands: list[Command] = []  # 子命令列表（存储待批量执行的命令）
-        self._executed: list[Command] = []  # 本轮已执行的子命令（用于失败回滚）
+        super().__init__()
+        self._description = description
+        self._commands: list[Command] = []
+        self._executed: list[Command] = []
 
     def add(self, cmd: Command):
         """
@@ -182,11 +180,11 @@ class AddNodeCommand(Command):
             group_name: 节点所属分组名称（用于组织节点，如"图像数据源"等）
         """
         super().__init__()  # 调用父类构造函数
-        self._node_data = node_data  # 保存节点数据（用于执行时创建节点）
-        self._pos = pos  # 保存节点位置（坐标）
-        self._group_name = group_name  # 保存分组名称（用于UI分类）
-        self._node_id = node_data.node_id  # 保存节点唯一标识符（用于撤销时定位）
-        self._description = f"添加节点: {node_data.name}"  # 命令描述（显示为"添加节点: 节点名称"）
+        self._node_data = node_data
+        self._pos = pos
+        self._group_name = group_name
+        self._node_id = node_data.node_id
+        self._description = f"添加节点: {node_data.name}"
 
     def execute(self, scene: Any) -> Any:
         """
@@ -841,19 +839,24 @@ class CommandStack:
         return self._redo_stack[-1].description if self._redo_stack else ""
 
 
-# ── Point conversion (thread-safe lazy-initialized) ──────────────────────
+# ── Point conversion (injectable, framework-agnostic) ──────────────────────
 
-import threading
-
-_point_converter = None
+_point_converter = lambda p: p  # default: pass-through, returns (x, y) tuple
 _point_lock = threading.Lock()
+
+
+def set_point_converter(converter):
+    """注入框架特定的坐标转换器。GUI 层应在初始化时调用。
+
+    示例 (PyQt5):
+        from PyQt5.QtCore import QPointF
+        set_point_converter(lambda p: QPointF(p[0], p[1]))
+    """
+    global _point_converter
+    with _point_lock:
+        _point_converter = converter
 
 
 def _to_point(pos):
     """Convert (x, y) tuple to framework-specific point type."""
-    global _point_converter
-    if _point_converter is None:
-        with _point_lock:
-            if _point_converter is None:
-                _point_converter = lambda p: QPointF(p[0], p[1])
     return _point_converter(pos)

@@ -47,8 +47,11 @@ class PluginManager:
                     import logging
                     logging.warning(f"加载节点模块 {full_name} 失败: {e}")
 
-        except ModuleNotFoundError:
-            pass  # nodes 包尚未创建
+        except ModuleNotFoundError as e:
+            if e.name == package_path:
+                pass  # nodes 包尚未创建
+            else:
+                logging.warning(f"节点包 {package_path} 存在但缺少依赖: {e}")
 
     def _discover_subpackage(self, package_path: str):
         """发现子包中的节点（例如 nodes.preprocessings）。"""
@@ -69,7 +72,6 @@ class PluginManager:
 
     def _load_module(self, module_name: str):
         """加载单个模块并注册其节点类。"""
-        # 避免重复加载
         if module_name in self._loaded_modules:
             return
         try:
@@ -78,48 +80,49 @@ class PluginManager:
             logging.warning(f"导入模块 {module_name} 失败: {e}")
             return
 
-        self._loaded_modules.append(module_name)
-        try:
-            self._register_module_classes(module)
-        except Exception as e:
-            logging.warning(f"注册模块 {module_name} 的节点类时失败: {e}")
-            self._unregister_module_classes(module)
-            self._loaded_modules.remove(module_name)
-            raise
-
-    def _register_module_classes(self, module):
-        """注册模块中找到的所有 NodeBase 子类。"""
-        # 遍历模块中的所有类
+        # 先收集所有可注册的类，验证后一次性注册
+        classes_to_register: list[tuple[type, str, str]] = []
         for name, obj in inspect.getmembers(module, inspect.isclass):
-            # 跳过私有类
             if name.startswith("_"):
                 continue
-            # 只处理 NodeBase 的子类，且不是 NodeBase 本身
             if not issubclass(obj, NodeBase) or obj is NodeBase:
                 continue
-            # 跳过抽象类
             if getattr(obj, '__abstract__', False) or inspect.isabstract(obj):
                 continue
+            group_name = getattr(obj, '__group__', None)
+            category = getattr(obj, '__category__', None) or group_name or ""
+            classes_to_register.append((obj, group_name or "", category))
 
-            # 获取节点所属的分组名称
+        self._loaded_modules.append(module_name)
+        for node_cls, group_name, category in classes_to_register:
+            if group_name:
+                node_data_group_manager.register_node(node_cls, group_name)
+            node_registry.register(node_cls, category)
+
+    def _register_module_classes(self, module):
+        """注册模块中找到的所有 NodeBase 子类（用于 load_from_path 路径）。
+
+        注意：discover_nodes_package 路径已改为批量收集后注册，不再使用此方法。
+        """
+        for name, obj in inspect.getmembers(module, inspect.isclass):
+            if name.startswith("_"):
+                continue
+            if not issubclass(obj, NodeBase) or obj is NodeBase:
+                continue
+            if getattr(obj, '__abstract__', False) or inspect.isabstract(obj):
+                continue
             group_name = getattr(obj, '__group__', None)
             if group_name:
-                # 在节点分组管理器中注册
                 node_data_group_manager.register_node(obj, group_name)
-
-            # 获取节点类别
             category = getattr(obj, '__category__', None) or group_name or ""
-            # 在节点注册表中注册
             node_registry.register(obj, category)
 
     def _unregister_module_classes(self, module):
-        """移除模块中所有已注册的 NodeBase 子类（用于失败回滚）。"""
+        """移除模块中所有已注册的 NodeBase 子类（用于 load_from_path 失败回滚）。"""
         for name, obj in inspect.getmembers(module, inspect.isclass):
             if name.startswith("_") or not issubclass(obj, NodeBase) or obj is NodeBase:
                 continue
-            # 从节点注册表中移除
             node_registry.unregister(obj.__name__)
-            # 从分组管理器中移除
             group_name = getattr(obj, '__group__', None)
             if group_name:
                 group = node_data_group_manager.get_group(group_name)

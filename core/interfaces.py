@@ -86,8 +86,9 @@ class ISrcFilesNodeData(INodeData):
     """源文件路径"""
 
     @src_file_path.setter
-    def src_file_path(self, value: str): ...
-    """设置源文件路径"""
+    def src_file_path(self, value: str):
+        """设置源文件路径"""
+        ...
 
     @property
     @abstractmethod

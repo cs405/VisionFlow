@@ -1,7 +1,7 @@
 """
 条件分支框架
 架构:
-  ConditionsPrensenter → 管理多个 ConditionBranch
+  ConditionsPresenter → 管理多个 ConditionBranch
     每个 ConditionBranch → 关联 input_node + output_node + conditions[] + operate
       每个 PropertyCondition → property_name + filter_operate + value
 """
@@ -145,14 +145,20 @@ class PropertyCondition:
     @staticmethod
     def _values_equal(a: Any, b: Any) -> bool:
         """比较两个值是否相等，支持布尔、数值、字符串的类型自适应比较。"""
+        if a is b or a == b:
+            return True
         if isinstance(a, bool) and not isinstance(b, bool):
             b = PropertyCondition._str_to_bool(b)
         elif isinstance(b, bool) and not isinstance(a, bool):
             a = PropertyCondition._str_to_bool(a)
-        try:
-            return float(a) == float(b)
-        except (ValueError, TypeError):
-            pass
+        # 仅当双方都是数值类型时才进行浮点比较，避免 "001" == "1" 误判
+        a_is_num = isinstance(a, (int, float)) and not isinstance(a, bool)
+        b_is_num = isinstance(b, (int, float)) and not isinstance(b, bool)
+        if a_is_num and b_is_num:
+            try:
+                return float(a) == float(b)
+            except (ValueError, TypeError):
+                pass
         return str(a) == str(b)
 
     @staticmethod
@@ -310,10 +316,10 @@ class ConditionBranch:
 
 
 # =============================================================================
-# ConditionsPrensenter — 条件分支集合管理器
+# ConditionsPresenter — 条件分支集合管理器
 # =============================================================================
 
-class ConditionsPrensenter:
+class ConditionsPresenter:
     """条件分支集合管理器
 
     管理 ConditionNodeData 的多个 ConditionBranch，负责:
@@ -441,7 +447,7 @@ class ConditionsPrensenter:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "ConditionsPrensenter":
+    def from_dict(cls, data: dict) -> "ConditionsPresenter":
         presenter = cls()
         presenter._selected_index = data.get("selected_index", -1)
         presenter.branches = [ConditionBranch.from_dict(b)
@@ -474,5 +480,5 @@ class ConditionsPrensenter:
             self.branches.append(branch)
 
 
-# 正确拼写别名（ConditionsPrensenter 保留向后兼容）
-ConditionsPresenter = ConditionsPrensenter
+# 向后兼容别名（已弃用，请使用 ConditionsPresenter）
+ConditionsPrensenter = ConditionsPresenter

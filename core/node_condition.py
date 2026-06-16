@@ -40,14 +40,14 @@ class ConditionNodeData(VisionNodeData):
         super().__init__()
         self.use_invoked_part = False
 
-    # -- ConditionsPrensenter (lazy init) --
+    # -- ConditionsPresenter (lazy init) --
 
     @property
     def conditions_presenter(self):
         """获取条件分支集合管理器。延迟导入避免循环依赖。"""
         if getattr(self, '_conditions_presenter', None) is None:
-            from core.conditions import ConditionsPrensenter
-            self._conditions_presenter = ConditionsPrensenter()
+            from core.conditions import ConditionsPresenter
+            self._conditions_presenter = ConditionsPresenter()
         return self._conditions_presenter
 
     @conditions_presenter.setter
@@ -149,7 +149,7 @@ class ConditionNodeData(VisionNodeData):
     # -- 核心调用 --
 
     def invoke(self, previors: LinkData | None, diagram: "WorkflowEngine") -> FlowableResult:
-        """执行条件分支逻辑。委托给 ConditionsPrensenter 评估。
+        """执行条件分支逻辑。委托给 ConditionsPresenter 评估。
         实际路由由 get_flowable_output_links() 控制。
         """
         from_node = None
@@ -221,13 +221,13 @@ class ConditionNodeData(VisionNodeData):
 
     def restore_from_dict(self, data: dict) -> "ConditionNodeData":
         super().restore_from_dict(data)
-        from core.conditions import ConditionsPrensenter
+        from core.conditions import ConditionsPresenter
         presenter_data = data.get("conditions_presenter")
         if presenter_data is not None:
-            self._conditions_presenter = ConditionsPrensenter.from_dict(presenter_data)
+            self._conditions_presenter = ConditionsPresenter.from_dict(presenter_data)
         elif "conditions" in data:
             # 兼容旧格式
-            self._conditions_presenter = ConditionsPrensenter.from_dict({"conditions": data["conditions"]})
+            self._conditions_presenter = ConditionsPresenter.from_dict({"conditions": data["conditions"]})
         return self
 
 
@@ -241,7 +241,7 @@ class VisionPropertyCondition:
     该类的功能已迁移至:
       - PropertyCondition (单条过滤)
       - ConditionBranch (分支 = 输入节点 + 条件 + 输出节点)
-      - ConditionsPrensenter (分支集合管理)
+      - ConditionsPresenter (分支集合管理)
 
     保留此类用于:
       1. GUI 兼容 (condition_editor.py)
@@ -312,6 +312,8 @@ class WaitAllParallelNodeData(VisionNodeData, LogicModuleNode):
         self.name = "并行等待"
         # 已完成的并行分支计数
         self._result_count = 0
+        self._cached_parallel_count: int = 0
+        self._parallel_count_cached: bool = False
         self._result_lock = threading.Lock()
 
     def invoke(self, previors: LinkData | None, diagram: "WorkflowEngine") -> FlowableResult:
@@ -328,23 +330,22 @@ class WaitAllParallelNodeData(VisionNodeData, LogicModuleNode):
 
         # 调用每个并行分支完成时的处理
         self.on_parallel_from_invoked(src_data, from_node, diagram)
-        # 增加完成计数（线程安全）
+
+        # 增加完成计数并检查（锁内原子操作，消除 TOCTOU 竞态）
         with self._result_lock:
             self._result_count += 1
-
-        # 统计并行模式的上游节点数量（排除已被条件分支禁用的节点）
-        parallel_count = sum(
-            1 for n in self.from_node_datas
-            if hasattr(n, 'invoke_mode') and n.invoke_mode == FlowableInvokeMode.PARALLEL
-            and getattr(n, '_execution_state', None) != 'error'
-        )
-
-        # 如果所有并行分支都已完成（线程安全读取）
-        with self._result_lock:
-            all_done = self._result_count >= parallel_count
+            if not self._parallel_count_cached:
+                self._cached_parallel_count = sum(
+                    1 for n in self.from_node_datas
+                    if hasattr(n, 'invoke_mode') and n.invoke_mode == FlowableInvokeMode.PARALLEL
+                    and getattr(n, '_execution_state', None) != 'error'
+                )
+                self._parallel_count_cached = True
+            all_done = self._result_count >= self._cached_parallel_count
+            if all_done:
+                self._result_count = 0
+                self._parallel_count_cached = False
         if all_done:
-            # 重置计数
-            self._result_count = 0
             # 调用所有并行分支完成时的处理
             return self._invoke_action(lambda: self.on_all_parallels_invoked(src_data, from_node, diagram))
         else:

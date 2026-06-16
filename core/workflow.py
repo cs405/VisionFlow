@@ -69,7 +69,7 @@ class WorkflowEngine:
         self._execution_order: list[str] = []
         # 最大并行工作线程数
         self._max_workers: int = 4
-        # 可复用的线程池（惰性创建，避免每层重复创建/销毁开销）
+        # 可复用的线程池（惰性创建，实例级别共享，dispose() 时关闭）
         self._executor: ThreadPoolExecutor | None = None
         # 调用计数
         self._invoke_count: int = 0
@@ -81,16 +81,16 @@ class WorkflowEngine:
         self.message: str = ""
         # 历史消息列表
         self.messages: list[VisionMessage] = []
-        # 消息索引：按节点 id() 快速查找已有消息（O(1) 替代 O(n) 遍历）
-        # 注意：id() 在对象 GC 后可复用，节点增删理论上可能命中旧索引；
-        # 实际使用中节点生命周期长于消息，此风险极低。
-        self._message_index: dict[int, VisionMessage] = {}
+        # 消息索引：按节点 node_id 快速查找已有消息（O(1) 替代 O(n) 遍历）
+        self._message_index: dict[str, VisionMessage] = {}
         # 当前聚合消息
         self.current_message: VisionMessage | None = None
         # 线程锁，保护消息列表的线程安全
         self._messages_lock = threading.Lock()
         # 历史变更回调列表（用于UI绑定）
         self._history_callbacks: list[Callable] = []
+        # 层级缓存（拓扑变更时失效）
+        self._levels_cache: tuple[tuple[str, ...], list[list[str]]] | None = None
 
     # -- 节点管理 --
 
@@ -104,6 +104,7 @@ class WorkflowEngine:
         event_system.publish(EventType.NODE_ADDED, sender=self, node=node)
         # 发布图表变更事件
         event_system.publish(EventType.DIAGRAM_CHANGED, sender=self)
+        self._invalidate_levels_cache()
         return node.node_id
 
     def remove_node(self, node_id: str):
@@ -123,6 +124,7 @@ class WorkflowEngine:
         event_system.publish(EventType.NODE_REMOVED, sender=self, node=node)
         # 发布图表变更事件
         event_system.publish(EventType.DIAGRAM_CHANGED, sender=self)
+        self._invalidate_levels_cache()
 
     def get_node_by_id(self, node_id: str) -> NodeBase | None:
         """根据ID获取节点"""
@@ -174,8 +176,9 @@ class WorkflowEngine:
         if result_image is not None and hasattr(result_image, 'copy'):
             result_image = result_image.copy()
 
-        # 加锁保护消息列表
-        node_key = id(node)
+        # 加锁保护消息列表；_notify_history_callbacks 在锁外调用避免死锁
+        node_key = node.node_id
+        should_notify = False
         with self._messages_lock:
             # O(1) 查找已有消息（用于视频/摄像头节点原地更新）
             existing = self._message_index.get(node_key)
@@ -187,23 +190,24 @@ class WorkflowEngine:
                     existing.result_image_source = result_image
                 existing.src_file_path = src_path
                 self._log_current_message_locked()
-                self._notify_history_callbacks()
-                return
-
-            # 创建新消息条目
-            msg = VisionMessage(
-                index=len(self.messages) + 1,
-                time_span=time_span,
-                type_name=node.name,
-                message=node.message or "",
-                state=state,
-                result_image_source=result_image,
-                src_file_path=src_path,
-                result_node_data=node,
-            )
-            self.messages.append(msg)
-            self._message_index[node_key] = msg
-            self._log_current_message_locked()
+                should_notify = True
+            else:
+                # 创建新消息条目
+                msg = VisionMessage(
+                    index=len(self.messages) + 1,
+                    time_span=time_span,
+                    type_name=node.name,
+                    message=node.message or "",
+                    state=state,
+                    result_image_source=result_image,
+                    src_file_path=src_path,
+                    result_node_data=node,
+                )
+                self.messages.append(msg)
+                self._message_index[node_key] = msg
+                self._log_current_message_locked()
+                should_notify = True
+        if should_notify:
             self._notify_history_callbacks()
 
     def _log_current_message_locked(self):
@@ -339,6 +343,7 @@ class WorkflowEngine:
         # 发布事件
         event_system.publish(EventType.LINK_ADDED, sender=self, link=link)
         event_system.publish(EventType.DIAGRAM_CHANGED, sender=self)
+        self._invalidate_levels_cache()
         return link
 
     def remove_link(self, link_id: str):
@@ -379,6 +384,7 @@ class WorkflowEngine:
         # 发布事件
         event_system.publish(EventType.LINK_REMOVED, sender=self, link=link)
         event_system.publish(EventType.DIAGRAM_CHANGED, sender=self)
+        self._invalidate_levels_cache()
 
     def get_all_links(self) -> list[LinkData]:
         """获取所有连线"""
@@ -532,9 +538,14 @@ class WorkflowEngine:
                 else:
                     # 并行执行一组节点
                     results = self._execute_parallel(executable)
+                    has_error = False
                     for r in results:
                         if r.is_error:
                             last_result = r
+                            has_error = True
+                    if has_error:
+                        self.state = WorkflowState.ERROR
+                        event_system.publish(EventType.WORKFLOW_ERROR, sender=self, result=last_result)
                     # 不因个别节点error终止，继续后续层级，让条件分支处理
                     # 条件端口路由：并行执行后，对每个节点应用端口路由
                     for nid in executable:
@@ -700,10 +711,18 @@ class WorkflowEngine:
                 results.append(FlowableResult.error(message=str(e)))
         return results
 
+    def _invalidate_levels_cache(self):
+        """拓扑变更时使层级缓存失效。"""
+        self._levels_cache = None
+
     def _group_by_levels(self, topo_order: list[str]) -> list[list[str]]:
-        """将拓扑排序后的节点按执行层级分组（BFS 距离，每次执行时重新计算）。"""
+        """将拓扑排序后的节点按执行层级分组（结果缓存至拓扑变更）。"""
         if not topo_order:
             return []
+
+        order_key = tuple(topo_order)
+        if self._levels_cache is not None and self._levels_cache[0] == order_key:
+            return self._levels_cache[1]
 
         # 按拓扑顺序计算每个节点的层级 = max(所有前驱节点层级) + 1
         node_level: dict[str, int] = {}
@@ -732,6 +751,7 @@ class WorkflowEngine:
         if cur_level:
             levels.append(cur_level)
 
+        self._levels_cache = (order_key, levels)
         return levels
 
     # -- 序列化 --
@@ -791,6 +811,8 @@ class WorkflowEngine:
                 if to_node not in from_node.to_node_datas:
                     from_node.to_node_datas.append(to_node)
 
+        self._invalidate_levels_cache()
+
     def clear(self):
         """移除所有节点和连线"""
         self._nodes.clear()
@@ -798,6 +820,7 @@ class WorkflowEngine:
         self._execution_order.clear()
         self.state = WorkflowState.IDLE
         event_system.publish(EventType.DIAGRAM_CHANGED, sender=self)
+        self._invalidate_levels_cache()
 
     def dispose(self):
         """清理所有资源"""
@@ -806,5 +829,12 @@ class WorkflowEngine:
             node.dispose()
         self._nodes.clear()
         if self._executor is not None:
-            self._executor.shutdown(wait=False)
+            self._executor.shutdown(wait=True)
             self._executor = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.dispose()
+        return False
