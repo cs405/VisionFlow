@@ -221,48 +221,38 @@ class VisionNodeData(DemoParamsMixin, HelpPresenterMixin, PropertyPresenterMixin
         return None
 
     def _invoke_action(self, action: Callable[[], FlowableResult]) -> FlowableResult:
-        """包装实际的 invoke 调用，管理 Mat 生命周期。
+        """包装实际的 invoke 调用，管理 Mat 生命周期。"""
+        self._pre_invoke()
+        result = action()
+        self._post_invoke(result)
+        return result
 
-        1. 清除之前的结果展示器
-        2. 执行动作
-        3. 释放旧的 Mat，设置新的 Mat
-        4. 更新结果图像源
-        5. 必要时创建结果展示器
-        """
-        # 清除之前的结果展示器
+    def _pre_invoke(self):
+        """invoke 前准备：清除展示器、发布开始事件。"""
         self._result_presenter = None
-        # 发布节点开始执行事件
         event_system.publish(EventType.NODE_STARTED, sender=self)
 
-        # 执行核心处理
-        result = action()
-
-        # 如果新 mat 不是旧 mat，则释放旧 mat
+    def _post_invoke(self, result: FlowableResult):
+        """invoke 后处理：更新 Mat、图像源、历史记录、发布事件。"""
         if self._mat is not None and result.value is not self._mat:
             self._mat = None
 
-        # 更新当前图像和消息（error 时不传递数据给下游）
         self._mat = result.value if result.is_ok else None
         self.message = result.message
+        if not result.is_ok:
+            self._original_mat = None
 
-        # 更新结果图像源
         if self.use_result_image_source:
             self._update_result_image_source()
 
-        # 创建结果展示器（如果尚未创建）
         if self._result_presenter is None:
             self._result_presenter = self.create_result_presenter()
 
-        # 先写入历史记录，再发布事件
-        # 通过 workflow.on_history_changed() 注册的回调（如 ResultPanel）
-        # 在这里同步触发，并使用 Qt::QueuedConnection 调度到主线程，
-        # 以保证 QTableWidget 的线程安全访问
         state = "Success" if result.is_ok else "Error"
         ts = time.strftime("%H:%M:%S")
         if self.diagram_data and hasattr(self.diagram_data, 'on_node_completed'):
             self.diagram_data.on_node_completed(self, state, ts)
 
-        # 记录执行状态（供 _finalize_execution_state / update_from_node 读取）
         if result.is_error:
             self._execution_state = "error"
         elif result.is_break:
@@ -270,16 +260,12 @@ class VisionNodeData(DemoParamsMixin, HelpPresenterMixin, PropertyPresenterMixin
         else:
             self._execution_state = "completed"
 
-        # 发布事件
         if result.is_ok:
             event_system.publish(EventType.NODE_COMPLETED, sender=self, result=result)
         elif result.is_error:
             event_system.publish(EventType.NODE_ERROR, sender=self, result=result)
 
-        # 调用后置钩子（子类可重写以在 invoke_core 完成后做额外处理）
         self._on_post_invoke(result)
-
-        return result
 
     def _on_post_invoke(self, result: FlowableResult):
         """invoke_core 完成后的后置钩子。子类可重写。"""

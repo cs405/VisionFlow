@@ -326,9 +326,12 @@ class WaitAllParallelNodeData(VisionNodeData, LogicModuleNode):
         # 增加完成计数
         self._result_count += 1
 
-        # 统计并行模式的上游节点数量
-        parallel_count = sum(1 for n in self.from_node_datas
-                           if hasattr(n, 'invoke_mode') and n.invoke_mode == FlowableInvokeMode.PARALLEL)
+        # 统计并行模式的上游节点数量（排除已被条件分支禁用的节点）
+        parallel_count = sum(
+            1 for n in self.from_node_datas
+            if hasattr(n, 'invoke_mode') and n.invoke_mode == FlowableInvokeMode.PARALLEL
+            and getattr(n, '_execution_state', None) != 'error'
+        )
 
         # 如果所有并行分支都已完成
         if self._result_count >= parallel_count:

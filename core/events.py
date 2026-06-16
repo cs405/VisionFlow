@@ -78,11 +78,8 @@ class EventSystem:
     # 定义取消订阅方法
     def unsubscribe(self, event_type: EventType, handler: Callable):
         """取消订阅"""
-        # 获取该事件类型的处理函数列表，如果不存在则返回空列表
-        handlers = self._handlers.get(event_type, [])
-        # 如果处理函数在列表中
-        if handler in handlers:
-            # 从列表中移除该处理函数
+        handlers = self._handlers.get(event_type)
+        if handlers and handler in handlers:
             handlers.remove(handler)
 
     # 定义发布事件方法

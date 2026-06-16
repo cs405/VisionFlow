@@ -66,7 +66,7 @@ GROUP_META = {
     "Feature": {"color": "#ff9800", "icon": FontIcons.GenericScan},  # 对应"特征提取模块"
     "Network": {"color": "#795548", "icon": FontIcons.NarratorForward},  # 对应"网络通讯模块"
     "Output": {"color": "#607d8b", "icon": FontIcons.Ethernet},  # 对应"结果输出模块"
-    "ONNX": {"color": "#e91e63", "icon": FontIcons.CommandPrompt},  # 对应"Onnx通用模型"
+    "ONNX": {"color": "#c2185b", "icon": FontIcons.CommandPrompt},  # 对应"Onnx通用模型"
     "Other": {"color": "#607d8b", "icon": FontIcons.More},  # 对应"其他模块"
     "Video": {"color": "#8d6e63", "icon": FontIcons.Video},  # 对应"视频处理模块"
 }

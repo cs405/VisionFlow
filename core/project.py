@@ -426,8 +426,6 @@ class ProjectService:
 
     def _load_recent_projects(self):
         """从 QSettings 加载最近项目"""
-        if self._settings is None:
-            return
         self._settings.beginGroup(self.SETTINGS_GROUP)
         raw = self._settings.value(self.RECENT_PROJECTS_KEY, [], type=list)
         self._settings.endGroup()
@@ -443,8 +441,6 @@ class ProjectService:
 
     def _save_recent_projects(self):
         """保存最近项目到 QSettings"""
-        if self._settings is None:
-            return
         self._settings.beginGroup(self.SETTINGS_GROUP)
         self._settings.setValue(self.RECENT_PROJECTS_KEY, self._recent_projects)
         self._settings.endGroup()
@@ -521,11 +517,19 @@ class ProjectService:
         # 序列化
         data = self._serialize(project)
         try:
-            with open(project.file_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2, default=str)
-            # 添加到最近项目
+            # 先写临时文件，再原子替换，防止写入中断损坏原文件
+            import tempfile
+            fd, tmp_path = tempfile.mkstemp(
+                suffix=".json", prefix=".tmp_",
+                dir=os.path.dirname(project.file_path))
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2, default=str)
+                os.replace(tmp_path, project.file_path)  # 原子替换（Windows 也支持）
+            except Exception:
+                os.remove(tmp_path)
+                raise
             self.add_recent(project.file_path)
-            # 发布保存事件
             event_system.publish(EventType.PROJECT_SAVED, sender=self, project=project)
             return True
         except Exception as e:

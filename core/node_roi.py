@@ -24,41 +24,31 @@ if TYPE_CHECKING:
 class ROIBase:
     """ROI定义的基类。"""
 
+    _roi_registry: dict[str, type] = {}  # 子类自动注册
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        ROIBase._roi_registry[cls.__name__] = cls
+
     def __init__(self, roi_type: str = ""):
-        # ROI名称，未指定时使用类名
         self.name = roi_type or self.__class__.__name__
 
     def to_dict(self) -> dict:
-        """序列化ROI对象为字典"""
         return {"type": self.__class__.__name__, "name": self.name}
 
     @classmethod
     def from_dict(cls, data: dict) -> "ROIBase":
-        """从字典反序列化创建ROI对象"""
-        # 获取ROI类型
         roi_type = data.get("type", "ROIBase")
-
-        # NoROI：无ROI区域
-        if roi_type == "NoROI":
-            return NoROI()
-
-        # DrawROI：用户绘制的ROI区域
+        roi_cls = cls._roi_registry.get(roi_type, FromROI)
+        roi = roi_cls()
         if roi_type == "DrawROI":
-            roi = DrawROI()
             roi.rect = tuple(data.get("rect", roi.rect))
-            return roi
-
-        # InputROI：手动输入的ROI区域（坐标+宽高）
-        if roi_type == "InputROI":
-            roi = InputROI()
+        elif roi_type == "InputROI":
             roi.x = int(data.get("x", roi.x))
             roi.y = int(data.get("y", roi.y))
             roi.width = int(data.get("width", roi.width))
             roi.height = int(data.get("height", roi.height))
-            return roi
-
-        # FromROI：来自上游节点的ROI
-        return FromROI()
+        return roi
 
 
 class FromROI(ROIBase):

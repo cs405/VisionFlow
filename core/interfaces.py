@@ -60,7 +60,11 @@ class IVisionNodeData(INodeData):
 
     @message.setter
     def message(self, value: str): ...
-    """设置节点消息"""
+    """设置节点消息
+
+    参数：
+        value: 节点消息字符串
+    """
 
     @property
     @abstractmethod

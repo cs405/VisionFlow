@@ -137,75 +137,9 @@ class TableResultItem(ResultItem):
 
 # ── 结果集合 ──────────────────────────────────────────────────────
 
-@dataclass
-# ═══════════════════════════════════════════════════════════════════════════
-# "历史结果" (History Results) 实现细节
-#
-# 核心架构（三层解耦）：
-#
-#   1. Data Model — IVisionMessage + VisionMessage (BindableBase, MVVM 数据层):
-#      ┌──────────────────────┬─────────────────────────────────────────────────┐
-#      │ Index (int)          │ 执行序号 = Messages.Count + 1                    │
-#      │ TimeSpan             │ 执行耗时 (System.TimeSpan)                       │
-#      │ Type (string)        │ 模块名称 (INameable.Name 或 ITextable.Text)       │
-#      │ Message (string)     │ 结果数据文本，ToolTip 显示完整内容                   │
-#      │ State (FlowableState)│ Success / Error                                 │
-#      │ ResultImageSource    │ 结果图像 ImageSource → 点击行时更新主图像            │
-#      │ SrcFilePath (string) │ 源文件路径（从 ISrcFilesNodeData 获取）             │
-#      │ ResultNodeData       │ IResultPresenterNodeData 引用，用于更新属性面板     │
-#      └──────────────────────┴─────────────────────────────────────────────────┘
-#
-#   2. Collection — ObservableCollection<IVisionMessage> Messages:
-#      - 存储在 VisionDiagramDataBase 上（非 UI Panel）
-#      - 每个 DiagramData 拥有独立的 Messages，切换 tab 时自动隔离
-#      - "运行全部" 循环中每次迭代自动累积
-#      - CurrentMessage: 聚合统计（totalTimeSpan + 最后一条消息）
-#
-#   3. OnInvokedPart(IPartData) — 节点执行后自动收归历史（关键解耦点）:
-#      node 执行完成 → OnInvokedPart(partData)
-#        → if !openCVNodeData.UseInvokedPart: return  ← 每个节点可控
-#        → 对视频/摄像头节点: find existing by ResultNodeData match
-#          → found: 原地更新 TimeSpan/Message/State/ResultImageSource（不新增行）
-#          → not found: 新建 VisionMessage{Index, Type=Name, State, TimeSpan,
-#              SrcFilePath, ResultImageSource, ResultNodeData}
-#        → Messages.Add(message) → LogCurrentMessage()
-#      注意: OnInvokedPart 在 Application.Current.Dispatcher.Invoke 中执行，
-#      因为视频部分异步触发需要用主线程生成 ImageSource 对象。
-#
-#   4. SelectedMessageChangedCommand — 点击行联动:
-#      SelectionChangedEventArgs → AddedItems → IVisionMessage
-#        → SetResultNodeData(message):
-#          ResultImageSource = message.ResultImageSource   // 更新主图像查看器
-#          ResultNodeData = message.ResultNodeData         // 更新属性面板 + 图像上下文
-#          ResultType = $"输出结果<{message.Type}>"        // 更新标题
-#
-#   5. LogCurrentMessage() — 聚合:
-#      totalTimeSpan = Messages.Sum(x => x.TimeSpan.Ticks)
-#      CurrentMessage = new VisionMessage{TimeSpan=total, Message=this.Message}
-#
-#   6. DataGrid 列定义: [执行序号|执行时间|模块|结果数据]
-#      - 结果数据列 = DataGridTemplateColumn:
-#        - FontIconTextBlock (FontIcons.Info 默认, Error=红色FontIcons.Error,
-#          Success=绿色FontIcons.Completed)
-#        - TextBlock (Text="{Binding Message}", ToolTip="{Binding Message}")
-#      - DataTrigger: State=Error → Foreground=Red, Icon=Error
-#      - DataTrigger: State=Success → Foreground=Green, Icon=Completed
-#
-#   7. UseInvokedPart 属性:
-#      每个 VisionNodeData 上有 UseInvokedPart (bool, 默认 true)
-#      位于 DisplayParameters 分组，控制是否输出到历史记录和预览图像
-#      ModbusNodeDataBase 等网络节点将其默认设为 false
-#
-# VisionFlow 适配策略:
-#   - VisionMessage dataclass (pure data, 无 Qt 依赖) → core/result_presenter.py
-#   - Messages 集合存储在 WorkflowEngine 上  ← 关键解耦
-#   - WorkflowEngine.on_node_completed() 替代 OnInvokedPart
-#   - ResultPanel 从 active workflow 读取 messages，不拥有数据
-#   - UseInvokedPart → VisionNodeData.use_invoked_part Property
-#   - 点击行 → image_update_requested + node_jump_requested 信号
-#   - 更新已有条目: 对相机/视频等持续采集节点，按 node_id 查找并原地更新
-# ═══════════════════════════════════════════════════════════════════════════
-
+# VisionMessage — 历史结果数据对象（纯数据，无 Qt 依赖）
+# 存储在 WorkflowEngine.messages 中，ResultPanel 从中读取；
+# WorkflowEngine.on_node_completed() 负责添加/原地更新条目。
 @dataclass
 class VisionMessage:
     """ IVisionMessage / VisionMessage 1:1 移植。

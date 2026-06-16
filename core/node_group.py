@@ -11,11 +11,14 @@
   10300 - 图像分割提取模块 (TakeoffDataGroup)
   10400 - 形态学模块 (MorphologyDataGroup)
   10500 - 逻辑模块 (ConditionDataGroup)
+  10501 - Onnx通用模型 (OnnxDataGroup)
   10600 - 模板匹配模块 (TemplateMatchingDataGroup)
   10700 - 对象识别模块 (DetectorDataGroup)
-  10700 - 网络通讯模块 (NetworkDataGroup)
+  10701 - 网络通讯模块 (NetworkDataGroup)
+  10800 - 特征提取模块 (FeatureDetectorDataGroup)
   10900 - 其他模块 (OtherDataGroup)
-  10900 - 结果输出模块 (OutputDataGroup)
+  10901 - 结果输出模块 (OutputDataGroup)
+  11000 - 视频处理模块 (VideoDataGroup)
 """
 
 from typing import Type

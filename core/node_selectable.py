@@ -124,9 +124,10 @@ class SrcFilesVisionNodeData(ROINodeData):
                                          description="连续执行时，每次采集图像的目标间隔（毫秒）。33ms≈30FPS，500ms≈2FPS")
 
     def __init__(self):
-        # 文件路径列表
-        self.src_file_paths: list[str] = []
         super().__init__()
+        # 文件路径列表（在 super().__init__ 之后初始化，确保 load_default 已执行）
+        if not hasattr(self, 'src_file_paths'):
+            self.src_file_paths: list[str] = []
         # 此节点可以作为流程起始节点
         self.use_start = True
 

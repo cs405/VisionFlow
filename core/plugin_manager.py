@@ -2,6 +2,7 @@
 
 import importlib
 import inspect
+import logging
 import os
 import pkgutil
 
@@ -64,7 +65,6 @@ class PluginManager:
                 if not is_pkg:
                     self._load_module(full_name)
         except Exception as e:
-            import logging
             logging.warning(f"发现子包 {package_path} 失败: {e}")
 
     def _load_module(self, module_name: str):
@@ -72,7 +72,6 @@ class PluginManager:
         # 避免重复加载
         if module_name in self._loaded_modules:
             return
-        import logging
         try:
             module = importlib.import_module(module_name)
         except Exception as e:
@@ -83,7 +82,6 @@ class PluginManager:
         try:
             self._register_module_classes(module)
         except Exception as e:
-            # 注册失败时清理已注册内容，避免部分注册导致不一致状态
             logging.warning(f"注册模块 {module_name} 的节点类时失败: {e}")
             self._unregister_module_classes(module)
             self._loaded_modules.remove(module_name)

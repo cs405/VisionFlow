@@ -180,7 +180,6 @@ class AddNodeCommand(Command):
         self._group_name = group_name  # 保存分组名称（用于UI分类）
         self._node_id = node_data.node_id  # 保存节点唯一标识符（用于撤销时定位）
         self._description = f"添加节点: {node_data.name}"  # 命令描述（显示为"添加节点: 节点名称"）
-        self._scene = scene  # 保存场景引用（供undo使用）
 
     def execute(self, scene: Any) -> Any:
         """
@@ -211,10 +210,7 @@ class AddNodeCommand(Command):
 
         说明：
             - 使用保存的 _node_id 定位要删除的节点
-            - 不关心参数 scene 的值（内部使用构造时保存的 _scene）
-            - 注意：scene 参数和 self._scene 可能是同一个对象
         """
-        # 调用场景方法删除节点
         scene.remove_node_item(self._node_id)
 
 

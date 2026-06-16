@@ -476,13 +476,14 @@ class WorkflowEngine:
 
         # 重置所有节点的本轮执行状态，避免上次运行的残留值
         for node in self._nodes.values():
-            node._execution_state = None
+            if hasattr(node, '_execution_state'):
+                node._execution_state = None
             if hasattr(node, '_reset_for_new_execution'):
                 node._reset_for_new_execution()
-            if hasattr(node, '_mat'):
-                node._mat = None
-            if hasattr(node, '_result_image_source'):
-                node._result_image_source = None
+            if hasattr(node, 'mat') and hasattr(node, '_mat'):
+                node.mat = None
+            if hasattr(node, 'result_image_source'):
+                node.result_image_source = None
 
         event_system.publish(EventType.WORKFLOW_STARTED, sender=self)
 

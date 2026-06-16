@@ -448,32 +448,19 @@ class NodeBase(ABC):
 
     def _init_ports(self):
         """初始化4个默认端口（上/下/左/右）"""
-        self.ports = []
-        # 顶部 - 输入端口
-        p = self.create_port_data()
-        p.dock = PortDock.TOP
-        p.port_type = PortType.INPUT
-        self.ports.append(p)
-        # 底部 - 输出端口
-        p = self.create_port_data()
-        p.dock = PortDock.BOTTOM
-        p.port_type = PortType.OUTPUT
-        self.ports.append(p)
-        # 左侧 - 输入端口
-        p = self.create_port_data()
-        p.dock = PortDock.LEFT
-        p.port_type = PortType.INPUT
-        self.ports.append(p)
-        # 右侧 - 输出端口
-        p = self.create_port_data()
-        p.dock = PortDock.RIGHT
-        p.port_type = PortType.OUTPUT
-        self.ports.append(p)
+        self.ports = [
+            self._make_port(PortType.INPUT, PortDock.TOP),
+            self._make_port(PortType.OUTPUT, PortDock.BOTTOM),
+            self._make_port(PortType.INPUT, PortDock.LEFT),
+            self._make_port(PortType.OUTPUT, PortDock.RIGHT),
+        ]
 
-    def create_port_data(self) -> Port:
+    def _make_port(self, port_type: PortType, dock: PortDock) -> Port:
         """创建单个端口。子类可重写以自定义端口样式"""
-        return Port(node_id=self.node_id, port_type=PortType.BOTH,
-                   dock=PortDock.TOP)
+        p = self.create_port_data()
+        p.dock = dock
+        p.port_type = port_type
+        return p
 
     def get_input_ports(self) -> list[Port]:
         """获取所有输入端口"""

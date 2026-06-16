@@ -58,8 +58,7 @@ class NodeRegistry:
     def get_all_instantiable(self) -> list[Type[NodeBase]]:
         """获取所有非抽象的节点类型（可实例化）。"""
         import inspect
-        # 过滤掉抽象类
-        return [t for t in self._nodes.values() if not inspect.isabstract(t)]
+        return [t for t in self._nodes.values() if not getattr(t, '__abstract__', False) and not inspect.isabstract(t)]
 
     def get_node_type(self, type_name: str) -> Type[NodeBase] | None:
         """get() 的别名 — 供 services/AppContext 使用。"""

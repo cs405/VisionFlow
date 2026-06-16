@@ -94,6 +94,10 @@ class ServiceProvider:
     def __init__(self, descriptors: list[ServiceDescriptor]):
         # 保存服务注册描述符列表
         self._descriptors = descriptors
+        # 构建类型到描述符的快速查找映射
+        self._descriptor_map: dict[type, ServiceDescriptor] = {
+            d.service_type: d for d in descriptors
+        }
         # 初始化单例实例缓存，键为服务类型，值为实例
         self._singletons: dict[type, Any] = {}
 
@@ -117,15 +121,8 @@ class ServiceProvider:
 
     # 定义查找描述符的方法
     def _find_descriptor(self, service_type: type) -> ServiceDescriptor | None:
-        """查找服务类型对应的注册描述符"""
-        # 遍历所有描述符
-        for d in self._descriptors:
-            # 如果描述符的服务类型与目标类型匹配
-            if d.service_type == service_type:
-                # 返回该描述符
-                return d
-        # 未找到，返回 None
-        return None
+        """查找服务类型对应的注册描述符（O(1) dict 查找）"""
+        return self._descriptor_map.get(service_type)
 
     # 定义根据描述符创建实例的方法
     def _create_instance(self, descriptor: ServiceDescriptor) -> Any:
@@ -205,5 +202,7 @@ class ServiceProvider:
         return resolved
 
 
-# 创建全局服务集合实例（替代 IocProject.Instance 模式）
+# 创建全局服务集合实例
+# 注意：此实例在 services/app_context.py 的 init_defaults() 中通过同步机制
+# 与 AppContext 保持一致。新代码应通过 app_context.service_collection 访问。
 service_collection = ServiceCollection()
