@@ -68,9 +68,10 @@ class AppContext:
         self._project_service = _prj.ProjectService()
 
         # 将节点注册表的组类更新为左侧控制面板的组类
-        self._node_registry._groups = self._node_groups
+        # 注意：NodeRegistry 通过 _categories 管理分类，不直接持有 NodeDataGroupBase 引用
+        # 节点分组由 node_data_group_manager 独立管理
 
-        # ── 同步遗留全局变量（向后兼容）──
+        # ── 同步遗留全局变量（向后兼容，计划 v3.0 移除）──
         _ev.event_system = self._event_bus
         _ng.node_data_group_manager = self._node_groups
         _reg.node_registry = self._node_registry

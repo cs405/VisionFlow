@@ -8,7 +8,7 @@ import threading
 import time
 import traceback
 
-from core.workflow import WorkflowEngine, WorkflowState
+from core.workflow import WorkflowEngine
 from core.events import EventType, event_system
 
 
@@ -199,7 +199,7 @@ class WorkflowRunner:
             auto_switch: 是否自动切换
             interval: 迭代间隔（秒）
         """
-        from core.node_base import SrcFilesVisionNodeData
+        from core.node_selectable import SrcFilesVisionNodeData
 
         # 获取起始节点
         start_node = self._workflow.get_start_node_data() if self._workflow else None
