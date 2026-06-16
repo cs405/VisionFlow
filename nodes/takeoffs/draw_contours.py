@@ -174,9 +174,13 @@ class DrawContoursNode(OpenCVNodeDataBase):
                     if img is not None:
                         return img
                     break
-        # 回退：pipeline 传递的原始图像
-        img = self._original_mat
-        return img if img is not None else fallback
+        # 未指定画布：向上游找第一个BGR图像（尺寸与_crop_chain_offset一致），
+        # 保证输出尺寸与裁剪偏移匹配，ROIMapBackNode可正确映射
+        for node in self.get_all_from_node_datas():
+            img = getattr(node, "mat", None)
+            if img is not None and len(img.shape) == 3:
+                return img
+        return fallback
 
     def _update_result_image_source(self):
         self._result_image_source = self._mat

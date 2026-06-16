@@ -4,7 +4,7 @@
   "description": "",
   "author": "",
   "created_at": "2026-06-15T16:22:26.718503",
-  "modified_at": "2026-06-16T09:17:57.572437",
+  "modified_at": "2026-06-16T10:10:08.730314",
   "selected_diagram_index": 0,
   "diagrams": [
     {
@@ -866,7 +866,7 @@
             ],
             "invoke_mode": "SEQUENTIAL",
             "properties": {
-              "draw_source_id": "8c364465",
+              "draw_source_id": "",
               "min_area": 100,
               "max_area": 999999,
               "margin_left": 40,
@@ -1501,7 +1501,7 @@
             ],
             "invoke_mode": "SEQUENTIAL",
             "properties": {
-              "draw_source_id": "0f17f979",
+              "draw_source_id": "",
               "min_area": 100,
               "max_area": 999999,
               "margin_left": 0,
@@ -1569,7 +1569,7 @@
             ],
             "invoke_mode": "SEQUENTIAL",
             "properties": {
-              "draw_source_id": "c415b100",
+              "draw_source_id": "",
               "min_area": 100,
               "max_area": 999999,
               "margin_left": 0,
@@ -1589,7 +1589,7 @@
               "demo_run_parameter1": "",
               "demo_result1": ""
             },
-            "pos_x": -52.88961894767512,
+            "pos_x": -51.88961894767512,
             "pos_y": 168.97547087726116,
             "use_invoked_part": true,
             "roi": {
@@ -1637,7 +1637,7 @@
             ],
             "invoke_mode": "SEQUENTIAL",
             "properties": {
-              "draw_source_id": "c9d3e777",
+              "draw_source_id": "",
               "min_area": 100,
               "max_area": 999999,
               "margin_left": 0,
@@ -1836,9 +1836,9 @@
               "selected_index": -1,
               "branches": [
                 {
-                  "branch_id": "1218546b",
+                  "branch_id": "204b38cf",
                   "selected_input_node_id": "4968bd80",
-                  "selected_output_node_id": "1f6cdc8c",
+                  "selected_output_node_id": "e026b667",
                   "condition_operate": "ALL",
                   "conditions": [
                     {
@@ -1849,7 +1849,7 @@
                   ]
                 },
                 {
-                  "branch_id": "0151a994",
+                  "branch_id": "b80c5eee",
                   "selected_input_node_id": "4968bd80",
                   "selected_output_node_id": "b9bd36de",
                   "condition_operate": "ANY_NOT",
@@ -1862,60 +1862,6 @@
                   ]
                 }
               ]
-            }
-          },
-          {
-            "id": "1f6cdc8c",
-            "type": "OKOutputNode",
-            "name": "OK输出",
-            "title": "",
-            "text": "",
-            "width": 120.0,
-            "height": 35.0,
-            "ports": [
-              {
-                "port_id": "78908d17",
-                "node_id": "1f6cdc8c",
-                "port_type": "INPUT",
-                "dock": "TOP",
-                "name": ""
-              },
-              {
-                "port_id": "a93d2b8a",
-                "node_id": "1f6cdc8c",
-                "port_type": "OUTPUT",
-                "dock": "BOTTOM",
-                "name": ""
-              },
-              {
-                "port_id": "dc6eeef3",
-                "node_id": "1f6cdc8c",
-                "port_type": "INPUT",
-                "dock": "LEFT",
-                "name": ""
-              },
-              {
-                "port_id": "62f2958c",
-                "node_id": "1f6cdc8c",
-                "port_type": "OUTPUT",
-                "dock": "RIGHT",
-                "name": ""
-              }
-            ],
-            "invoke_mode": "SEQUENTIAL",
-            "properties": {
-              "image_source_mode": "处理后图片",
-              "use_invoked_part": true,
-              "demo_base_parameter1": "",
-              "demo_run_parameter1": "",
-              "demo_result1": ""
-            },
-            "pos_x": 287.48313542891844,
-            "pos_y": 170.91327157363128,
-            "use_invoked_part": true,
-            "roi": {
-              "type": "NoROI",
-              "name": "无"
             }
           },
           {
@@ -1966,6 +1912,114 @@
             },
             "pos_x": 451.4699943707663,
             "pos_y": 66.80946105038247,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          },
+          {
+            "id": "e026b667",
+            "type": "ROIMapBackNode",
+            "name": "ROI映射回原图",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "708c56fa",
+                "node_id": "e026b667",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "4e9a5a3b",
+                "node_id": "e026b667",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "14bf3abe",
+                "node_id": "e026b667",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "3f90ed93",
+                "node_id": "e026b667",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true,
+              "demo_base_parameter1": "",
+              "demo_run_parameter1": "",
+              "demo_result1": ""
+            },
+            "pos_x": 289.0,
+            "pos_y": 153.0,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          },
+          {
+            "id": "982c4da9",
+            "type": "OKOutputNode",
+            "name": "OK输出",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "2f842993",
+                "node_id": "982c4da9",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "36216d4c",
+                "node_id": "982c4da9",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "5b073664",
+                "node_id": "982c4da9",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "c8a7b4ff",
+                "node_id": "982c4da9",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true,
+              "demo_base_parameter1": "",
+              "demo_run_parameter1": "",
+              "demo_result1": ""
+            },
+            "pos_x": 290.0,
+            "pos_y": 226.0,
             "use_invoked_part": true,
             "roi": {
               "type": "NoROI",
@@ -2255,19 +2309,27 @@
             "text": ""
           },
           {
-            "link_id": "0d7cd223",
-            "from_node_id": "2adbb043",
-            "from_port_id": "031fe925",
-            "to_node_id": "1f6cdc8c",
-            "to_port_id": "78908d17",
-            "text": ""
-          },
-          {
             "link_id": "1a5bec4a",
             "from_node_id": "2adbb043",
             "from_port_id": "0deac89a",
             "to_node_id": "b9bd36de",
             "to_port_id": "90e494c8",
+            "text": ""
+          },
+          {
+            "link_id": "374e4cce",
+            "from_node_id": "2adbb043",
+            "from_port_id": "031fe925",
+            "to_node_id": "e026b667",
+            "to_port_id": "708c56fa",
+            "text": ""
+          },
+          {
+            "link_id": "8d97edf1",
+            "from_node_id": "e026b667",
+            "from_port_id": "4e9a5a3b",
+            "to_node_id": "982c4da9",
+            "to_port_id": "2f842993",
             "text": ""
           }
         ]

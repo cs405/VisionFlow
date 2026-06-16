@@ -1,14 +1,12 @@
 """ROI映射回原图节点 — 将上游所有裁剪/匹配的结果映射回完整原始图像。
 
 完全解耦设计：不依赖任何特定节点类型。
-依赖的只有一个标准属性 `_crop_chain_offset`：
-  - VisionNodeData 基类自动维护，存储累积裁剪偏移量 (x, y, w, h)
-  - ROINodeData.invoke() 在应用ROI时自动累加
-  - 匹配节点（XFeat等）在匹配成功后累加匹配偏移
-  - 不做裁剪的节点自动透传
+只依赖框架层通用属性：
+  - _crop_chain_offset : 节点输出在原始图像中的 (x, y, w, h)，由上游自动维护
+  - from_node_datas / mat / ndim : 框架通用图拓扑和图像属性
 
-ROIMapBackNode 只需要读取上游节点的 _crop_chain_offset 即可知道
-其输出图像在原始图像中的绝对位置，无需了解上游是什么节点。
+上游任何节点只要在裁剪时更新自己的 _crop_chain_offset，
+ROIMapBack 即可自动映射，无需了解上游是什么节点。
 """
 
 from __future__ import annotations
@@ -102,9 +100,10 @@ class ROIMapBackNode(OpenCVNodeDataBase):
     def _collect_branch_mappings(self) -> list[tuple[tuple, "np.ndarray"]]:
         """BFS遍历上游图，收集所有分支的 (绝对坐标, 处理结果)。
 
-        策略：收集所有有有效 _crop_chain_offset + mat 的非汇合点节点，
-        按偏移量分组，每组保留BFS距离最大的（处理链路最深的终端）。
-        深终端未执行时自动回退到浅终端。
+        策略：
+        1. 收集所有有有效 _crop_chain_offset + mat 的非汇合点节点
+        2. 按偏移量分组，每组保留BFS距离最大的（最深终端）
+        3. 过滤掉被另一个区域完全包含的大区域（ROI包含匹配目标）
         """
         node_lookup, distances = self._bfs_upstream()
 
@@ -113,8 +112,9 @@ class ROIMapBackNode(OpenCVNodeDataBase):
             if len(node.from_node_datas) > 1:
                 merge_ids.add(node.node_id)
 
-        # 按偏移量分组，保留每组的最大距离节点
-        best_per_offset: dict[tuple, tuple[object, int]] = {}
+        # 按偏移量分组，保留每组最优节点
+        # 评分：(通道数, BFS距离)。优先BGR(3) > 灰度(1)，再比处理深度
+        best_per_offset: dict[tuple, tuple[object, tuple]] = {}
 
         for node in node_lookup.values():
             if node.node_id in merge_ids:
@@ -125,11 +125,16 @@ class ROIMapBackNode(OpenCVNodeDataBase):
             if node.mat is None:
                 continue
 
+            channels = 3 if node.mat.ndim == 3 else 1
             d = distances.get(node.node_id, 99999)
-            if offset not in best_per_offset or d > best_per_offset[offset][1]:
-                best_per_offset[offset] = (node.mat, d)
+            score = (channels, d)
+            if offset not in best_per_offset or score > best_per_offset[offset][1]:
+                best_per_offset[offset] = (node.mat, score)
 
-        return [(offset, mat) for offset, (mat, _) in best_per_offset.items()]
+        # 按面积降序排列：大面积先贴，小面积后贴（盖在上面，不会被覆盖）
+        result = [(offset, mat) for offset, (mat, _) in best_per_offset.items()]
+        result.sort(key=lambda x: -(x[0][2] * x[0][3]))
+        return result
 
     def _bfs_upstream(self) -> tuple[dict[str, object], dict[str, int]]:
         """BFS遍历上游图。
