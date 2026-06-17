@@ -188,7 +188,7 @@ def run_gui(ctx, project_path: str = None):
     # 通过 ThemeManager 应用主题（唯一数据源）
     app.setStyle("Fusion")
     # 设置应用程序调色板
-    app.setPalette(theme_manager.colors.to_palette())
+    app.setPalette(theme_manager.to_palette())
     # 设置应用程序样式表
     app.setStyleSheet(theme_manager.get_stylesheet())
 

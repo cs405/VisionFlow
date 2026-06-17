@@ -28,7 +28,6 @@ from core.registry import node_registry
 from gui.font_icons import FontIcons, FontIconButton, FontIconTextBlock, FontIconToggleButton
 
 from gui.theme import theme_manager, ThemePickerDialog, connect_theme
-from gui.theme_data import resolve_colors
 from gui.node_editor.node_item import NodeState
 from gui.toolbox_panel import ToolboxPanel
 from gui.property_panel import PropertyPanel
@@ -682,7 +681,7 @@ class _SettingsDialog(QDialog):
             卡片控件
         """
         # 解析主题颜色
-        c = resolve_colors(tdef)
+        c = tdef.resolve()
         # 创建卡片框架
         card = QFrame()
         # 设置固定大小200x100
@@ -994,7 +993,7 @@ class MainWindow(QMainWindow):
         # 设置最小窗口大小为1180x720
         self.setMinimumSize(1180, 720)
         # 设置窗口调色板（从主题管理器获取）
-        self.setPalette(theme_manager.colors.to_palette())
+        self.setPalette(theme_manager.to_palette())
         # 设置窗口样式表（从主题管理器获取）
         self.setStyleSheet(theme_manager.get_stylesheet())
         # 连接主题变化信号，主题改变时应用新主题
@@ -4212,7 +4211,7 @@ class MainWindow(QMainWindow):
     def _on_toggle_theme(self):
         """在暗色和亮色主题之间切换"""
         # 切换主题
-        theme_manager.toggle()
+        theme_manager.toggle_dark()
         # 应用主题
         self._apply_theme()
         # 如果有主题切换按钮
@@ -4249,16 +4248,13 @@ class MainWindow(QMainWindow):
         """重新应用主题到所有控件"""
         # 获取主题管理器
         tm = theme_manager
-        # 获取颜色代理
-        c = tm.colors
-        # 获取样式表
         qss = tm.get_stylesheet()
 
         # 1. 全局QSS — 覆盖所有窗口、对话框和标准控件类型
         QApplication.instance().setStyleSheet(qss)
 
         # 2. 主窗口调色板 + 样式表
-        self.setPalette(c.to_palette())
+        self.setPalette(tm.to_palette())
         self.setStyleSheet(qss)
 
         # 3. 重新应用工具栏按钮（每个按钮在创建时都有自己的QSS）

@@ -1,95 +1,59 @@
 """颜色主题数据
 
 纯数据层：对 Qt 或其他 GUI 模块零依赖。
-定义哪些颜色存在以及每个主题将它们设置为什么值。
-ThemeManager 在 theme.py 中加载这些数据 — 数据与逻辑的清晰分离。
-
-架构
-  ColorKey    — 一个具有暗色/亮色默认值的命名颜色槽
-  ThemeDef    — 包含键→十六进制值覆盖字典的命名主题
-  COLOR_KEYS  — 所有45个颜色键的注册表
-  THEMES      — 所有主题定义的注册表
+定义颜色键、主题以及解析逻辑。
+ThemeManager 在 theme.py 中加载这些数据。
 """
 
 from __future__ import annotations
 from dataclasses import dataclass, field
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# ColorKey（颜色键）
-# ═══════════════════════════════════════════════════════════════════════════
-
 @dataclass(frozen=True)
 class ColorKey:
-    """一个具有暗色/亮色默认值的命名颜色令牌
-
-    每个键包含：
-      - id: 唯一标识符，例如 "accent"、"foreground"
-      - name: 中文显示名称
-      - group: 用于UI组织的分类（前景/背景/边框/强调/状态/画布/节点/端口/滚动条）
-      - dark_default: 当没有主题覆盖时的回退十六进制值（暗色模式）
-      - light_default: 当没有主题覆盖时的回退十六进制值（亮色模式）
-    """
-    id: str                        # 唯一标识符
-    name: str = ""                 # 中文显示名称
-    group: str = ""                # 分类
-    dark_default: str = "#000000"  # 暗色模式默认值
-    light_default: str = "#FFFFFF" # 亮色模式默认值
+    """命名的颜色令牌，包含暗色/亮色默认值"""
+    id: str
+    name: str = ""
+    group: str = ""
+    dark_default: str = "#000000"
+    light_default: str = "#FFFFFF"
 
     def default_for(self, is_dark: bool) -> str:
-        """根据是否为暗色模式返回默认值
-
-        参数：
-            is_dark: 是否为暗色模式
-
-        返回：
-            十六进制颜色字符串
-        """
-        # 如果是暗色模式返回dark_default，否则返回light_default
         return self.dark_default if is_dark else self.light_default
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# ThemeDef（主题定义）
-# ═══════════════════════════════════════════════════════════════════════════
-
 @dataclass
 class ThemeDef:
-    """一个命名的颜色主题
+    """命名的颜色主题"""
+    id: str
+    name: str
+    group: str = "纯色"
+    is_dark: bool = True
+    prompt: str = ""
+    description: str = ""
+    colors: dict[str, str] = field(default_factory=dict)
+    order: int = 0
 
-    每个主题：
-      - id: 唯一标识符
-      - name: 显示名称
-      - group: 分类
-      - is_dark: True = 暗色背景
-      - prompt: 在【】中显示的简短提示
-      - description: 更长的描述
-      - colors: 颜色键ID → 十六进制值的字典
-      - order: 排序顺序
-    """
-    id: str                                      # 唯一标识符
-    name: str                                    # 显示名称
-    group: str = "纯色"                          # 分类
-    is_dark: bool = True                         # 是否为暗色模式
-    prompt: str = ""                             # 简短提示
-    description: str = ""                        # 描述
-    colors: dict[str, str] = field(default_factory=dict)  # 颜色覆盖字典
-    order: int = 0                               # 排序顺序
+    def resolve(self) -> dict[str, str]:
+        """将主题覆盖合并到默认值上，返回完整的 {key: hex} 映射"""
+        defaults = _DEFAULTS_DARK if self.is_dark else _DEFAULTS_LIGHT
+        resolved = dict(defaults)
+        resolved.update(self.colors)
+        return resolved
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# COLOR_KEYS — 45个颜色令牌
+# COLOR_KEYS — 颜色令牌注册表
 # ═══════════════════════════════════════════════════════════════════════════
 
-# 颜色键字典
 COLOR_KEYS: dict[str, ColorKey] = {
-    # ── 强调色 / 强调 ──
+    # ── 强调色 ──
     "accent":              ColorKey("accent", "强调色", "强调",
                                     dark_default="#2D80FF", light_default="#FF3399FF"),
     "accent_text":         ColorKey("accent_text", "强调文字", "强调",
                                     dark_default="#FFFFFF", light_default="#FFFFFF"),
 
-    # ── 前景文字 / 前景 ──
+    # ── 前景文字 ──
     "text_primary":        ColorKey("text_primary", "主文字", "前景",
                                     dark_default="#FF8F939C", light_default="#606266"),
     "text_secondary":      ColorKey("text_secondary", "次文字", "前景",
@@ -103,7 +67,7 @@ COLOR_KEYS: dict[str, ColorKey] = {
     "text_caption":        ColorKey("text_caption", "标题栏文字", "前景",
                                     dark_default="#8F939C", light_default="#606266"),
 
-    # ── 背景 / 背景 ──
+    # ── 背景 ──
     "bg_window":           ColorKey("bg_window", "窗口背景", "背景",
                                     dark_default="#2D2D30", light_default="#F5F5F5"),
     "bg_surface":          ColorKey("bg_surface", "表面", "背景",
@@ -125,7 +89,7 @@ COLOR_KEYS: dict[str, ColorKey] = {
     "bg_menu":             ColorKey("bg_menu", "菜单背景", "背景",
                                     dark_default="#191A20", light_default="#FFFFFF"),
 
-    # ── 边框 / 边框 ──
+    # ── 边框 ──
     "border":              ColorKey("border", "边框", "边框",
                                     dark_default="#3F3F46", light_default="#E0E0E0"),
     "border_focus":        ColorKey("border_focus", "焦点边框", "边框",
@@ -135,7 +99,7 @@ COLOR_KEYS: dict[str, ColorKey] = {
     "border_assist":       ColorKey("border_assist", "辅助边框", "边框",
                                     dark_default="#272932", light_default="#F0F0F0"),
 
-    # ── 状态色 / 状态 ──
+    # ── 状态色 ──
     "status_ok":           ColorKey("status_ok", "成功", "状态",
                                     dark_default="#67C23A", light_default="#67C23A"),
     "status_error":        ColorKey("status_error", "错误", "状态",
@@ -149,7 +113,7 @@ COLOR_KEYS: dict[str, ColorKey] = {
     "status_disabled":     ColorKey("status_disabled", "禁用", "状态",
                                     dark_default="#555555", light_default="#C0C0C0"),
 
-    # ── 具名颜色 / 具名色 ──
+    # ── 具名色 ──
     "green":               ColorKey("green", "绿色", "具名色",
                                     dark_default="#67C23A", light_default="#67C23A"),
     "red":                 ColorKey("red", "红色", "具名色",
@@ -167,7 +131,7 @@ COLOR_KEYS: dict[str, ColorKey] = {
     "gray":                ColorKey("gray", "灰色", "具名色",
                                     dark_default="#909399", light_default="#909399"),
 
-    # ── 画布 / 画布 ──
+    # ── 画布 ──
     "canvas_bg":           ColorKey("canvas_bg", "画布背景", "画布",
                                     dark_default="#121317", light_default="#FFFFFF"),
     "canvas_checker_base": ColorKey("canvas_checker_base", "棋盘格基底", "画布",
@@ -177,7 +141,7 @@ COLOR_KEYS: dict[str, ColorKey] = {
     "canvas_grid":         ColorKey("canvas_grid", "网格线", "画布",
                                     dark_default="#2E313B", light_default="#E8E8E8"),
 
-    # ── 节点 / 节点 ──
+    # ── 节点 ──
     "node_bg":             ColorKey("node_bg", "节点背景", "节点",
                                     dark_default="#3C3C3C", light_default="#FFFFFF"),
     "node_bg_hover":       ColorKey("node_bg_hover", "节点悬停", "节点",
@@ -195,7 +159,7 @@ COLOR_KEYS: dict[str, ColorKey] = {
     "node_shadow":         ColorKey("node_shadow", "节点阴影", "节点",
                                     dark_default="#3C000000", light_default="#1E000000"),
 
-    # ── 连线 / 连线 ──
+    # ── 连线 ──
     "edge":                ColorKey("edge", "连线", "连线",
                                     dark_default="#67C23A", light_default="#67C23A"),
     "edge_selected":       ColorKey("edge_selected", "连线选中", "连线",
@@ -209,7 +173,7 @@ COLOR_KEYS: dict[str, ColorKey] = {
     "edge_error":          ColorKey("edge_error", "连线错误", "连线",
                                     dark_default="#DC000C", light_default="#DC000C"),
 
-    # ── 端口 / 端口 ──
+    # ── 端口 ──
     "port_input":          ColorKey("port_input", "输入端口", "端口",
                                     dark_default="#FFFFFF", light_default="#FFFFFF"),
     "port_output":         ColorKey("port_output", "输出端口", "端口",
@@ -217,7 +181,7 @@ COLOR_KEYS: dict[str, ColorKey] = {
     "port_connected":      ColorKey("port_connected", "已连接端口", "端口",
                                     dark_default="#67C23A", light_default="#67C23A"),
 
-    # ── 滚动条 / 滚动条 ──
+    # ── 滚动条 ──
     "scroll_bg":           ColorKey("scroll_bg", "滚动条背景", "滚动条",
                                     dark_default="#1E1E1E", light_default="#F0F0F0"),
     "scroll_handle":       ColorKey("scroll_handle", "滚动条手柄", "滚动条",
@@ -225,7 +189,7 @@ COLOR_KEYS: dict[str, ColorKey] = {
     "scroll_handle_hover": ColorKey("scroll_handle_hover", "滚动条悬停", "滚动条",
                                     dark_default="#686868", light_default="#A0A0A0"),
 
-    # ── 节点分组颜色 / 节点分组 ──
+    # ── 节点分组 ──
     "group_src":           ColorKey("group_src", "图像数据源", "节点分组",
                                     dark_default="#4A9EFF", light_default="#4A9EFF"),
     "group_preprocess":    ColorKey("group_preprocess", "预处理", "节点分组",
@@ -246,22 +210,15 @@ COLOR_KEYS: dict[str, ColorKey] = {
                                     dark_default="#E91E63", light_default="#E91E63"),
 }
 
-# 快速查找：颜色键ID → 暗色/亮色模式的默认值
-# 当主题未覆盖时，由 ThemeDef.resolve() 使用
-_DEFAULTS_DARK = {k: v.dark_default for k, v in COLOR_KEYS.items()}   # 暗色模式默认值字典
-_DEFAULTS_LIGHT = {k: v.light_default for k, v in COLOR_KEYS.items()}  # 亮色模式默认值字典
+_DEFAULTS_DARK = {k: v.dark_default for k, v in COLOR_KEYS.items()}
+_DEFAULTS_LIGHT = {k: v.light_default for k, v in COLOR_KEYS.items()}
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 主题 — 所有内置主题定义
+# 主题工厂函数
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _make_dark() -> dict[str, str]:
-    """暗色主题
-
-    返回：
-        暗色主题的颜色字典
-    """
     return {
         "accent":              "#2D80FF",
         "text_primary":        "#FF8F939C",
@@ -318,11 +275,6 @@ def _make_dark() -> dict[str, str]:
 
 
 def _make_light() -> dict[str, str]:
-    """亮色主题
-
-    返回：
-        亮色主题的颜色字典
-    """
     return {
         "accent":              "#FF3399FF",
         "text_primary":        "#606266",
@@ -379,19 +331,8 @@ def _make_light() -> dict[str, str]:
 
 
 def _make_technology_blue_dark() -> dict[str, str]:
-    """深空科技蓝主题
-
-    用蓝青色技术调色板覆盖暗色主题：
-      - accent → #00D1FF（青色）
-      - bg → 深蓝灰色（#0A1628, #0D1F35）
-      - node → 玻璃蓝（#1A3A5C）
-
-    返回：
-        科技蓝主题的颜色字典
-    """
     return {
-        **_make_dark(),          # 继承暗色主题的所有颜色
-        # 覆盖以下颜色
+        **_make_dark(),
         "accent":              "#00D1FF",
         "bg_surface":          "#0D1F35",
         "bg_surface_raised":   "#112240",
@@ -428,16 +369,8 @@ def _make_technology_blue_dark() -> dict[str, str]:
 
 
 def _make_purple_dark() -> dict[str, str]:
-    """暗夜紫主题
-
-    用紫色调色板覆盖暗色主题。
-
-    返回：
-        紫色主题的颜色字典
-    """
     return {
-        **_make_dark(),          # 继承暗色主题的所有颜色
-        # 覆盖以下颜色
+        **_make_dark(),
         "accent":              "#BB86FC",
         "bg_surface":          "#1E1A2E",
         "bg_surface_raised":   "#262236",
@@ -473,33 +406,31 @@ def _make_purple_dark() -> dict[str, str]:
     }
 
 
-# 主题字典
+# ═══════════════════════════════════════════════════════════════════════════
+# THEMES — 主题注册表
+# ═══════════════════════════════════════════════════════════════════════════
+
 THEMES: dict[str, ThemeDef] = {
-    # 暗色主题（推荐）
     "dark": ThemeDef(
         id="dark", name="深色（推荐）", group="强力推荐",
         is_dark=True, prompt="专业深色", description="护眼深色主题，适合长时间使用",
         colors=_make_dark(), order=0,
     ),
-    # 亮色主题（推荐）
     "light": ThemeDef(
         id="light", name="浅色（推荐）", group="强力推荐",
         is_dark=False, prompt="清爽浅色", description="明亮清新，适合日间办公环境",
         colors=_make_light(), order=1,
     ),
-    # 常规主题
     "default": ThemeDef(
         id="default", name="常规", group="纯色",
         is_dark=False, prompt="系统默认", description="跟随系统的基础配色方案",
         colors={}, order=10,
     ),
-    # 深空科技蓝主题
     "technology_blue": ThemeDef(
         id="technology_blue", name="深空科技蓝", group="外部主题",
         is_dark=True, prompt="科技感", description="深蓝基调搭配青色强调，充满科技感",
         colors=_make_technology_blue_dark(), order=20,
     ),
-    # 暗夜紫主题
     "purple": ThemeDef(
         id="purple", name="暗夜紫", group="外部主题",
         is_dark=True, prompt="优雅紫色", description="深紫底色配合淡紫强调，优雅神秘",
@@ -507,67 +438,3 @@ THEMES: dict[str, ThemeDef] = {
     ),
 }
 
-
-# ═══════════════════════════════════════════════════════════════════════════
-# 解析：合并主题覆盖与默认值
-# ═══════════════════════════════════════════════════════════════════════════
-
-def resolve_colors(theme: ThemeDef) -> dict[str, str]:
-    """将主题解析为完整的颜色映射，用默认值填充缺失的键
-
-    参数：
-        theme: 主题定义
-
-    返回：
-        完整的颜色字典
-    """
-    # 根据是否为暗色模式选择默认值字典
-    defaults = _DEFAULTS_DARK if theme.is_dark else _DEFAULTS_LIGHT
-    # 从所有默认值开始
-    resolved = dict(defaults)
-    # 应用主题覆盖
-    resolved.update(theme.colors)
-    return resolved
-
-
-def get_theme_ids() -> list[str]:
-    """获取所有已注册的主题ID，按显示顺序排列
-
-    返回：
-        主题ID列表
-    """
-    # 按order排序后返回主题ID列表
-    return sorted(THEMES.keys(), key=lambda k: THEMES[k].order)
-
-
-def get_theme_by_id(theme_id: str) -> ThemeDef | None:
-    """根据ID获取主题定义
-
-    参数：
-        theme_id: 主题ID
-
-    返回：
-        主题定义或None
-    """
-    return THEMES.get(theme_id)
-
-
-def get_color_key(key_id: str) -> ColorKey | None:
-    """根据ID获取颜色键
-
-    参数：
-        key_id: 颜色键ID
-
-    返回：
-        颜色键或None
-    """
-    return COLOR_KEYS.get(key_id)
-
-
-def list_color_keys() -> list[str]:
-    """列出所有颜色键ID
-
-    返回：
-        颜色键ID列表
-    """
-    return list(COLOR_KEYS.keys())
