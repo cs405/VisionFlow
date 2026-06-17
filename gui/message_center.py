@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import ctypes
 from enum import Enum
 from typing import Any
 
@@ -18,6 +19,17 @@ from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, QPoint, QEasingCurve, p
 from PyQt5.QtGui import QColor
 
 from core.events import EventType, event_system
+
+
+class _MSG(ctypes.Structure):
+    """Windows 原生消息结构体，用于 nativeEvent 中解包 MSG 指针的字段"""
+    _fields_ = [
+        ("hwnd", ctypes.c_void_p),
+        ("message", ctypes.c_uint),
+        ("_pad", ctypes.c_uint),
+        ("wParam", ctypes.c_ulonglong),
+        ("lParam", ctypes.c_longlong),
+    ]
 
 
 # ═══════════════════════════════════════════════════════════════════════════

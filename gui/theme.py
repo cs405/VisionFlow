@@ -14,6 +14,7 @@ from pathlib import Path
 
 from PyQt5.QtGui import QColor, QPalette
 from PyQt5.QtCore import Qt, pyqtSignal, QObject
+from PyQt5.QtWidgets import QFrame
 
 from gui.theme_data import THEMES, ThemeDef
 
@@ -462,3 +463,63 @@ class ThemePickerDialog(QDialog):
         if result != QDialog.Accepted:
             self._on_cancel()
         return bool(self._selected_id) or (result == QDialog.Accepted)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 主题感知控件工厂
+# ═══════════════════════════════════════════════════════════════════════════
+
+def vsep() -> QFrame:
+    """创建一条垂直分隔线（颜色跟随主题边框色）"""
+    line = QFrame()
+    line.setFrameShape(QFrame.VLine)
+    line.setFixedWidth(1)
+    line.setStyleSheet(f"color: {theme_manager.color('border').name()};")
+    return line
+
+
+def cmd_btn_qss() -> str:
+    """工具栏命令按钮 QSS（从当前主题动态生成）"""
+    return f"""
+    QPushButton {{
+        background: transparent;
+        border: none;
+        border-radius: 2px;
+        padding: 5px 0;
+        color: {theme_manager.color('text_primary').name()};
+    }}
+    QPushButton:hover {{ background: {theme_manager.color('bg_surface_hover').name()}; }}
+    QPushButton:pressed {{ background: {theme_manager.color('accent').name()}; color: white; }}
+    QPushButton:disabled {{
+        color: {theme_manager.color('text_secondary').name()};
+        background: transparent;
+    }}
+"""
+
+
+def tab_qss() -> str:
+    """标签页控件 QSS（从当前主题动态生成）"""
+    c = theme_manager
+    return f"""
+    QTabWidget::pane {{ border: none; background: {c.color('bg_surface').name()}; }}
+    QTabWidget:focus {{ outline: 0; }}
+    QTabWidget::pane:focus {{ outline: 0; border: none; }}
+    QTabBar:focus {{ outline: 0; }}
+    QTabBar::tab {{
+        background: {c.color('bg_surface_raised').name()};
+        color: {c.color('text_title').name()};
+        padding: 3px 8px;
+        border: none;
+        border-bottom: 2px solid transparent;
+        font-size: 11px;
+    }}
+    QTabBar::tab:selected {{ background: {c.color('bg_surface').name()}; border-bottom: 2px solid {c.color('accent').name()}; }}
+    QTabBar::tab:focus {{ outline: 0; }}
+    QTabBar::tab:hover {{ background: {c.color('bg_surface_hover').name()}; }}
+    QTabBar::close-button {{
+        subcontrol-position: right;
+        padding: 3px;
+        margin-left: 4px;
+    }}
+    QTabBar::close-button:hover {{ background: #c42b1c; border-radius: 3px; }}
+"""

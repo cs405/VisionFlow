@@ -6,16 +6,14 @@
 
 import ctypes
 import os
-import json
 import time
 from datetime import datetime
 
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QAction,
     QLabel, QTabWidget, QMessageBox, QFileDialog, QApplication, QFormLayout,
-    QPushButton, QFrame, QMenuBar, QMenu, QLineEdit, QStackedWidget, QTabBar,
-    QDialog, QScrollArea, QGroupBox, QGridLayout, QCheckBox, QListWidgetItem,
-    QListWidget, QDialogButtonBox
+    QPushButton, QFrame, QMenuBar, QMenu, QLineEdit, QTabBar,
+    QDialog, QDialogButtonBox, QInputDialog, QStackedWidget,
 )
 from PyQt5.QtCore import Qt, QTimer, QSettings, pyqtSignal, QEvent
 from PyQt5.QtGui import QIcon, QPixmap, QCursor, QFont
@@ -25,9 +23,26 @@ from core.workflow import WorkflowEngine, WorkflowState
 from core.project import project_service, DiagramData, ProjectItem
 from core.events import EventType, event_system
 from core.registry import node_registry
-from gui.font_icons import FontIcons, FontIconButton, FontIconTextBlock, FontIconToggleButton
 
-from gui.theme import theme_manager, ThemePickerDialog, connect_theme
+from gui.constants import (
+    WM_NCHITTEST, WM_NCCALCSIZE,
+    HTLEFT, HTRIGHT, HTTOP, HTTOPLEFT, HTTOPRIGHT,
+    HTBOTTOM, HTBOTTOMLEFT, HTBOTTOMRIGHT, HTCAPTION,
+    BORDER, UI_PROFILE_VERSION,
+    DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT,
+    DEFAULT_LEFT_WIDTH, DEFAULT_RIGHT_WIDTH,
+    DEFAULT_CENTER_HEIGHT, DEFAULT_BOTTOM_HEIGHT,
+    DEFAULT_RESOURCE_HEIGHT, DEFAULT_CAPTION_HEIGHT,
+    load_app_config, save_app_config,
+)
+from gui.message_center import _MSG
+from gui.panel_state import panel_state
+from gui.font_icons import FontIcons, FontIconButton, FontIconTextBlock, FontIconToggleButton
+from gui.theme import theme_manager, ThemePickerDialog, connect_theme, vsep, cmd_btn_qss, tab_qss
+from gui.settings_dialog import SettingsDialog
+from gui.diagram_tab_header import DiagramTabHeader
+from gui.widgets.inline_status_strip import InlineStatusStrip
+from gui.widget_utils import find_child_by_tip
 from gui.node_editor.node_item import NodeState
 from gui.toolbox_panel import ToolboxPanel
 from gui.property_panel import PropertyPanel
@@ -40,847 +55,6 @@ from gui.node_editor.editor_widget import DiagramEditorWidget
 from gui.start_page import StartPage
 from gui.help_panel import HelpPanel
 from services.workflow_runner import WorkflowRunner
-
-# ── Windows 无边框窗口边框调整大小 ──────────────────────────
-
-# WM_NCHITTEST 消息：Windows 发送此消息以确定鼠标位置的命中测试结果
-WM_NCHITTEST = 0x0084
-# WM_NCCALCSIZE 消息：用于计算窗口的非客户区大小
-WM_NCCALCSIZE = 0x0083
-# 命中测试结果常量：左侧边框
-HTLEFT = 10
-# 命中测试结果常量：右侧边框
-HTRIGHT = 11
-# 命中测试结果常量：顶部边框
-HTTOP = 12
-# 命中测试结果常量：左上角
-HTTOPLEFT = 13
-# 命中测试结果常量：右上角
-HTTOPRIGHT = 14
-# 命中测试结果常量：底部边框
-HTBOTTOM = 15
-# 命中测试结果常量：左下角
-HTBOTTOMLEFT = 16
-# 命中测试结果常量：右下角
-HTBOTTOMRIGHT = 17
-# 命中测试结果常量：标题栏区域（用于拖动窗口）
-HTCAPTION = 2
-
-# 边框调整大小边距（像素）
-_BORDER = 8
-
-
-class _MSG(ctypes.Structure):
-    """Windows 消息结构体，用于接收消息参数"""
-    _fields_ = [
-        ("hwnd", ctypes.c_void_p),  # 窗口句柄
-        ("message", ctypes.c_uint),  # 消息ID
-        ("_pad", ctypes.c_uint),  # 填充字段
-        ("wParam", ctypes.c_ulonglong),  # 消息的 wParam 参数
-        ("lParam", ctypes.c_longlong),  # 消息的 lParam 参数
-    ]
-
-
-class PanelState:
-    """面板状态管理类，用于保存和恢复各种面板的状态（宽度、高度、可见性等）"""
-
-    GRP = "PanelState"  # QSettings 中的分组名称
-
-    def __init__(self):
-        """初始化面板状态管理器（惰性创建 QSettings，确保在 QApplication 之后）"""
-        self._settings = None
-
-    @property
-    def s(self):
-        if self._settings is None:
-            self._settings = QSettings()
-        return self._settings
-
-    def _k(self, key):
-        """生成完整的键名
-
-        参数：
-            key: 键名
-
-        返回：
-            带分组前缀的完整键名
-        """
-        return f"{self.GRP}/{key}"
-
-    def get_i(self, key, default=0):
-        """获取整数值
-
-        参数：
-            key: 键名
-            default: 默认值
-
-        返回：
-            整数值
-        """
-        # 从 QSettings 获取值，如果不存在则返回默认值
-        return int(self.s.value(self._k(key), default) or default)
-
-    def set_i(self, key, value):
-        """设置整数值
-
-        参数：
-            key: 键名
-            value: 整数值
-        """
-        # 保存整数值到 QSettings
-        self.s.setValue(self._k(key), value)
-
-    def get_b(self, key, default=True):
-        """获取布尔值
-
-        参数：
-            key: 键名
-            default: 默认值
-
-        返回：
-            布尔值
-        """
-        # 从 QSettings 获取值
-        value = self.s.value(self._k(key), default)
-        # 如果是字符串，转换为布尔值；否则直接返回
-        return str(value).lower() == "true" if isinstance(value, str) else bool(value) if value is not None else default
-
-    def set_b(self, key, value):
-        """设置布尔值
-
-        参数：
-            key: 键名
-            value: 布尔值
-        """
-        # 保存布尔值到 QSettings（转换为字符串 'true' 或 'false'）
-        self.s.setValue(self._k(key), "true" if value else "false")
-
-
-# 创建全局面板状态实例
-_ps = PanelState()
-
-# UI 配置文件版本号
-_UI_PROFILE_VERSION = 1
-# 默认窗口宽度（像素）
-_DEFAULT_WINDOW_WIDTH = 1460
-# 默认窗口高度（像素）
-_DEFAULT_WINDOW_HEIGHT = 900
-# 默认左侧面板宽度（像素）
-_DEFAULT_LEFT_WIDTH = 280
-# 默认右侧面板宽度（像素）
-_DEFAULT_RIGHT_WIDTH = 850
-# 默认中央区域高度（像素）
-_DEFAULT_CENTER_HEIGHT = 800
-# 默认底部面板高度（像素）
-_DEFAULT_BOTTOM_HEIGHT = 180
-# 默认资源面板高度（像素）
-_DEFAULT_RESOURCE_HEIGHT = 175
-# 默认标题栏高度（像素）
-_DEFAULT_CAPTION_HEIGHT = 85
-
-
-def _app_config_path():
-    """获取应用配置文件的路径
-
-    返回：
-        配置文件路径
-    """
-    # 配置文件位于当前文件所在目录的父目录下
-    return os.path.join(os.path.dirname(os.path.dirname(__file__)), "app_config.json")
-
-
-def _load_app_config():
-    """加载应用配置文件
-
-    返回：
-        配置字典
-    """
-    try:
-        # 打开配置文件
-        with open(_app_config_path(), "r", encoding="utf-8") as f:
-            # 解析 JSON 数据
-            data = json.load(f)
-            # 确保返回字典类型
-            return data if isinstance(data, dict) else {}
-    except Exception:
-        # 出错时返回空字典
-        return {}
-
-
-def _save_app_config(data: dict):
-    """保存应用配置文件
-
-    参数：
-        data: 配置字典
-    """
-    # 打开配置文件写入
-    with open(_app_config_path(), "w", encoding="utf-8") as f:
-        # 将数据序列化为 JSON 格式写入文件
-        json.dump(data, f, indent=2, ensure_ascii=False)
-
-
-class _Sep(QFrame):
-    """分隔线控件"""
-
-    def __init__(self, vertical=True):
-        """初始化分隔线
-
-        参数：
-            vertical: 是否为垂直分隔线（True=垂直，False=水平）
-        """
-        # 调用父类 QFrame 的构造函数
-        super().__init__()
-        # 设置帧形状：垂直分隔线或水平分隔线
-        self.setFrameShape(QFrame.VLine if vertical else QFrame.HLine)
-        # 设置样式表：颜色为深灰色
-        self.setStyleSheet("color: #505050;")
-        # 如果是垂直分隔线
-        if vertical:
-            # 设置固定宽度为1像素
-            self.setFixedWidth(1)
-        else:
-            # 设置固定高度为1像素
-            self.setFixedHeight(1)
-
-
-def _hsep():
-    """创建垂直分隔线（实际上是水平分隔符，函数名是历史遗留）
-
-    返回：
-        垂直分隔线控件
-    """
-    return _Sep(True)
-
-
-def _cmd_btn_qss():
-    """工具栏命令按钮样式表 — 从主题动态生成
-
-    通过 explicit setEnabled() 调用 + :disabled QSS 提供视觉反馈
-
-    返回：
-        样式表字符串
-    """
-    return f"""
-    QPushButton {{
-        background: transparent;
-        border: none;
-        border-radius: 2px;
-        padding: 5px 0;
-        color: {theme_manager.color('text_primary').name()};
-    }}
-    QPushButton:hover {{ background: {theme_manager.color('bg_surface_hover').name()}; }}
-    QPushButton:pressed {{ background: {theme_manager.color('accent').name()}; color: white; }}
-    QPushButton:disabled {{
-        color: {theme_manager.color('text_secondary').name()};
-        background: transparent;
-    }}
-"""
-
-
-def _tab_qss():
-    """标签页控件样式表 — 从主题动态生成
-
-    标签页文字使用 text_title 以提高清晰度
-
-    返回：
-        样式表字符串
-    """
-    # 获取主题管理器
-    c = theme_manager
-    # 返回样式表
-    return f"""
-    QTabWidget::pane {{ border: none; background: {c.color('bg_surface').name()}; }}
-    QTabWidget:focus {{ outline: 0; }}
-    QTabWidget::pane:focus {{ outline: 0; border: none; }}
-    QTabBar:focus {{ outline: 0; }}
-    QTabBar::tab {{
-        background: {c.color('bg_surface_raised').name()};
-        color: {c.color('text_title').name()};
-        padding: 3px 8px;
-        border: none;
-        border-bottom: 2px solid transparent;
-        font-size: 11px;
-    }}
-    QTabBar::tab:selected {{ background: {c.color('bg_surface').name()}; border-bottom: 2px solid {c.color('accent').name()}; }}
-    QTabBar::tab:focus {{ outline: 0; }}
-    QTabBar::tab:hover {{ background: {c.color('bg_surface_hover').name()}; }}
-    QTabBar::close-button {{
-        subcontrol-position: right;
-        padding: 3px;
-        margin-left: 4px;
-    }}
-    QTabBar::close-button:hover {{ background: #c42b1c; border-radius: 3px; }}
-"""
-
-
-# 全局命令按钮样式表
-_CMD_BTN = _cmd_btn_qss()
-# 全局标签页样式表
-_TAB_STYLE = _tab_qss()
-
-
-def find_child_by_tip(parent, tip):
-    """通过工具提示递归查找可见的子控件
-
-    参数：
-        parent: 父控件
-        tip: 工具提示文本
-
-    返回：
-        找到的控件，如果没有找到则返回 None
-    """
-    try:
-        # 遍历父控件的所有子控件
-        for w in parent.findChildren(QWidget):
-            try:
-                # 如果控件可见且有 toolTip 属性，且 toolTip 匹配
-                if w.isVisible() and hasattr(w, 'toolTip') and w.toolTip() == tip:
-                    # 返回找到的控件
-                    return w
-            except Exception:
-                continue
-    except Exception:
-        pass
-    # 没有找到返回 None
-    return None
-
-
-class _InlineStatusStrip(QWidget):
-    """内联状态栏控件，显示在窗口底部"""
-
-    def __init__(self, accent: str = "#4caf50", parent=None):
-        """初始化内联状态栏
-
-        参数：
-            accent: 强调色（用于图标颜色）
-            parent: 父对象
-        """
-        # 调用父类QWidget的构造函数
-        super().__init__(parent)
-        # 设置焦点策略为无焦点（阻止Windows原生蓝色焦点框）
-        self.setFocusPolicy(Qt.NoFocus)
-        # 保存强调色
-        self._accent = accent
-        # 当前图标颜色，初始为强调色
-        self._current_icon_color = accent
-        # 创建水平布局
-        layout = QHBoxLayout(self)
-        # 设置布局边距
-        layout.setContentsMargins(10, 4, 10, 4)
-        # 设置布局间距为8
-        layout.setSpacing(8)
-
-        # 图标标签（圆点）
-        self._icon = QLabel("●")
-        # 添加到布局
-        layout.addWidget(self._icon)
-
-        # 文本标签
-        self._label = QLabel("就绪")
-        # 设置字体为微软雅黑，大小11
-        self._label.setFont(QFont("Microsoft YaHei", 11))
-        # 添加到布局，拉伸因子为1
-        layout.addWidget(self._label, 1)
-
-        # 连接主题变化信号，刷新样式
-        connect_theme(self._refresh_qss)
-
-    def _refresh_qss(self):
-        """刷新样式表（主题变化时调用）"""
-        # 获取主题管理器
-        tm = theme_manager
-        # 获取各种颜色
-        bg = tm.color("bg_surface_deep").name()  # 深层背景色
-        border = tm.color("border").name()  # 边框色
-        text = tm.color("text_primary").name()  # 主文本色
-        # 设置控件样式
-        self.setStyleSheet(
-            f"background: {bg}; border-top: 1px solid {border}; outline: none;"
-        )
-        # 设置文本标签样式
-        self._label.setStyleSheet(
-            f"color: {text}; font-size: 11px; background: transparent;"
-        )
-        # 设置图标样式
-        self._icon.setStyleSheet(
-            f"color: {self._current_icon_color}; font-weight: bold; background: transparent;"
-        )
-
-    def set_status(self, text: str, color: str | None = None):
-        """设置状态文本和颜色
-
-        参数：
-            text: 状态文本
-            color: 图标颜色
-        """
-        # 设置文本标签内容
-        self._label.setText(text)
-        # 更新当前图标颜色（使用传入颜色或默认强调色）
-        self._current_icon_color = color or self._accent
-        # 更新图标样式
-        self._icon.setStyleSheet(
-            f"color: {self._current_icon_color}; font-weight: bold; background: transparent;"
-        )
-
-
-class _DiagramTabHeader(QWidget):
-    """图表标签页头部控件，包含名称编辑框和操作按钮"""
-
-    # 重命名请求信号
-    rename_requested = pyqtSignal(str)
-    # 运行请求信号
-    run_requested = pyqtSignal()
-    # 停止请求信号
-    stop_requested = pyqtSignal()
-    # 重置请求信号
-    reset_requested = pyqtSignal()
-
-    def __init__(self, name: str, parent=None):
-        """初始化图表标签页头部
-
-        参数：
-            name: 图表名称
-            parent: 父对象
-        """
-        # 调用父类QWidget的构造函数
-        super().__init__(parent)
-        # 创建水平布局
-        layout = QHBoxLayout(self)
-        # 设置布局边距
-        layout.setContentsMargins(6, 0, 6, 0)
-        # 设置布局间距为0
-        layout.setSpacing(0)
-
-        # 名称编辑框
-        self._name_edit = QLineEdit(name)
-        # 设置无边框
-        self._name_edit.setFrame(False)
-        # 设置固定高度22像素
-        self._name_edit.setFixedHeight(22)
-        # 设置最小宽度60像素
-        self._name_edit.setMinimumWidth(60)
-        # 连接编辑完成信号
-        self._name_edit.editingFinished.connect(self._emit_rename)
-        # 刷新样式
-        self._refresh_qss()
-        # 添加到布局，拉伸因子为1
-        layout.addWidget(self._name_edit, 1)
-
-    def _refresh_qss(self):
-        """刷新样式表（主题变化时调用）"""
-        # 获取主题管理器
-        tm = theme_manager
-        # 设置编辑框样式
-        self._name_edit.setStyleSheet(
-            f"QLineEdit {{ background: transparent; color: {tm.color('text_title').name()};"
-            f" border: none; padding: 0 2px; font-family: 'Microsoft YaHei'; font-size: 12px; }}"
-            f"QLineEdit:focus {{ border-bottom: 1px solid {tm.color('accent').name()}; }}"
-        )
-
-    def _emit_rename(self):
-        """发出重命名信号"""
-        # 获取编辑框文本（去除首尾空格）
-        name = self._name_edit.text().strip()
-        # 发出重命名信号
-        self.rename_requested.emit(name)
-
-    def set_name(self, name: str):
-        """设置图表名称
-
-        参数：
-            name: 图表名称
-        """
-        # 如果名称不同，更新编辑框文本
-        if self._name_edit.text() != name:
-            self._name_edit.setText(name)
-
-    def set_active(self, active: bool):
-        """设置激活状态
-
-        参数：
-            active: 是否激活
-        """
-        # 当前不需要额外处理，保留为空
-        pass
-
-
-class _SettingsDialog(QDialog):
-    """设置对话框
-
-    布局：QTabWidget 分组标签页 + 每个标签页内的导航框 + 底部按钮
-    """
-
-    def __init__(self, parent=None):
-        """初始化设置对话框
-
-        参数：
-            parent: 父对象
-        """
-        # 调用父类QDialog的构造函数
-        super().__init__(parent)
-        # 设置窗口标题
-        self.setWindowTitle("系统设置")
-        # 设置最小尺寸720x500
-        self.setMinimumSize(720, 500)
-        # 保存原始主题ID
-        self._original_theme = theme_manager.current_theme_id
-        # 设置UI
-        self._setup_ui()
-        # 加载设置
-        self._load_settings()
-
-    def _setup_ui(self):
-        """设置UI界面"""
-        # 创建垂直布局
-        layout = QVBoxLayout(self)
-        # 设置布局间距为0
-        layout.setSpacing(0)
-        # 创建标签页控件
-        self._group_tabs = QTabWidget()
-        # 添加到布局，拉伸因子为1
-        layout.addWidget(self._group_tabs, 1)
-        # 构建主题标签页
-        self._build_theme_tab()
-        # 构建基本设置标签页
-        self._build_basic_tab()
-        # 构建设置标签页
-        self._build_display_tab()
-        # 创建按钮行
-        btn_row = QHBoxLayout()
-        # 设置按钮行边距
-        btn_row.setContentsMargins(10, 8, 10, 8)
-        # 添加弹性空间
-        btn_row.addStretch()
-        # 恢复默认按钮
-        restore_btn = QPushButton("恢复默认")
-        # 连接点击信号
-        restore_btn.clicked.connect(self._on_restore_default)
-        # 添加到按钮行
-        btn_row.addWidget(restore_btn)
-        # 取消按钮
-        cancel_btn = QPushButton("取消")
-        # 连接点击信号
-        cancel_btn.clicked.connect(self._on_cancel)
-        # 添加到按钮行
-        btn_row.addWidget(cancel_btn)
-        # 确定按钮
-        ok_btn = QPushButton("确定")
-        # 设置为默认按钮
-        ok_btn.setDefault(True)
-        # 连接点击信号
-        ok_btn.clicked.connect(self.accept)
-        # 添加到按钮行
-        btn_row.addWidget(ok_btn)
-        # 添加按钮行到布局
-        layout.addLayout(btn_row)
-
-    # -- 导航框辅助方法 --
-    def _make_nav_box(self):
-        """创建导航框（分割器 + 导航列表 + 堆叠窗口）
-
-        返回：
-            (分割器, 导航列表, 堆叠窗口) 元组
-        """
-        # 创建水平分割器
-        box = QSplitter(Qt.Horizontal)
-        # 创建导航列表
-        nav = QListWidget()
-        # 设置固定宽度130像素
-        nav.setFixedWidth(130)
-        # 设置间距为0
-        nav.setSpacing(0)
-        # 创建堆叠窗口
-        stack = QStackedWidget()
-        # 添加导航列表到分割器
-        box.addWidget(nav)
-        # 添加堆叠窗口到分割器
-        box.addWidget(stack)
-        # 连接导航列表当前行变化信号
-        nav.currentRowChanged.connect(stack.setCurrentIndex)
-        # 返回分割器、导航列表、堆叠窗口
-        return box, nav, stack
-
-    @staticmethod
-    def _add_nav_item(nav, stack, name, page):
-        """添加导航项
-
-        参数：
-            nav: 导航列表
-            stack: 堆叠窗口
-            name: 项名称
-            page: 页面控件
-        """
-        # 添加列表项
-        nav.addItem(QListWidgetItem(name))
-        # 添加页面到堆叠窗口
-        stack.addWidget(page)
-
-    # -- Tab 1: 主题  --
-    def _build_theme_tab(self):
-        """构建主题标签页"""
-        # 创建导航框
-        box, nav, stack = self._make_nav_box()
-        # 创建页面（滚动区域）
-        page = QScrollArea()
-        # 设置控件可调整大小
-        page.setWidgetResizable(True)
-        # 设置无边框
-        page.setFrameShape(QScrollArea.NoFrame)
-        # 创建页面控件
-        pw = QWidget()
-        # 创建垂直布局
-        vl = QVBoxLayout(pw)
-        # 设置布局间距为10
-        vl.setSpacing(10)
-        # 添加说明标签
-        vl.addWidget(QLabel("选择颜色主题，即时预览："))
-        # 按分组收集主题
-        groups = {}
-        # 遍历所有可用主题
-        for t in theme_manager.available_themes:
-            groups.setdefault(t.group, []).append(t)
-        # 按顺序处理分组
-        for group_name in ["强力推荐", "纯色", "外部主题"]:
-            # 如果分组不存在，跳过
-            if group_name not in groups:
-                continue
-            # 创建分组框
-            gb = QGroupBox(group_name)
-            # 创建网格布局
-            grid = QGridLayout()
-            # 设置网格间距为8
-            grid.setSpacing(8)
-            # 遍历分组中的主题
-            for i, tdef in enumerate(groups[group_name]):
-                # 创建主题卡片
-                card = self._make_theme_card(tdef)
-                # 添加到网格布局（每行2列）
-                grid.addWidget(card, i // 2, i % 2)
-            # 设置分组框布局
-            gb.setLayout(grid)
-            # 添加到垂直布局
-            vl.addWidget(gb)
-        # 添加弹性空间
-        vl.addStretch()
-        # 设置滚动区域控件
-        page.setWidget(pw)
-        # 添加导航项
-        self._add_nav_item(nav, stack, "颜色主题", page)
-        # 设置选中第一项
-        nav.setCurrentRow(0)
-        # 添加标签页
-        self._group_tabs.addTab(box, "主题")
-
-    def _make_theme_card(self, tdef):
-        """创建主题卡片
-
-        参数：
-            tdef: 主题定义
-
-        返回：
-            卡片控件
-        """
-        # 解析主题颜色
-        c = tdef.resolve()
-        # 创建卡片框架
-        card = QFrame()
-        # 设置固定大小200x100
-        card.setFixedSize(200, 100)
-        # 设置光标为手指形状
-        card.setCursor(Qt.PointingHandCursor)
-        # 设置工具提示
-        card.setToolTip(f"{tdef.name} - {tdef.description}")
-        # 检查是否为当前主题
-        is_current = tdef.id == theme_manager.current_theme_id
-        # 边框颜色：当前主题使用强调色，否则使用边框色
-        border = c.get("accent", "#3399FF") if is_current else c.get("border", "#555")
-        # 边框宽度：当前主题为2，否则为1
-        bw = 2 if is_current else 1
-        # 设置卡片样式
-        card.setStyleSheet(
-            f"QFrame {{ background: {c.get('bg_surface', '#333')}; "
-            f"border: {bw}px solid {border}; border-radius: 6px; }}")
-        # 设置鼠标按下事件
-        card.mousePressEvent = lambda e, tid=tdef.id: self._on_theme_select(tid)
-        # 创建内部垂直布局
-        inner = QVBoxLayout(card)
-        # 设置布局边距
-        inner.setContentsMargins(8, 6, 8, 6)
-        # 设置布局间距为3
-        inner.setSpacing(3)
-        # 提示标签
-        p = QLabel(f"[{tdef.prompt or tdef.name}]")
-        p.setAlignment(Qt.AlignCenter)
-        p.setStyleSheet(f"color: {c.get('text_title', '#ccc')}; font-weight: bold; "
-                        f"border: none; background: transparent;")
-        inner.addWidget(p)
-        # 名称标签
-        n = QLabel(tdef.name)
-        n.setAlignment(Qt.AlignCenter)
-        n.setStyleSheet(f"color: {c.get('text_primary', '#ccc')}; border: none; background: transparent;")
-        inner.addWidget(n)
-        # 描述标签
-        d = QLabel(tdef.description or "")
-        d.setAlignment(Qt.AlignCenter)
-        d.setWordWrap(True)
-        d.setStyleSheet(f"color: {c.get('text_secondary', '#999')}; font-size: 9px; "
-                        f"border: none; background: transparent;")
-        inner.addWidget(d)
-        return card
-
-    def _on_theme_select(self, theme_id):
-        """主题选择回调
-
-        参数：
-            theme_id: 主题ID
-        """
-        # 切换主题
-        theme_manager.set_theme(theme_id)
-
-    # -- Tab 2: 基本设置 --
-    def _build_basic_tab(self):
-        """构建基本设置标签页"""
-        # 创建导航框
-        box, nav, stack = self._make_nav_box()
-        # 创建页面（滚动区域）
-        page = QScrollArea()
-        # 设置控件可调整大小
-        page.setWidgetResizable(True)
-        # 设置无边框
-        page.setFrameShape(QScrollArea.NoFrame)
-        # 创建页面控件
-        pw = QWidget()
-        # 创建垂直布局
-        vl = QVBoxLayout(pw)
-        # 创建分组框
-        gb = QGroupBox("通用设置")
-        # 创建表单布局
-        form = QFormLayout(gb)
-        # 开机自动启动复选框
-        self._chk_auto_start = QCheckBox()
-        form.addRow("开机自动启动：", self._chk_auto_start)
-        # 任务栏显示图标复选框
-        self._chk_tray = QCheckBox()
-        form.addRow("任务栏显示图标：", self._chk_tray)
-        # 显示主题按钮复选框
-        self._chk_theme_btn = QCheckBox()
-        form.addRow("显示主题按钮：", self._chk_theme_btn)
-        # 添加分组框到布局
-        vl.addWidget(gb)
-        # 添加弹性空间
-        vl.addStretch()
-        # 设置滚动区域控件
-        page.setWidget(pw)
-        # 添加导航项
-        self._add_nav_item(nav, stack, "通用设置", page)
-        # 设置选中第一项
-        nav.setCurrentRow(0)
-        # 添加标签页
-        self._group_tabs.addTab(box, "基本设置")
-
-    # -- Tab 3: 显示设置 --
-    def _build_display_tab(self):
-        """构建设置标签页"""
-        # 创建导航框
-        box, nav, stack = self._make_nav_box()
-        # 创建页面（滚动区域）
-        page = QScrollArea()
-        # 设置控件可调整大小
-        page.setWidgetResizable(True)
-        # 设置无边框
-        page.setFrameShape(QScrollArea.NoFrame)
-        # 创建页面控件
-        pw = QWidget()
-        # 创建垂直布局
-        vl = QVBoxLayout(pw)
-        # 创建分组框
-        gb = QGroupBox("画布设置")
-        # 创建表单布局
-        form = QFormLayout(gb)
-        # 显示画布网格复选框
-        self._chk_show_grid = QCheckBox()
-        form.addRow("显示画布网格：", self._chk_show_grid)
-        # 添加分组框到布局
-        vl.addWidget(gb)
-        # 添加弹性空间
-        vl.addStretch()
-        # 设置滚动区域控件
-        page.setWidget(pw)
-        # 添加导航项
-        self._add_nav_item(nav, stack, "画布设置", page)
-        # 设置选中第一项
-        nav.setCurrentRow(0)
-        # 添加标签页
-        self._group_tabs.addTab(box, "显示设置")
-
-    # -- 持久化 --
-    def _config_path(self):
-        """获取配置文件路径
-
-        返回：
-            配置文件路径
-        """
-        # 配置文件位于当前文件所在目录的父目录下
-        return os.path.join(os.path.dirname(os.path.dirname(__file__)), "app_config.json")
-
-    def _load_settings(self):
-        """加载设置"""
-        try:
-            # 打开配置文件
-            with open(self._config_path(), "r", encoding="utf-8") as f:
-                # 解析JSON数据
-                data = json.load(f)
-        except Exception:
-            # 出错时使用空字典
-            data = {}
-        # 设置复选框状态
-        self._chk_auto_start.setChecked(data.get("auto_start", False))
-        self._chk_tray.setChecked(data.get("show_tray", True))
-        self._chk_theme_btn.setChecked(data.get("show_theme_btn", True))
-        self._chk_show_grid.setChecked(data.get("show_grid", True))
-
-    def _save_settings(self):
-        """保存设置"""
-        # 构建数据字典
-        data = {
-            "auto_start": self._chk_auto_start.isChecked(),
-            "show_tray": self._chk_tray.isChecked(),
-            "show_theme_btn": self._chk_theme_btn.isChecked(),
-            "show_grid": self._chk_show_grid.isChecked(),
-        }
-        # 写入配置文件
-        with open(self._config_path(), "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-
-    def _on_restore_default(self):
-        """恢复默认设置"""
-        # 恢复复选框默认值
-        self._chk_auto_start.setChecked(False)
-        self._chk_tray.setChecked(True)
-        self._chk_theme_btn.setChecked(False)
-        self._chk_show_grid.setChecked(True)
-        # 如果当前主题与原始主题不同
-        if self._original_theme != theme_manager.current_theme_id:
-            # 恢复原始主题
-            theme_manager.set_theme(self._original_theme)
-
-    def _on_cancel(self):
-        """取消按钮处理"""
-        # 如果当前主题与原始主题不同
-        if self._original_theme != theme_manager.current_theme_id:
-            # 恢复原始主题
-            theme_manager.set_theme(self._original_theme)
-        # 重新加载设置
-        self._load_settings()
-        # 拒绝对话框
-        self.reject()
-
-    def accept(self):
-        """确定按钮处理"""
-        # 保存设置
-        self._save_settings()
-        # 调用父类的accept方法
-        super().accept()
 
 
 class MainWindow(QMainWindow):
@@ -913,12 +87,15 @@ class MainWindow(QMainWindow):
         self._workflow: WorkflowEngine | None = None
         # 当前选中的节点
         self._selected_node: NodeBase | None = None
+        # 主题相关 QSS（工具栏按钮、标签页），主题切换时更新
+        self._cmd_btn = cmd_btn_qss()
+        self._tab_style = tab_qss()
         # 流程图编辑器控件
         self._diagram_editor: DiagramEditorWidget | None = None
         # 流程图页面缓存字典
         self._diagram_pages: dict[str, QWidget] = {}
         # 流程图标签页头部组件缓存字典
-        self._diagram_headers: dict[str, _DiagramTabHeader] = {}
+        self._diagram_headers: dict[str, DiagramTabHeader] = {}
         # 项目是否已加载标志
         self._project_loaded = False
         # 是否处于连续运行模式
@@ -938,7 +115,7 @@ class MainWindow(QMainWindow):
         # 右侧面板是否可见，初始为True
         self._right_panel_visible = True
         # 保存的右侧面板宽度（从QSettings加载，默认420）
-        self._saved_right_width = _ps.get_i("right_width", 420)
+        self._saved_right_width = panel_state.get_i("right_width", 420)
         # 加载共享的UI布局配置文件
         self._ui_layout_profile = self._load_shared_ui_layout_profile()
         # 计算UI布局度量（为了适应不同屏幕显示一样的画面）
@@ -1056,7 +233,7 @@ class MainWindow(QMainWindow):
             UI布局配置字典，如果不存在则返回None
         """
         # 从根目录的 app_config.json 中加载 ui_layout_profile
-        profile = _load_app_config().get("ui_layout_profile")
+        profile = load_app_config().get("ui_layout_profile")
         # 确保返回的是字典类型
         return profile if isinstance(profile, dict) else None
 
@@ -1070,7 +247,7 @@ class MainWindow(QMainWindow):
         screen = QApplication.primaryScreen()
         # 如果屏幕不存在，返回默认尺寸
         if screen is None:
-            return _DEFAULT_WINDOW_WIDTH, _DEFAULT_WINDOW_HEIGHT
+            return DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT
         # 获取屏幕可用几何区域
         geometry = screen.availableGeometry()
         # 获取宽度，至少为1
@@ -1101,19 +278,19 @@ class MainWindow(QMainWindow):
             布局度量字典
         """
         # 从QSettings加载左侧面板宽度
-        left_width = _ps.get_i("left_width", _DEFAULT_LEFT_WIDTH)
+        left_width = panel_state.get_i("left_width", DEFAULT_LEFT_WIDTH)
         # 从QSettings加载底部面板高度
-        bottom_height = _ps.get_i("bottom_height", _DEFAULT_BOTTOM_HEIGHT)
+        bottom_height = panel_state.get_i("bottom_height", DEFAULT_BOTTOM_HEIGHT)
         # 默认度量值
         metrics = {
-            "window_width": _ps.get_i("window_width", _DEFAULT_WINDOW_WIDTH),  # 窗口宽度
-            "window_height": _ps.get_i("window_height", _DEFAULT_WINDOW_HEIGHT),  # 窗口高度
+            "window_width": panel_state.get_i("window_width", DEFAULT_WINDOW_WIDTH),  # 窗口宽度
+            "window_height": panel_state.get_i("window_height", DEFAULT_WINDOW_HEIGHT),  # 窗口高度
             "left_width": left_width,  # 左侧面板宽度
-            "right_width": _DEFAULT_RIGHT_WIDTH,  # 右侧面板宽度
-            "center_height": _DEFAULT_CENTER_HEIGHT,  # 中央区域高度
+            "right_width": DEFAULT_RIGHT_WIDTH,  # 右侧面板宽度
+            "center_height": DEFAULT_CENTER_HEIGHT,  # 中央区域高度
             "bottom_height": bottom_height,  # 底部面板高度
-            "resource_height": _DEFAULT_RESOURCE_HEIGHT,  # 资源面板高度
-            "caption_height": _DEFAULT_CAPTION_HEIGHT,  # 标题栏高度
+            "resource_height": DEFAULT_RESOURCE_HEIGHT,  # 资源面板高度
+            "caption_height": DEFAULT_CAPTION_HEIGHT,  # 标题栏高度
         }
 
         # 获取UI布局配置
@@ -1205,16 +382,16 @@ class MainWindow(QMainWindow):
         # 获取屏幕可用尺寸
         screen_width, screen_height = self._screen_available_size()
         # 获取左侧面板宽度
-        left_width = self._left_box.menu_width() if hasattr(self, "_left_box") else _DEFAULT_LEFT_WIDTH
+        left_width = self._left_box.menu_width() if hasattr(self, "_left_box") else DEFAULT_LEFT_WIDTH
         # 获取右侧面板宽度
-        right_width = self._right_panel.width() if hasattr(self, "_right_panel") and self._right_panel.width() > 0 else _DEFAULT_RIGHT_WIDTH
+        right_width = self._right_panel.width() if hasattr(self, "_right_panel") and self._right_panel.width() > 0 else DEFAULT_RIGHT_WIDTH
         # 获取中央区域高度
-        center_height = self._center_splitter.widget(0).height() if hasattr(self, "_center_splitter") else _DEFAULT_CENTER_HEIGHT
+        center_height = self._center_splitter.widget(0).height() if hasattr(self, "_center_splitter") else DEFAULT_CENTER_HEIGHT
         # 如果中央区域高度无效，使用默认值
         if center_height <= 0:
-            center_height = _DEFAULT_CENTER_HEIGHT
+            center_height = DEFAULT_CENTER_HEIGHT
         # 获取底部面板高度
-        bottom_height = _ps.get_i("bottom_height", _DEFAULT_BOTTOM_HEIGHT)
+        bottom_height = panel_state.get_i("bottom_height", DEFAULT_BOTTOM_HEIGHT)
         # 如果有中央分割器，获取其大小
         if hasattr(self, "_center_splitter"):
             sizes = self._center_splitter.sizes()
@@ -1222,10 +399,10 @@ class MainWindow(QMainWindow):
                 bottom_height = sizes[1]
 
         # 加载应用配置
-        data = _load_app_config()
+        data = load_app_config()
         # 保存UI布局配置
         data["ui_layout_profile"] = {
-            "version": _UI_PROFILE_VERSION,                                    # 配置文件版本
+            "version": UI_PROFILE_VERSION,                                    # 配置文件版本
             "screen": {                                                        # 屏幕信息
                 "width": screen_width,                                         # 屏幕宽度
                 "height": screen_height,                                       # 屏幕高度
@@ -1239,12 +416,12 @@ class MainWindow(QMainWindow):
                 "right_width": right_width,                                    # 右侧面板宽度
                 "center_height": center_height,                                # 中央区域高度
                 "bottom_height": bottom_height,                                # 底部面板高度
-                "resource_height": self._resource_panel.height() if hasattr(self, "_resource_panel") and self._resource_panel.height() > 0 else _DEFAULT_RESOURCE_HEIGHT,  # 资源面板高度
-                "caption_height": self._caption_bar.height() if hasattr(self, "_caption_bar") and self._caption_bar.height() > 0 else _DEFAULT_CAPTION_HEIGHT,  # 标题栏高度
+                "resource_height": self._resource_panel.height() if hasattr(self, "_resource_panel") and self._resource_panel.height() > 0 else DEFAULT_RESOURCE_HEIGHT,  # 资源面板高度
+                "caption_height": self._caption_bar.height() if hasattr(self, "_caption_bar") and self._caption_bar.height() > 0 else DEFAULT_CAPTION_HEIGHT,  # 标题栏高度
             },
         }
         # 保存应用配置
-        _save_app_config(data)
+        save_app_config(data)
         # 更新UI布局配置
         self._ui_layout_profile = data["ui_layout_profile"]
         # 清除待捕获标志
@@ -1404,13 +581,13 @@ class MainWindow(QMainWindow):
             # 创建字体图标按钮
             btn = FontIconButton(icon, tooltip=tip, font_size=16)
             # 设置样式
-            btn.setStyleSheet(_CMD_BTN)
+            btn.setStyleSheet(self._cmd_btn)
             # 连接点击信号
             btn.clicked.connect(slot)
             # 添加到布局
             tb.addWidget(btn)
         # 添加分隔线
-        tb.addWidget(_hsep())
+        tb.addWidget(vsep())
 
         # 按钮组2 — 项目级命令
         # 创建项目命令工具栏容器
@@ -1434,7 +611,7 @@ class MainWindow(QMainWindow):
             # 创建字体图标按钮
             btn = FontIconButton(icon, tooltip=tip, font_size=16)
             # 设置样式
-            btn.setStyleSheet(_CMD_BTN)
+            btn.setStyleSheet(self._cmd_btn)
             # 如果有槽函数，连接点击信号
             if slot:
                 btn.clicked.connect(slot)
@@ -1446,7 +623,7 @@ class MainWindow(QMainWindow):
         # 添加到工具栏
         tb.addWidget(self._tool_project_cmds)
         # 添加分隔线
-        tb.addWidget(_hsep())
+        tb.addWidget(vsep())
 
         # 按钮组3 — 图表命令
         # 创建图表命令工具栏容器
@@ -1474,7 +651,7 @@ class MainWindow(QMainWindow):
             # 创建字体图标按钮
             btn = FontIconButton(icon, tooltip=tip, font_size=16)
             # 设置样式
-            btn.setStyleSheet(_CMD_BTN)
+            btn.setStyleSheet(self._cmd_btn)
             # 如果有槽函数，连接点击信号
             if slot:
                 btn.clicked.connect(slot)
@@ -1492,13 +669,13 @@ class MainWindow(QMainWindow):
         # 添加到工具栏
         tb.addWidget(self._tool_diagram_cmds)
         # 添加分隔线
-        tb.addWidget(_hsep())
+        tb.addWidget(vsep())
 
         # 按钮组4 — 查看 | 标签页编辑
         # 创建查看按钮
         # self._tool_view_btn = FontIconButton(FontIcons.View, tooltip="查看", font_size=16)
         # 设置样式
-        # self._tool_view_btn.setStyleSheet(_CMD_BTN)
+        # self._tool_view_btn.setStyleSheet(self._cmd_btn)
         # 添加到布局
         # tb.addWidget(self._tool_view_btn)
 
@@ -1522,7 +699,7 @@ class MainWindow(QMainWindow):
             # 创建字体图标按钮
             btn = FontIconButton(icon, tooltip=tip, font_size=16)
             # 设置样式
-            btn.setStyleSheet(_CMD_BTN)
+            btn.setStyleSheet(self._cmd_btn)
             # 如果有槽函数，连接点击信号
             if slot:
                 btn.clicked.connect(slot)
@@ -1534,7 +711,7 @@ class MainWindow(QMainWindow):
         # 设置工具提示
         self._theme_toggle.setToolTip("切换明/暗主题")
         # 设置样式
-        self._theme_toggle.setStyleSheet(_CMD_BTN + """
+        self._theme_toggle.setStyleSheet(self._cmd_btn + """
             FontIconToggleButton:checked { color: #dcdcdc; }
             FontIconToggleButton:checked:hover { background: #3e3e42; }
         """)
@@ -1553,7 +730,7 @@ class MainWindow(QMainWindow):
             # 创建字体图标按钮
             btn = FontIconButton(icon, tooltip=tip, font_size=16)
             # 设置样式
-            btn.setStyleSheet(_CMD_BTN)
+            btn.setStyleSheet(self._cmd_btn)
             # 如果有槽函数，连接点击信号
             if slot:
                 btn.clicked.connect(slot)
@@ -1740,10 +917,10 @@ class MainWindow(QMainWindow):
         # 获取窗口几何信息
         g = self.geometry()
         # 判断鼠标位置是否在边框区域内
-        on_left = x < g.x() + _BORDER          # 左侧边框
-        on_right = x > g.x() + g.width() - _BORDER  # 右侧边框
-        on_top = y < g.y() + _BORDER           # 顶部边框
-        on_bottom = y > g.y() + g.height() - _BORDER  # 底部边框
+        on_left = x < g.x() + BORDER          # 左侧边框
+        on_right = x > g.x() + g.width() - BORDER  # 右侧边框
+        on_top = y < g.y() + BORDER           # 顶部边框
+        on_bottom = y > g.y() + g.height() - BORDER  # 底部边框
 
         # 根据鼠标位置返回对应的命中测试结果
         if on_top and on_left:
@@ -1904,7 +1081,7 @@ class MainWindow(QMainWindow):
         # 创建中央标签页控件
         self._center_tabs = QTabWidget()
         # 设置标签页样式
-        self._center_tabs.setStyleSheet(_TAB_STYLE)
+        self._center_tabs.setStyleSheet(self._tab_style)
 
         # 创建图像查看器面板
         self._img_panel = ImageViewerPanel()
@@ -1950,7 +1127,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._resource_panel)
 
         # 创建侧边状态栏
-        self._side_status_strip = _InlineStatusStrip("#4caf50")
+        self._side_status_strip = InlineStatusStrip("#4caf50")
         # 设置初始状态文本
         self._side_status_strip.set_status("等待选择节点")
         # 添加到布局
@@ -1970,7 +1147,7 @@ class MainWindow(QMainWindow):
         # 包装在容器中，以便切换/角按钮正常工作
         self._bottom_tabs = self._result_panel._tabs
         # 设置标签页样式
-        self._bottom_tabs.setStyleSheet(_TAB_STYLE)
+        self._bottom_tabs.setStyleSheet(self._tab_style)
         # 设置最小高度为120像素
         self._bottom_tabs.setMinimumHeight(120)
 
@@ -2008,7 +1185,7 @@ class MainWindow(QMainWindow):
         # 创建图表标签页控件
         self._diagram_tab_widget = QTabWidget()
         # 设置标签页样式
-        self._diagram_tab_widget.setStyleSheet(_TAB_STYLE)
+        self._diagram_tab_widget.setStyleSheet(self._tab_style)
         # 设置标签页不可关闭
         self._diagram_tab_widget.setTabsClosable(False)
         # 连接标签页关闭请求信号
@@ -2021,7 +1198,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._diagram_tab_widget, 1)
 
         # 创建图表状态栏
-        self._diagram_status_strip = _InlineStatusStrip("#4caf50")
+        self._diagram_status_strip = InlineStatusStrip("#4caf50")
         # 设置初始状态文本
         self._diagram_status_strip.set_status("流程图就绪")
         # 添加到布局
@@ -2042,14 +1219,14 @@ class MainWindow(QMainWindow):
         # 添加到状态栏
         status.addWidget(self._state_lbl)
         # 添加分隔线
-        status.addWidget(_hsep())
+        status.addWidget(vsep())
 
         # 创建消息标签
         self._msg_lbl = QLabel("就绪")
         # 添加到状态栏，拉伸因子为1
         status.addWidget(self._msg_lbl, 1)
         # 添加分隔线
-        status.addWidget(_hsep())
+        status.addWidget(vsep())
 
         # 创建节点计数标签
         self._node_cnt_lbl = QLabel("节点: 0")
@@ -2120,27 +1297,27 @@ class MainWindow(QMainWindow):
         # 同步工作流到项目
         self._sync_workflow_to_project()
         # 保存窗口宽度到QSettings
-        _ps.set_i("window_width", self.width())
+        panel_state.set_i("window_width", self.width())
         # 保存窗口高度到QSettings
-        _ps.set_i("window_height", self.height())
+        panel_state.set_i("window_height", self.height())
         # 如果有左侧面板
         if hasattr(self, "_left_box"):
             # 保存左侧面板宽度
-            _ps.set_i("left_width", self._left_box.menu_width())
+            panel_state.set_i("left_width", self._left_box.menu_width())
             # 获取中央+右侧分割器的大小
             inner_sizes = self._center_right_splitter.sizes()
             # 如果有右侧面板且可见，保存右侧面板宽度
             if len(inner_sizes) >= 2 and self._right_panel_visible:
-                _ps.set_i("right_width", inner_sizes[1])
+                panel_state.set_i("right_width", inner_sizes[1])
             # 获取中央分割器的大小
             center_sizes = self._center_splitter.sizes()
             if len(center_sizes) >= 2:
                 # 保存底部面板高度
-                _ps.set_i("bottom_height", center_sizes[1])
+                panel_state.set_i("bottom_height", center_sizes[1])
         # 保存左侧面板可见性
-        _ps.set_b("left_visible", self._left_panel_visible)
+        panel_state.set_b("left_visible", self._left_panel_visible)
         # 保存右侧面板可见性
-        _ps.set_b("right_visible", self._right_panel_visible)
+        panel_state.set_b("right_visible", self._right_panel_visible)
         # 停止时钟定时器
         self._clock.stop()
         # 调用父类的closeEvent
@@ -2152,17 +1329,17 @@ class MainWindow(QMainWindow):
         if self._ui_layout_profile:
             left_width = self._ui_layout_metrics["left_width"]
         else:
-            left_width = _ps.get_i("left_width", 280)
+            left_width = panel_state.get_i("left_width", 280)
         # 获取右侧面板宽度
         if self._ui_layout_profile:
             right_width = self._ui_layout_metrics["right_width"]
         else:
-            right_width = _ps.get_i("right_width", 420)
+            right_width = panel_state.get_i("right_width", 420)
         # 获取底部面板高度
         if self._ui_layout_profile:
             bottom_height = self._ui_layout_metrics["bottom_height"]
         else:
-            bottom_height = _ps.get_i("bottom_height", 180)
+            bottom_height = panel_state.get_i("bottom_height", 180)
 
         # 设置左侧面板宽度
         self._left_box.set_menu_width(left_width)
@@ -2172,9 +1349,9 @@ class MainWindow(QMainWindow):
         self._center_splitter.setSizes([max(380, self.height() - bottom_height - 140), bottom_height])
 
         # 获取左侧面板可见性
-        self._left_panel_visible = _ps.get_b("left_visible", True)
+        self._left_panel_visible = panel_state.get_b("left_visible", True)
         # 获取右侧面板可见性
-        self._right_panel_visible = _ps.get_b("right_visible", True)
+        self._right_panel_visible = panel_state.get_b("right_visible", True)
         # 如果左侧面板不可见
         if not self._left_panel_visible:
             # 切换左侧面板
@@ -2424,7 +1601,7 @@ class MainWindow(QMainWindow):
             diagram: 图表数据
         """
         # 创建图表标签页头部
-        header = _DiagramTabHeader(diagram.name, self._diagram_tab_widget.tabBar())
+        header = DiagramTabHeader(diagram.name, self._diagram_tab_widget.tabBar())
         # 连接重命名请求信号
         header.rename_requested.connect(lambda text, current=diagram: self._rename_diagram(current, text))
         # 连接运行请求信号
@@ -3952,14 +3129,14 @@ class MainWindow(QMainWindow):
         # 如果底部面板当前可见
         if self._bottom_visible:
             # 保存当前底部面板高度
-            _ps.set_i("bottom_height_saved", sizes[1])
+            panel_state.set_i("bottom_height_saved", sizes[1])
             # 将底部面板高度设为0（隐藏）
             self._center_splitter.setSizes([sizes[0] + sizes[1], 0])
             # 切换按钮文本为向上箭头
             self._bottom_toggle.setText("▲")
         else:
             # 获取保存的底部面板高度，默认180
-            saved = _ps.get_i("bottom_height_saved", 180)
+            saved = panel_state.get_i("bottom_height_saved", 180)
             # 计算总高度
             total = sum(sizes)
             # 计算新的底部面板高度（不超过总高度减去220）
@@ -4136,7 +3313,7 @@ class MainWindow(QMainWindow):
     def _on_open_settings(self):
         """打开设置对话框"""
         # 创建设置对话框
-        dlg = _SettingsDialog(self)
+        dlg = SettingsDialog(self)
         # 如果用户确认
         if dlg.exec_() == QDialog.Accepted:
             # 应用设置
@@ -4154,15 +3331,7 @@ class MainWindow(QMainWindow):
 
     def _apply_settings(self):
         """将持久化设置应用到UI"""
-        import json, os
-        # 获取配置文件路径
-        path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "app_config.json")
-        try:
-            # 读取配置文件
-            with open(path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-        except Exception:
-            data = {}
+        data = load_app_config()
 
         # 显示/隐藏主题切换按钮
         if hasattr(self, '_theme_toggle'):
@@ -4225,24 +3394,22 @@ class MainWindow(QMainWindow):
 
     def _reapply_widget_styles(self):
         """重新应用动态QSS到有内联样式的控件"""
-        global _CMD_BTN, _TAB_STYLE
-        # 更新全局样式
-        _CMD_BTN = _cmd_btn_qss()
-        _TAB_STYLE = _tab_qss()
+        self._cmd_btn = cmd_btn_qss()
+        self._tab_style = tab_qss()
         # 获取主题管理器
         tm = theme_manager
         # 主题切换按钮样式
         if hasattr(self, '_theme_toggle'):
-            self._theme_toggle.setStyleSheet(_CMD_BTN + f"""
+            self._theme_toggle.setStyleSheet(self._cmd_btn + f"""
                 FontIconToggleButton:checked {{ color: {tm.color('text_primary').name()}; }}
                 FontIconToggleButton:checked:hover {{ background: {tm.color('bg_surface_hover').name()}; }}
             """)
         # 图表标签页控件（包含"新项目"、流程图标签页）
         if hasattr(self, '_diagram_tab_widget'):
-            self._diagram_tab_widget.setStyleSheet(_TAB_STYLE)
+            self._diagram_tab_widget.setStyleSheet(self._tab_style)
         # 中央标签页（图像 / 模块结果 / 帮助）
         if hasattr(self, '_center_tabs'):
-            self._center_tabs.setStyleSheet(_TAB_STYLE)
+            self._center_tabs.setStyleSheet(self._tab_style)
 
     def _apply_theme(self):
         """重新应用主题到所有控件"""
@@ -4259,7 +3426,7 @@ class MainWindow(QMainWindow):
 
         # 3. 重新应用工具栏按钮（每个按钮在创建时都有自己的QSS）
         self._reapply_widget_styles()
-        cmd = _CMD_BTN  # 当前主题的QSS
+        cmd = self._cmd_btn  # 当前主题的QSS
         # 遍历所有按钮，重新应用样式
         for btn in self.findChildren(QPushButton):
             s = btn.styleSheet()
