@@ -1,7 +1,7 @@
 """裁剪节点 — 根据 ROI 设置裁剪输入图像并输出裁剪后的区域。
 """
 
-from core.node_base import OpenCVNodeDataBase
+from core.node_selectable import OpenCVNodeDataBase
 from core.data_packet import FlowableResult
 
 

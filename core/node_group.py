@@ -20,9 +20,8 @@
   10901 - 结果输出模块 (OutputDataGroup)
   11000 - 视频处理模块 (VideoDataGroup)
 """
-
+import inspect
 from typing import Type
-
 from core.node_base import NodeBase
 
 
@@ -86,6 +85,11 @@ class NodeDataGroupBase:
 
     # -- 分组管理 --
 
+    def clear(self):
+        """清空所有分组和节点注册"""
+        self._groups.clear()
+        self._node_registry.clear()
+
     def add_group(self, group: NodeGroup):
         """添加一个节点分组"""
         self._groups[group.name] = group
@@ -132,11 +136,10 @@ class NodeDataGroupBase:
     # -- 发现功能 --
 
     def discover_module(self, module, group_prefix: str = ""):
-        """发现模块中的 NodeBase 子类并注册它们。
-
+        """
+        发现模块中的 NodeBase 子类并注册它们。
         每个类必须有一个 `group` 类属性或 `__group__` 属性来指定所属分组。
         """
-        import inspect
         # 遍历模块中的所有成员
         for name, obj in inspect.getmembers(module, inspect.isclass):
             # 只处理 NodeBase 的子类且不是 NodeBase 本身

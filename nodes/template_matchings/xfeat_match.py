@@ -7,7 +7,8 @@
 import cv2
 import numpy as np
 
-from core.node_base import Base64MatchingNodeData, OpenCVNodeDataBase, Property, PropertyGroupNames
+from core.node_base import Property, PropertyGroupNames
+from core.node_selectable import Base64MatchingNodeData, OpenCVNodeDataBase
 from core.data_packet import FlowableResult
 from nodes.template_matchings.template_base import ITemplateMatchingGroupableNode
 

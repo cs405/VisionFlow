@@ -13,8 +13,6 @@ from typing import Any
 import threading
 
 
-# 场景对象类型：GUI 层的 QGraphicsScene 或其适配器。
-# 使用 Any 避免 core 层直接依赖 PyQt5.QtWidgets。
 SceneType = Any
 
 

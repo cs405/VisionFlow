@@ -13,8 +13,8 @@ from core.events import EventType, event_system
 
 
 class WorkflowRunner:
-    """在后台线程上管理工作流执行生命周期。
-
+    """
+    在后台线程上管理工作流执行生命周期。
     将线程和循环逻辑与 UI 层解耦。
     UI 监听 WorkflowEngine 事件（WORKFLOW_STARTED、NODE_COMPLETED、WORKFLOW_COMPLETED 等）来更新自身。
 
@@ -29,24 +29,18 @@ class WorkflowRunner:
 
     def __init__(self):
         """初始化工作流运行器"""
-        # 绑定的工作流引擎，初始为None
-        self._workflow: WorkflowEngine | None = None
-        # 后台线程对象，初始为None
-        self._thread: threading.Thread | None = None
-        # 停止事件，用于线程间通信
-        self._stop_event = threading.Event()
-        # 是否连续运行模式标志
-        self._continuous = False
-        # 单次执行完成标记（后台线程设置，主线程轮询，避免跨线程信号不可靠）
-        self._run_finished = threading.Event()
+        self._workflow: WorkflowEngine | None = None  # 绑定的工作流引擎，初始为None
+        self._thread: threading.Thread | None = None  # 后台线程对象，初始为None
+        self._stop_event = threading.Event()          # 停止事件，用于线程间通信
+        self._continuous = False                      # 是否连续运行模式标志
+        self._run_finished = threading.Event()        # 单次执行完成标记（后台线程设置，主线程轮询，避免跨线程信号不可靠）
         self._run_had_error: bool = False
 
     # -- 属性 --
-
     @property
     def is_running(self) -> bool:
-        """检查是否正在运行
-
+        """
+        检查是否正在运行
         返回：
             正在运行返回True，否则返回False
         """
@@ -55,25 +49,23 @@ class WorkflowRunner:
 
     @property
     def is_continuous(self) -> bool:
-        """检查是否为连续运行模式
-
+        """
+        检查是否为连续运行模式
         返回：
             连续模式返回True，否则返回False
         """
         return self._continuous
 
     # -- 绑定 --
-
     def bind(self, workflow: WorkflowEngine):
-        """绑定工作流引擎到此运行器
-
+        """
+        绑定工作流引擎到此运行器
         参数：
             workflow: 工作流引擎对象
         """
         self._workflow = workflow
 
     # -- 单步执行 --
-
     def start_once(self):
         """
         在后台线程上执行工作流一次
@@ -83,15 +75,12 @@ class WorkflowRunner:
         # 如果没有绑定工作流或已在运行中，返回
         if not self._workflow or self.is_running:
             return
-        # 设置为非连续模式
-        self._continuous = False
-        # 清除停止事件和完成标记
-        self._stop_event.clear()
-        self._run_finished.clear()
-        # 创建后台线程，目标函数为_run_once
-        self._thread = threading.Thread(target=self._run_once, daemon=True)
-        # 启动线程
-        self._thread.start()
+
+        self._continuous = False                                             # 设置为非连续模式
+        self._stop_event.clear()                                             # 清除停止事件和完成标记
+        self._run_finished.clear()                                           # 清空单步执行标志
+        self._thread = threading.Thread(target=self._run_once, daemon=True)  # 创建后台线程，目标函数为_run_once
+        self._thread.start()                                                 # 启动线程
 
     def start_run_all(self, file_paths: list[str], auto_switch: bool = True, interval: float = 1.0):
         """
@@ -128,7 +117,7 @@ class WorkflowRunner:
     def start_continuous(self):
         """在后台线程上循环执行工作流
 
-        每次迭代调用 workflow.start()，会发布
+        每次迭代调用 workflow.execute()，会发布
         WORKFLOW_STARTED → NODE_STARTED/COMPLETED/ERROR → WORKFLOW_COMPLETED。
         循环持续直到调用 stop() 或发生错误。
         """
@@ -159,15 +148,13 @@ class WorkflowRunner:
         self._continuous = False
 
     # -- 内部方法 --
-
     def _run_once(self):
         """单次运行工作流的内部方法"""
         try:
-            # 如果没有工作流，返回
-            if not self._workflow:
+            if not self._workflow:  # 如果没有工作流，返回
                 return
-            # 启动工作流
-            result = self._workflow.start()
+
+            result = self._workflow.execute()  # 启动工作流
             self._run_had_error = result.is_error
             # 如果执行出错
             if result.is_error:
@@ -234,7 +221,7 @@ class WorkflowRunner:
 
                 # 为此文件运行工作流
                 try:
-                    result = self._workflow.start()
+                    result = self._workflow.execute()
                     # 如果执行出错
                     if result.is_error:
                         self._run_had_error = True
@@ -275,7 +262,7 @@ class WorkflowRunner:
                 # 记录本次迭代开始时间
                 t_start = time.time()
                 # 执行整条工作流（摄像头拍照→所有处理节点）
-                result = self._workflow.start()
+                result = self._workflow.execute()
                 # 如果执行出错
                 if result.is_error:
                     self._run_had_error = True

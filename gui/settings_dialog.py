@@ -5,11 +5,11 @@
 
 import json
 
-from PyQt5.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QSplitter, QLabel, QTabWidget,
-    QPushButton, QFrame, QStackedWidget, QListWidget, QListWidgetItem,
-    QScrollArea, QGroupBox, QGridLayout, QCheckBox, QFormLayout,
-)
+from PyQt5.QtWidgets import (QWidget, QDialog, QVBoxLayout, QHBoxLayout,
+                             QSplitter, QLabel, QTabWidget,
+                             QPushButton, QFrame, QStackedWidget, QListWidget,
+                             QListWidgetItem, QScrollArea, QGroupBox, QGridLayout,
+                             QCheckBox, QFormLayout)
 from PyQt5.QtCore import Qt
 
 from gui.theme import theme_manager

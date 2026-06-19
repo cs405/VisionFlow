@@ -1,5 +1,6 @@
 import cv2
-from core.node_base import OpenCVNodeDataBase, VisionNodeData
+from core.node_selectable import OpenCVNodeDataBase
+from core.node_vision import VisionNodeData
 from core.data_packet import FlowableResult
 
 

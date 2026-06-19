@@ -1,70 +1,20 @@
-"""可缩放图像查看器
-
-提供：鼠标滚轮缩放、中键/右键拖拽平移、适应窗口、像素信息、
-叠加层（ROI框、检测框、文本标签）、结构化叠加模型、选择高亮、缩放到矩形导航。
-"""
-
+import math
 import cv2
+import os
+from datetime import datetime
 import numpy as np
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
 
 from PyQt5.QtWidgets import (QGraphicsView, QGraphicsScene, QGraphicsPixmapItem,
-                              QWidget,
-                              QVBoxLayout, QLabel, QHBoxLayout, QStackedLayout)
-from PyQt5.QtCore import Qt, QRectF, QPointF, pyqtSignal, QPropertyAnimation, QEasingCurve, QVariantAnimation
-from PyQt5.QtGui import (QPixmap, QImage, QPen, QColor, QBrush, QPainter,
-                           QWheelEvent, QMouseEvent, QFont)
+                             QWidget, QVBoxLayout, QLabel, QHBoxLayout, QStackedLayout)
+from PyQt5.QtCore import Qt, QRectF, QPointF, pyqtSignal, QEasingCurve, QVariantAnimation
+from PyQt5.QtGui import (QPixmap, QPen, QColor, QBrush, QPainter,
+                           QWheelEvent, QMouseEvent, QFont, QImage)
 from gui.theme import theme_manager, connect_theme
 
+from gui.widget_utils import numpy_to_pixmap
 
-def numpy_to_qimage(array: np.ndarray) -> QImage:
-    """将numpy数组（BGR/灰度）转换为QImage
-
-    参数：
-        array: numpy数组图像
-
-    返回：
-        QImage对象
-    """
-    # 如果数组为空，返回空QImage
-    if array is None:
-        return QImage()
-    # 获取图像高度和宽度
-    h, w = array.shape[:2]
-    # 如果是灰度图（2维）
-    if len(array.shape) == 2:
-        return QImage(array.data, w, h, w, QImage.Format_Grayscale8).copy()
-    # 如果是3通道彩色图（BGR格式）
-    elif array.shape[2] == 3:
-        # BGR转RGB（浅拷贝）
-        rgb = array[..., ::-1].copy()
-        return QImage(rgb.data, w, h, w * 3, QImage.Format_RGB888).copy()
-    # 如果是4通道图像（BGRA格式）
-    elif array.shape[2] == 4:
-        # BGRA转RGBA
-        rgba = array[..., [2, 1, 0, 3]].copy()
-        return QImage(rgba.data, w, h, w * 4, QImage.Format_RGBA8888).copy()
-    # 其他格式返回空QImage
-    return QImage()
-
-
-def numpy_to_pixmap(array: np.ndarray) -> QPixmap:
-    """将numpy数组转换为QPixmap
-
-    参数：
-        array: numpy数组图像
-
-    返回：
-        QPixmap对象
-    """
-    # 先转换为QImage，再转换为QPixmap
-    qimg = numpy_to_qimage(array)
-    return QPixmap.fromImage(qimg)
-
-
-# ── 叠加模型 ──────────────────────────────────────────────────────────
 
 class OverlayType(Enum):
     """叠加项类型枚举"""
@@ -106,8 +56,6 @@ class OverlayItem:
         return None
 
 
-# ── 图像查看器 ───────────────────────────────────────────────────────────
-
 class ImageViewer(QGraphicsView):
     """可缩放、可平移的图像查看器，具有结构化叠加层管理。
 
@@ -127,6 +75,7 @@ class ImageViewer(QGraphicsView):
     zoom_changed = pyqtSignal(float)                # 缩放因子
     color_picked = pyqtSignal(object)               # 字典：rgb/bgr/hsv/hex/x/y
     roi_picked = pyqtSignal(tuple)                  # (x, y, w, h)
+    roi_moved = pyqtSignal(tuple)                   # (x, y, w, h) ROI 被拖动
     overlay_selected = pyqtSignal(str)              # 叠加项uid
     overlay_deselected = pyqtSignal()
 
@@ -141,17 +90,13 @@ class ImageViewer(QGraphicsView):
         参数：
             parent: 父对象
         """
-        # 调用父类QGraphicsView的构造函数
         super().__init__(parent)
 
         # 创建图形场景
         self._scene = QGraphicsScene(self)
-        # 设置场景
         self.setScene(self._scene)
 
-        # 主图像项
         self._pixmap_item = QGraphicsPixmapItem()
-        # 添加到场景
         self._scene.addItem(self._pixmap_item)
 
         # 状态变量
@@ -161,8 +106,19 @@ class ImageViewer(QGraphicsView):
         self._fit_to_window = True               # 是否适应窗口
         self._color_pick_mode = False            # 取色模式标志
         self._roi_pick_mode = False              # ROI拾取模式标志
+        self._roi_draw_type = "rect"             # ROI绘制类型: rect / rotated / circle
         self._roi_drag_start: QPointF | None = None  # ROI拖拽起始点
         self._roi_pick_item = None               # ROI拾取矩形项
+        self._roi_circle_item = None             # ROI拾取圆形项
+        self._roi_rotating = False               # 旋转子模式
+        self._roi_rot_center: QPointF = QPointF() # 旋转中心
+
+        # ROI 拖动（移动已完成绘制的 ROI）
+        self._roi_move_active = False
+        self._roi_move_start: QPointF = QPointF()   # 拖动起始鼠标位置（不变）
+        self._roi_move_last: QPointF = QPointF()    # 上一次鼠标位置
+        self._roi_move_orig_rect: tuple | None = None
+        self._current_roi_rect: tuple | None = None
 
         # 叠加模型
         self._overlays: dict[str, OverlayItem] = {}  # 叠加项字典
@@ -170,21 +126,13 @@ class ImageViewer(QGraphicsView):
         self._overlay_counter = 0                    # 叠加项计数器
 
         # 视图设置
-        # 启用抗锯齿和平滑像素图变换
         self.setRenderHints(QPainter.Antialiasing | QPainter.SmoothPixmapTransform)
-        # 设置拖拽模式为无拖拽（手动控制）
         self.setDragMode(QGraphicsView.NoDrag)
-        # 设置变换锚点为鼠标下方
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
-        # 设置调整大小锚点为鼠标下方
         self.setResizeAnchor(QGraphicsView.AnchorUnderMouse)
-        # 设置视口更新模式为全视口更新
         self.setViewportUpdateMode(QGraphicsView.FullViewportUpdate)
-        # 禁用水平滚动条
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        # 禁用垂直滚动条
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        # 设置无边框
         self.setFrameShape(QGraphicsView.NoFrame)
 
         # 背景
@@ -201,8 +149,6 @@ class ImageViewer(QGraphicsView):
         返回：
             棋盘格画刷
         """
-        from PyQt5.QtGui import QPixmap
-        from PyQt5.QtCore import QSize
         # 创建2x2大小的像素图
         pixmap = QPixmap(size * 2, size * 2)
         # 用第一种颜色填充
@@ -231,49 +177,24 @@ class ImageViewer(QGraphicsView):
     # ── 图像加载 ─────────────────────────────────────────────────
 
     def set_image(self, image: np.ndarray | QPixmap | None):
-        """设置显示的图像
-
-        参数：
-            image: numpy数组或QPixmap对象
-        """
-        # 清除所有叠加层
-        self.clear_overlays()
-        # 清除ROI矩形
-        self.clear_roi_rect()
-
-        # 如果图像为空
+        """设置显示的图像"""
         if image is None:
-            # 清空像素图
             self._pixmap_item.setPixmap(QPixmap())
-            # 清空图像数组
             self._image = None
-            # 设置场景矩形为空
             self._scene.setSceneRect(QRectF())
             return
 
-        # 根据图像类型处理
         if isinstance(image, np.ndarray):
-            # 保存图像数组
             self._image = image
-            # 转换为QPixmap
             pixmap = numpy_to_pixmap(image)
         elif isinstance(image, QPixmap):
-            # 保存像素图
             pixmap = image
-            # 清空图像数组
             self._image = None
         else:
             return
 
-        # 设置像素图
         self._pixmap_item.setPixmap(pixmap)
-        # 设置场景矩形为像素图矩形
         self._scene.setSceneRect(QRectF(pixmap.rect()))
-
-        # 如果需要适应窗口
-        if self._fit_to_window:
-            # 适应窗口
-            self.fit_to_window()
 
     @property
     def image(self) -> np.ndarray | None:
@@ -283,71 +204,39 @@ class ImageViewer(QGraphicsView):
     # ── 缩放 ──────────────────────────────────────────────────────────
 
     def wheelEvent(self, event: QWheelEvent):
-        """滚轮事件处理
-
-        参数：
-            event: 滚轮事件对象
-        """
-        # 获取滚轮滚动量（正值向上，负值向下）
         delta = event.angleDelta().y()
-        # 根据方向计算缩放因子
         factor = self.ZOOM_FACTOR if delta > 0 else 1.0 / self.ZOOM_FACTOR
-        # 计算新的缩放比例
         new_zoom = self._zoom * factor
-        # 检查是否在允许范围内
         if self.MIN_ZOOM <= new_zoom <= self.MAX_ZOOM:
-            # 更新缩放比例
             self._zoom = new_zoom
-            # 执行缩放
             self.scale(factor, factor)
-            # 发出缩放变化信号
             self.zoom_changed.emit(self._zoom)
-            # 标记不再适应窗口
             self._fit_to_window = False
 
     def fit_to_window(self):
-        """适应窗口大小"""
-        # 如果像素图为空，返回
         if self._pixmap_item.pixmap().isNull():
             return
-        # 适应场景矩形，保持宽高比
         self.fitInView(self._scene.sceneRect(), Qt.KeepAspectRatio)
-        # 获取当前缩放比例
         self._zoom = self.transform().m11()
-        # 发出缩放变化信号
-        self.zoom_changed.emit(self._zoom)
-        # 标记为适应窗口状态
-        self._fit_to_window = True
 
     def zoom_in(self):
         """放大"""
-        # 计算新的缩放比例（不超过最大值）
         self._zoom = min(self._zoom * self.ZOOM_FACTOR, self.MAX_ZOOM)
-        # 重置变换
         self.resetTransform()
-        # 应用缩放
         self.scale(self._zoom, self._zoom)
-        # 标记不再适应窗口
         self._fit_to_window = False
 
     def zoom_out(self):
         """缩小"""
-        # 计算新的缩放比例（不小于最小值）
         self._zoom = max(self._zoom / self.ZOOM_FACTOR, self.MIN_ZOOM)
-        # 重置变换
         self.resetTransform()
-        # 应用缩放
         self.scale(self._zoom, self._zoom)
-        # 标记不再适应窗口
         self._fit_to_window = False
 
     def zoom_to_100(self):
         """100%缩放"""
-        # 设置缩放比例为1.0
         self._zoom = 1.0
-        # 重置变换
         self.resetTransform()
-        # 标记不再适应窗口
         self._fit_to_window = False
 
     def set_zoom(self, factor: float):
@@ -356,19 +245,21 @@ class ImageViewer(QGraphicsView):
         参数：
             factor: 缩放因子
         """
-        # 限制在允许范围内
-        self._zoom = max(self.MIN_ZOOM, min(self.MAX_ZOOM, factor))
-        # 重置变换
-        self.resetTransform()
-        # 应用缩放
-        self.scale(self._zoom, self._zoom)
-        # 标记不再适应窗口
-        self._fit_to_window = False
+        # # 限制在允许范围内
+        # self._zoom = max(self.MIN_ZOOM, min(self.MAX_ZOOM, factor))
+        # # 重置变换
+        # self.resetTransform()
+        # # 应用缩放
+        # self.scale(self._zoom, self._zoom)
+        # # 标记不再适应窗口
+        # self._fit_to_window = False
+        pass
 
     @property
     def zoom_level(self) -> float:
         """获取当前缩放级别"""
-        return self._zoom
+        # return self._zoom
+        pass
 
     # ── zoom_to_rect ──────────────────────────────────────────────────
 
@@ -381,35 +272,36 @@ class ImageViewer(QGraphicsView):
             padding: 视口内边距比例
             animate: 是否使用动画
         """
-        # 解包矩形参数
-        x, y, w, h = rect
-        # 如果尺寸无效，返回
-        if w <= 0 or h <= 0:
-            return
-
-        # 计算内边距
-        pw = w * padding
-        ph = h * padding
-        # 计算目标矩形
-        target_rect = QRectF(x - pw, y - ph, w + 2 * pw, h + 2 * ph)
-
-        # 停止现有动画
-        if animate and hasattr(self, '_zoom_anim') and self._zoom_anim is not None:
-            self._zoom_anim.stop()
-
-        # 如果需要动画且目标矩形有效
-        if animate and not target_rect.isEmpty():
-            # 执行动画
-            self._animate_to_rect(target_rect)
-        else:
-            # 直接适应目标矩形
-            self.fitInView(target_rect, Qt.KeepAspectRatio)
-            # 获取当前缩放比例
-            self._zoom = self.transform().m11()
-            # 标记不再适应窗口
-            self._fit_to_window = False
-            # 发出缩放变化信号
-            self.zoom_changed.emit(self._zoom)
+        # # 解包矩形参数
+        # x, y, w, h = rect
+        # # 如果尺寸无效，返回
+        # if w <= 0 or h <= 0:
+        #     return
+        #
+        # # 计算内边距
+        # pw = w * padding
+        # ph = h * padding
+        # # 计算目标矩形
+        # target_rect = QRectF(x - pw, y - ph, w + 2 * pw, h + 2 * ph)
+        #
+        # # 停止现有动画
+        # if animate and hasattr(self, '_zoom_anim') and self._zoom_anim is not None:
+        #     self._zoom_anim.stop()
+        #
+        # # 如果需要动画且目标矩形有效
+        # if animate and not target_rect.isEmpty():
+        #     # 执行动画
+        #     self._animate_to_rect(target_rect)
+        # else:
+        #     # 直接适应目标矩形
+        #     self.fitInView(target_rect, Qt.KeepAspectRatio)
+        #     # 获取当前缩放比例
+        #     self._zoom = self.transform().m11()
+        #     # 标记不再适应窗口
+        #     self._fit_to_window = False
+        #     # 发出缩放变化信号
+        #     self.zoom_changed.emit(self._zoom)
+        pass
 
     def _animate_to_rect(self, target_rect: QRectF):
         """平滑动画导航到目标矩形
@@ -417,143 +309,160 @@ class ImageViewer(QGraphicsView):
         参数：
             target_rect: 目标矩形
         """
-        # 获取当前视口矩形
-        start_rect = self.viewport_rect_in_scene()
-        # 如果当前矩形无效
-        if start_rect.isEmpty():
-            # 直接适应
-            self.fitInView(target_rect, Qt.KeepAspectRatio)
-            # 获取缩放比例
-            self._zoom = self.transform().m11()
-            # 标记不再适应窗口
-            self._fit_to_window = False
-            # 发出缩放变化信号
-            self.zoom_changed.emit(self._zoom)
-            return
-
-        # 创建动画对象
-        self._zoom_anim = QVariantAnimation(self)
-        # 设置动画时长250毫秒
-        self._zoom_anim.setDuration(250)
-        # 设置缓动曲线为三次缓出
-        self._zoom_anim.setEasingCurve(QEasingCurve.OutCubic)
-        # 设置起始值
-        self._zoom_anim.setStartValue(start_rect)
-        # 设置结束值
-        self._zoom_anim.setEndValue(target_rect)
-
-        # 定义步进函数
-        def _step(rect):
-            # 适应当前矩形
-            self.fitInView(rect, Qt.KeepAspectRatio)
-            # 获取缩放比例
-            self._zoom = self.transform().m11()
-            # 标记不再适应窗口
-            self._fit_to_window = False
-
-        # 连接值变化信号
-        self._zoom_anim.valueChanged.connect(_step)
-        # 连接完成信号
-        self._zoom_anim.finished.connect(lambda: (
-            self.zoom_changed.emit(self._zoom),   # 发出缩放变化信号
-            setattr(self, '_zoom_anim', None)      # 清空动画引用
-        ))
-        # 启动动画
-        self._zoom_anim.start()
+        # # 获取当前视口矩形
+        # start_rect = self.viewport_rect_in_scene()
+        # # 如果当前矩形无效
+        # if start_rect.isEmpty():
+        #     # 直接适应
+        #     self.fitInView(target_rect, Qt.KeepAspectRatio)
+        #     # 获取缩放比例
+        #     self._zoom = self.transform().m11()
+        #     # 标记不再适应窗口
+        #     self._fit_to_window = False
+        #     # 发出缩放变化信号
+        #     self.zoom_changed.emit(self._zoom)
+        #     return
+        #
+        # # 创建动画对象
+        # self._zoom_anim = QVariantAnimation(self)
+        # # 设置动画时长250毫秒
+        # self._zoom_anim.setDuration(250)
+        # # 设置缓动曲线为三次缓出
+        # self._zoom_anim.setEasingCurve(QEasingCurve.OutCubic)
+        # # 设置起始值
+        # self._zoom_anim.setStartValue(start_rect)
+        # # 设置结束值
+        # self._zoom_anim.setEndValue(target_rect)
+        #
+        # # 定义步进函数
+        # def _step(rect):
+        #     # 适应当前矩形
+        #     self.fitInView(rect, Qt.KeepAspectRatio)
+        #     # 获取缩放比例
+        #     self._zoom = self.transform().m11()
+        #     # 标记不再适应窗口
+        #     self._fit_to_window = False
+        #
+        # # 连接值变化信号
+        # self._zoom_anim.valueChanged.connect(_step)
+        # # 连接完成信号
+        # self._zoom_anim.finished.connect(lambda: (
+        #     self.zoom_changed.emit(self._zoom),   # 发出缩放变化信号
+        #     setattr(self, '_zoom_anim', None)      # 清空动画引用
+        # ))
+        # # 启动动画
+        # self._zoom_anim.start()
+        pass
 
     def viewport_rect_in_scene(self) -> QRectF:
         """获取当前视口在场景中的矩形"""
         # 将视口矩形映射到场景坐标，返回边界矩形
-        return self.mapToScene(self.viewport().rect()).boundingRect()
+        # return self.mapToScene(self.viewport().rect()).boundingRect()
+        pass
 
     # ── 平移 ───────────────────────────────────────────────────────────
 
     def mousePressEvent(self, event: QMouseEvent):
-        """鼠标按下事件
+        """鼠标按下事件"""
+        if self._roi_rotating and event.button() == Qt.LeftButton:
+            self._finalize_rotated_rect()
+            event.accept()
+            return
 
-        参数：
-            event: 鼠标事件对象
-        """
-        # 如果是左键且处于ROI拾取模式且像素图不为空
         if event.button() == Qt.LeftButton and self._roi_pick_mode and not self._pixmap_item.pixmap().isNull():
-            # 记录拖拽起点
             self._roi_drag_start = self.mapToScene(event.pos())
-            # 如果ROI拾取项不存在
-            if self._roi_pick_item is None:
-                # 创建虚线画笔
-                pen = QPen(QColor(255, 50, 50), 2)
-                pen.setCosmetic(True)
-                self._roi_pick_item = self._scene.addRect(QRectF(), pen)
-                # 设置Z序
-                self._roi_pick_item.setZValue(50)
-            # 设置矩形为起点到起点的点矩形
-            self._roi_pick_item.setRect(QRectF(self._roi_drag_start, self._roi_drag_start))
-            # 接受事件
+            if self._roi_draw_type == "circle":
+                if self._roi_circle_item is None:
+                    pen = QPen(QColor(255, 50, 50), 2)
+                    pen.setCosmetic(True)
+                    self._roi_circle_item = self._scene.addEllipse(QRectF(), pen)
+                    self._roi_circle_item.setZValue(50)
+            else:
+                if self._roi_pick_item is None:
+                    pen = QPen(QColor(255, 50, 50), 2)
+                    pen.setCosmetic(True)
+                    self._roi_pick_item = self._scene.addRect(QRectF(), pen)
+                    self._roi_pick_item.setZValue(50)
+                self._roi_pick_item.setRect(QRectF(self._roi_drag_start, self._roi_drag_start))
             event.accept()
             return
-        # 如果是左键且处于取色模式
         if event.button() == Qt.LeftButton and self._color_pick_mode:
-            # 获取像素位置
             self._emit_pixel_pos(event.pos())
-            # 获取颜色信息
             self._emit_color_info(event.pos())
-            # 接受事件
             event.accept()
             return
-        # 如果是中键或右键
+        # ROI 拖动：在已有 ROI 上按住左键拖拽移动
+        if (event.button() == Qt.LeftButton and not self._roi_pick_mode
+                and not self._color_pick_mode and not self._roi_rotating
+                and self._current_roi_rect is not None):
+            scene_pos = self.mapToScene(event.pos())
+            rx, ry, rw, rh = self._current_roi_rect
+            if rx <= scene_pos.x() <= rx + rw and ry <= scene_pos.y() <= ry + rh:
+                self._roi_move_active = True
+                self._roi_move_start = scene_pos
+                self._roi_move_last = scene_pos
+                self._roi_move_orig_rect = self._current_roi_rect
+                self.setCursor(Qt.ClosedHandCursor)
+                event.accept()
+                return
         if event.button() in (Qt.MiddleButton, Qt.RightButton):
-            # 记录平移起始点
             self._pan_start = event.pos()
-            # 设置光标为握紧手形状
             self.setCursor(Qt.ClosedHandCursor)
-        # 如果是左键
         elif event.button() == Qt.LeftButton:
-            # 获取像素位置
             self._emit_pixel_pos(event.pos())
-            # 检查叠加层命中测试
             self._hit_test_overlays(event.pos())
-        # 调用父类的mousePressEvent
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: QMouseEvent):
-        """鼠标移动事件
+        """
+        鼠标移动事件，ROI（感兴趣区域）选取时的矩形绘制，图像平移拖拽，发射鼠标坐标信号 mouse_moved
 
         参数：
             event: 鼠标事件对象
         """
-        # 如果正在拖拽ROI且处于ROI拾取模式
-        if self._roi_drag_start is not None and self._roi_pick_mode:
-            # 获取当前鼠标位置
-            current_pos = self.mapToScene(event.pos())
-            # 计算归一化矩形
-            rect = QRectF(self._roi_drag_start, current_pos).normalized()
-            # 如果ROI拾取项存在
-            if self._roi_pick_item is not None:
-                # 设置矩形
-                self._roi_pick_item.setRect(rect)
-            # 接受事件
+        if self._roi_rotating and self._roi_pick_item is not None:
+            pos = self.mapToScene(event.pos())
+            dx = pos.x() - self._roi_rot_center.x()
+            dy = pos.y() - self._roi_rot_center.y()
+            angle = math.degrees(math.atan2(dy, dx))
+            self._roi_pick_item.setTransformOriginPoint(self._roi_rot_center)
+            self._roi_pick_item.setRotation(angle)
             event.accept()
             return
-        # 如果正在平移
+
+        if self._roi_drag_start is not None and self._roi_pick_mode:
+            current_pos = self.mapToScene(event.pos())
+            if self._roi_draw_type == "circle":
+                r = max(abs(current_pos.x() - self._roi_drag_start.x()),
+                        abs(current_pos.y() - self._roi_drag_start.y()))
+                circle_rect = QRectF(self._roi_drag_start.x() - r, self._roi_drag_start.y() - r, r * 2, r * 2)
+                if self._roi_circle_item is not None:
+                    self._roi_circle_item.setRect(circle_rect)
+            else:
+                rect = QRectF(self._roi_drag_start, current_pos).normalized()
+                if self._roi_pick_item is not None:
+                    self._roi_pick_item.setRect(rect)
+            event.accept()
+            return
+        if self._roi_move_active:
+            current_pos = self.mapToScene(event.pos())
+            dx = current_pos.x() - self._roi_move_last.x()
+            dy = current_pos.y() - self._roi_move_last.y()
+            for item in self._roi_overlay_items:
+                item.moveBy(dx, dy)
+            self._roi_move_last = current_pos
+            event.accept()
+            return
         if self._pan_start is not None:
-            # 计算偏移量
             delta = event.pos() - self._pan_start
-            # 更新起始点
             self._pan_start = event.pos()
-            # 移动水平滚动条
             self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - delta.x())
-            # 移动垂直滚动条
             self.verticalScrollBar().setValue(self.verticalScrollBar().value() - delta.y())
         else:
-            # 获取鼠标在场景中的位置
             scene_pos = self.mapToScene(event.pos())
-            # 获取整数坐标
             x, y = int(scene_pos.x()), int(scene_pos.y())
-            # 检查是否在图像范围内
             if 0 <= x < self._scene.width() and 0 <= y < self._scene.height():
-                # 发出鼠标移动信号
                 self.mouse_moved.emit(x, y)
-        # 调用父类的mouseMoveEvent
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent):
@@ -562,36 +471,55 @@ class ImageViewer(QGraphicsView):
         参数：
             event: 鼠标事件对象
         """
-        # 如果是左键且正在拖拽ROI且处于ROI拾取模式
-        if event.button() == Qt.LeftButton and self._roi_drag_start is not None and self._roi_pick_mode:
-            # 获取当前鼠标位置
-            current_pos = self.mapToScene(event.pos())
-            # 计算归一化矩形
-            rect = QRectF(self._roi_drag_start, current_pos).normalized()
-            # 清空拖拽起点
-            self._roi_drag_start = None
-            # 将矩形转换为元组
-            roi_rect = self._scene_rect_to_tuple(rect)
-            # 如果ROI拾取项存在
-            if self._roi_pick_item is not None:
-                # 从场景移除
-                self._scene.removeItem(self._roi_pick_item)
-                # 清空引用
-                self._roi_pick_item = None
-            # 如果矩形有效
-            if roi_rect[2] > 0 and roi_rect[3] > 0:
-                # 发出ROI拾取信号
-                self.roi_picked.emit(roi_rect)
-            # 接受事件
+        if self._roi_move_active and event.button() == Qt.LeftButton:
+            self._roi_move_active = False
+            self.setCursor(Qt.ArrowCursor)
+            if self._roi_move_orig_rect is not None:
+                current_pos = self.mapToScene(event.pos())
+                dx = int(current_pos.x() - self._roi_move_start.x())
+                dy = int(current_pos.y() - self._roi_move_start.y())
+                ox, oy, ow, oh = self._roi_move_orig_rect
+                new_rect = (ox + dx, oy + dy, ow, oh)
+                self._current_roi_rect = new_rect
+                self.roi_moved.emit(new_rect)
             event.accept()
             return
-        # 如果是中键或右键
+        if event.button() == Qt.LeftButton and self._roi_drag_start is not None and self._roi_pick_mode:
+            current_pos = self.mapToScene(event.pos())
+            drag_start = self._roi_drag_start
+            self._roi_drag_start = None
+            if self._roi_draw_type == "circle":
+                r = max(abs(current_pos.x() - drag_start.x()),
+                        abs(current_pos.y() - drag_start.y()))
+                roi_rect = (int(drag_start.x() - r), int(drag_start.y() - r),
+                            int(r * 2), int(r * 2))
+                if self._roi_circle_item is not None:
+                    self._scene.removeItem(self._roi_circle_item)
+                    self._roi_circle_item = None
+            elif self._roi_draw_type == "rotated":
+                rect = QRectF(drag_start, current_pos).normalized()
+                roi_rect = self._scene_rect_to_tuple(rect)
+                if roi_rect[2] > 0 and roi_rect[3] > 0 and self._roi_pick_item is not None:
+                    self._roi_rotating = True
+                    self._roi_rot_center = rect.center()
+                    self._roi_pick_item.setTransformOriginPoint(self._roi_rot_center)
+                else:
+                    if self._roi_pick_item is not None:
+                        self._scene.removeItem(self._roi_pick_item)
+                        self._roi_pick_item = None
+            else:
+                rect = QRectF(drag_start, current_pos).normalized()
+                roi_rect = self._scene_rect_to_tuple(rect)
+                if self._roi_pick_item is not None:
+                    self._scene.removeItem(self._roi_pick_item)
+                    self._roi_pick_item = None
+            if roi_rect[2] > 0 and roi_rect[3] > 0 and self._roi_draw_type != "rotated":
+                self.roi_picked.emit(roi_rect)
+            event.accept()
+            return
         if event.button() in (Qt.MiddleButton, Qt.RightButton):
-            # 清空平移起始点
             self._pan_start = None
-            # 恢复光标为箭头
             self.setCursor(Qt.ArrowCursor)
-        # 调用父类的mouseReleaseEvent
         super().mouseReleaseEvent(event)
 
     def mouseDoubleClickEvent(self, event: QMouseEvent):
@@ -601,11 +529,12 @@ class ImageViewer(QGraphicsView):
             event: 鼠标事件对象
         """
         # 如果是左键
-        if event.button() == Qt.LeftButton:
-            # 适应窗口
-            self.fit_to_window()
-        # 调用父类的mouseDoubleClickEvent
-        super().mouseDoubleClickEvent(event)
+        # if event.button() == Qt.LeftButton:
+        #     # 适应窗口
+        #     self.fit_to_window()
+        # # 调用父类的mouseDoubleClickEvent
+        # super().mouseDoubleClickEvent(event)
+        pass
 
     def _emit_pixel_pos(self, pos: QPointF):
         """发出像素位置信号
@@ -613,16 +542,10 @@ class ImageViewer(QGraphicsView):
         参数：
             pos: 视口坐标
         """
-        # 将视口坐标转换为场景坐标
         scene_pos = self.mapToScene(pos)
-        # 获取整数坐标
         x, y = int(scene_pos.x()), int(scene_pos.y())
-        # 检查是否在图像范围内
         if self._image is not None and 0 <= y < self._image.shape[0] and 0 <= x < self._image.shape[1]:
-            # 获取像素值
-            pixel_val = self._image[y, x].tolist()
-            # 发出像素点击信号
-            self.pixel_clicked.emit(x, y, pixel_val)
+            self.pixel_clicked.emit(x, y, self._image[y, x].tolist())
 
     def _emit_color_info(self, pos: QPointF):
         """发出颜色信息信号
@@ -630,12 +553,13 @@ class ImageViewer(QGraphicsView):
         参数：
             pos: 视口坐标
         """
-        # 转换为场景坐标
-        scene_pos = self.mapToScene(pos)
-        # 获取整数坐标
-        x, y = int(scene_pos.x()), int(scene_pos.y())
-        # 调用取色方法
-        self.pick_color_at(x, y)
+        # # 转换为场景坐标
+        # scene_pos = self.mapToScene(pos)
+        # # 获取整数坐标
+        # x, y = int(scene_pos.x()), int(scene_pos.y())
+        # # 调用取色方法
+        # self.pick_color_at(x, y)
+        pass
 
     def pick_color_at(self, x: int, y: int) -> dict | None:
         """直接从图像坐标取色
@@ -647,39 +571,40 @@ class ImageViewer(QGraphicsView):
         返回：
             颜色信息字典
         """
-        # 检查图像是否存在且坐标有效
-        if self._image is None or not (0 <= y < self._image.shape[0] and 0 <= x < self._image.shape[1]):
-            return
-        # 获取像素值
-        pixel = self._image[y, x]
-        # 如果是灰度图
-        if np.isscalar(pixel):
-            gray = int(pixel)
-            bgr = (gray, gray, gray)
-        else:
-            # 转换为列表
-            values = [int(v) for v in pixel.tolist()]
-            if len(values) >= 3:
-                bgr = tuple(values[:3])
-            elif len(values) == 1:
-                bgr = (values[0], values[0], values[0])
-            else:
-                return
-        # 转换为HSV
-        hsv = cv2.cvtColor(np.array([[bgr]], dtype=np.uint8), cv2.COLOR_BGR2HSV)[0, 0].tolist()
-        # 转换为RGB
-        rgb = (bgr[2], bgr[1], bgr[0])
-        # 构建返回数据
-        payload = {
-            "x": x, "y": y,                                   # 坐标
-            "bgr": bgr,                                       # BGR值
-            "rgb": rgb,                                       # RGB值
-            "hsv": tuple(int(v) for v in hsv),                # HSV值
-            "hex": "#{:02X}{:02X}{:02X}".format(*rgb),        # HEX值
-        }
-        # 发出颜色拾取信号
-        self.color_picked.emit(payload)
-        return payload
+        # # 检查图像是否存在且坐标有效
+        # if self._image is None or not (0 <= y < self._image.shape[0] and 0 <= x < self._image.shape[1]):
+        #     return None
+        # # 获取像素值
+        # pixel = self._image[y, x]
+        # # 如果是灰度图
+        # if np.isscalar(pixel):
+        #     gray = int(pixel)
+        #     bgr = (gray, gray, gray)
+        # else:
+        #     # 转换为列表
+        #     values = [int(v) for v in pixel.tolist()]
+        #     if len(values) >= 3:
+        #         bgr = tuple(values[:3])
+        #     elif len(values) == 1:
+        #         bgr = (values[0], values[0], values[0])
+        #     else:
+        #         return None
+        # # 转换为HSV
+        # hsv = cv2.cvtColor(np.array([[bgr]], dtype=np.uint8), cv2.COLOR_BGR2HSV)[0, 0].tolist()
+        # # 转换为RGB
+        # rgb = (bgr[2], bgr[1], bgr[0])
+        # # 构建返回数据
+        # payload = {
+        #     "x": x, "y": y,                                   # 坐标
+        #     "bgr": bgr,                                       # BGR值
+        #     "rgb": rgb,                                       # RGB值
+        #     "hsv": tuple(int(v) for v in hsv),                # HSV值
+        #     "hex": "#{:02X}{:02X}{:02X}".format(*rgb),        # HEX值
+        # }
+        # # 发出颜色拾取信号
+        # self.color_picked.emit(payload)
+        # return payload
+        pass
 
     def _scene_rect_to_tuple(self, rect: QRectF) -> tuple[int, int, int, int]:
         """将场景矩形转换为整数元组
@@ -690,18 +615,14 @@ class ImageViewer(QGraphicsView):
         返回：
             (x, y, w, h) 元组
         """
-        # 如果没有图像
         if self._image is None:
-            return (int(rect.x()), int(rect.y()), int(rect.width()), int(rect.height()))
-        # 获取图像尺寸
-        max_w = self._image.shape[1]
-        max_h = self._image.shape[0]
-        # 限制范围
-        x1 = max(0, min(int(round(rect.left())), max_w))
-        y1 = max(0, min(int(round(rect.top())), max_h))
-        x2 = max(0, min(int(round(rect.right())), max_w))
-        y2 = max(0, min(int(round(rect.bottom())), max_h))
-        return (x1, y1, max(0, x2 - x1), max(0, y2 - y1))
+            return int(rect.x()), int(rect.y()), int(rect.width()), int(rect.height())
+        h, w = self._image.shape[:2]
+        x1 = max(0, min(int(round(rect.left())), w))
+        y1 = max(0, min(int(round(rect.top())), h))
+        x2 = max(0, min(int(round(rect.right())), w))
+        y2 = max(0, min(int(round(rect.bottom())), h))
+        return x1, y1, max(0, x2 - x1), max(0, y2 - y1)
 
     # ── 取色/ROI拾取模式 ───────────────────────────────────────────
 
@@ -711,72 +632,83 @@ class ImageViewer(QGraphicsView):
         参数：
             enabled: 是否启用
         """
-        self._color_pick_mode = enabled
-        # 设置光标样式
-        self.setCursor(Qt.CrossCursor if enabled else Qt.ArrowCursor)
+        # self._color_pick_mode = enabled
+        # # 设置光标样式
+        # self.setCursor(Qt.CrossCursor if enabled else Qt.ArrowCursor)
+        pass
 
     def set_roi_pick_mode(self, enabled: bool):
-        """设置ROI拾取模式
-
-        参数：
-            enabled: 是否启用
-        """
+        """设置ROI拾取模式"""
         self._roi_pick_mode = enabled
+        self._roi_rotating = False
         if not enabled:
-            # 清空拖拽起点
             self._roi_drag_start = None
-            # 移除ROI拾取项
             if self._roi_pick_item is not None:
                 self._scene.removeItem(self._roi_pick_item)
                 self._roi_pick_item = None
-        # 设置光标样式
         self.setCursor(Qt.CrossCursor if enabled else Qt.ArrowCursor)
+
+    def set_roi_draw_type(self, draw_type: str):
+        """设置ROI绘制类型: rect / rotated / circle"""
+        self._roi_draw_type = draw_type
+
+    def _finalize_rotated_rect(self):
+        """结束旋转子模式，发射带角度的 ROI"""
+        self._roi_rotating = False
+        if self._roi_pick_item is None:
+            return
+        self._last_roi_angle = self._roi_pick_item.rotation()
+        original = self._roi_pick_item.rect()
+        center = self._roi_rot_center
+        w, h = original.width(), original.height()
+        self._scene.removeItem(self._roi_pick_item)
+        self._roi_pick_item = None
+        x = int(center.x() - w / 2.0)
+        y = int(center.y() - h / 2.0)
+        if int(w) > 0 and int(h) > 0:
+            self.roi_picked.emit((x, y, int(w), int(h)))
 
     # ── ROI叠加层 ───────────────────────────────────────────────────
 
     def clear_roi_rect(self):
         """移除固定位置的ROI叠加层"""
-        # 遍历ROI叠加项列表
+        self._current_roi_rect = None
+        self._roi_move_active = False
         for item in getattr(self, '_roi_overlay_items', []):
-            # 从场景移除
             self._scene.removeItem(item)
-        # 清空列表
         self._roi_overlay_items = []
 
     def set_roi_rect(self, rect: tuple[int, int, int, int] | None,
-                     label: str = "ROI",
-                     color: QColor = QColor(255, 50, 50)):
-        """设置ROI矩形
-
-        参数：
-            rect: 矩形 (x, y, w, h)
-            label: 标签文本
-            color: 颜色
-        """
-        # 清除现有ROI
+                     label: str = "",
+                     color: QColor = QColor(255, 50, 50),
+                     angle: float = 0.0,
+                     draw_type: str = "rect"):
+        """设置ROI叠加层，支持矩形/旋转矩形/圆形"""
         self.clear_roi_rect()
-        # 如果不存在属性，初始化
+        self._current_roi_rect = rect
         if not hasattr(self, '_roi_overlay_items'):
             self._roi_overlay_items = []
-        # 如果矩形为空，返回
-        if rect is None:
+        if rect is None or (rect[2] <= 0 and rect[3] <= 0):
             return
-        # 解包矩形
         x, y, w, h = rect
         if w <= 0 or h <= 0:
             return
 
-        # 实线加粗 cosmectic pen (不随缩放变细)
         pen = QPen(color, 5)
         pen.setCosmetic(True)
-        item = self._scene.addRect(x, y, w, h, pen)
+        if draw_type == "circle":
+            r = min(w, h) / 2.0
+            cx, cy = x + w / 2.0, y + h / 2.0
+            item = self._scene.addEllipse(cx - r, cy - r, r * 2, r * 2, pen)
+        else:
+            item = self._scene.addRect(x, y, w, h, pen)
+            if draw_type == "rotated" and angle != 0.0:
+                item.setTransformOriginPoint(x + w / 2.0, y + h / 2.0)
+                item.setRotation(angle)
         item.setZValue(40)
-        # 添加到列表
         self._roi_overlay_items.append(item)
 
-        # 如果有标签
         if label:
-            # 添加文本项
             text = self._scene.addText(label, QFont("Segoe UI", 10))
             text.setPos(x, max(0, y - 20))
             text.setDefaultTextColor(color)
@@ -801,48 +733,49 @@ class ImageViewer(QGraphicsView):
         返回：
             唯一叠加项ID
         """
-        # 计数器加1
-        self._overlay_counter += 1
-        # 生成唯一ID
-        uid = f"overlay_{self._overlay_counter}"
-        # 解包矩形
-        x, y, w, h = rect
-
-        # 创建画笔
-        pen = QPen(color, 2)
-        # 根据类型设置画笔样式
-        pen.setStyle(Qt.DashLine if overlay_type == OverlayType.ROI else Qt.SolidLine)
-        # 添加矩形项
-        rect_item = self._scene.addRect(x, y, w, h, pen)
-        rect_item.setZValue(10)
-        # 图形项列表
-        gfx_items = [rect_item]
-
-        # 如果有标签或分数
-        if label or score > 0:
-            # 构建文本
-            text_str = f"{label} {score:.2f}" if score > 0 else label
-            # 添加文本项
-            text_item = self._scene.addText(text_str, QFont("Segoe UI", 9))
-            text_item.setPos(x, y - 18)
-            text_item.setDefaultTextColor(color)
-            text_item.setZValue(11)
-            gfx_items.append(text_item)
-
-        # 创建叠加项
-        overlay = OverlayItem(
-            uid=uid,                              # 唯一ID
-            type=overlay_type,                   # 类型
-            geometry={"x": x, "y": y, "w": w, "h": h},  # 几何参数
-            label=label,                         # 标签
-            color=color,                         # 颜色
-            score=score,                         # 分数
-            graphics_items=gfx_items,            # 图形项列表
-        )
-        # 保存到字典
-        self._overlays[uid] = overlay
-        # 返回ID
-        return uid
+        # # 计数器加1
+        # self._overlay_counter += 1
+        # # 生成唯一ID
+        # uid = f"overlay_{self._overlay_counter}"
+        # # 解包矩形
+        # x, y, w, h = rect
+        #
+        # # 创建画笔
+        # pen = QPen(color, 2)
+        # # 根据类型设置画笔样式
+        # pen.setStyle(Qt.DashLine if overlay_type == OverlayType.ROI else Qt.SolidLine)
+        # # 添加矩形项
+        # rect_item = self._scene.addRect(x, y, w, h, pen)
+        # rect_item.setZValue(10)
+        # # 图形项列表
+        # gfx_items = [rect_item]
+        #
+        # # 如果有标签或分数
+        # if label or score > 0:
+        #     # 构建文本
+        #     text_str = f"{label} {score:.2f}" if score > 0 else label
+        #     # 添加文本项
+        #     text_item = self._scene.addText(text_str, QFont("Segoe UI", 9))
+        #     text_item.setPos(x, y - 18)
+        #     text_item.setDefaultTextColor(color)
+        #     text_item.setZValue(11)
+        #     gfx_items.append(text_item)
+        #
+        # # 创建叠加项
+        # overlay = OverlayItem(
+        #     uid=uid,                              # 唯一ID
+        #     type=overlay_type,                   # 类型
+        #     geometry={"x": x, "y": y, "w": w, "h": h},  # 几何参数
+        #     label=label,                         # 标签
+        #     color=color,                         # 颜色
+        #     score=score,                         # 分数
+        #     graphics_items=gfx_items,            # 图形项列表
+        # )
+        # # 保存到字典
+        # self._overlays[uid] = overlay
+        # # 返回ID
+        # return uid
+        pass
 
     def add_circle_overlay(self, center: tuple, radius: float,
                             label: str = "",
@@ -858,44 +791,45 @@ class ImageViewer(QGraphicsView):
         返回：
             唯一叠加项ID
         """
-        # 计数器加1
-        self._overlay_counter += 1
-        # 生成唯一ID
-        uid = f"overlay_{self._overlay_counter}"
-        # 解包圆心
-        cx, cy = center
-
-        # 创建画笔
-        pen = QPen(color, 2)
-        # 添加椭圆项（圆形）
-        item = self._scene.addEllipse(cx - radius, cy - radius,
-                                       radius * 2, radius * 2, pen)
-        item.setZValue(10)
-        # 图形项列表
-        gfx_items = [item]
-
-        # 如果有标签
-        if label:
-            # 添加文本项
-            text_item = self._scene.addText(label, QFont("Segoe UI", 9))
-            text_item.setPos(cx - radius, cy - radius - 18)
-            text_item.setDefaultTextColor(color)
-            text_item.setZValue(11)
-            gfx_items.append(text_item)
-
-        # 创建叠加项
-        overlay = OverlayItem(
-            uid=uid,                                    # 唯一ID
-            type=OverlayType.CIRCLE,                   # 类型
-            geometry={"cx": cx, "cy": cy, "r": radius},  # 几何参数
-            label=label,                               # 标签
-            color=color,                               # 颜色
-            graphics_items=gfx_items,                  # 图形项列表
-        )
-        # 保存到字典
-        self._overlays[uid] = overlay
-        # 返回ID
-        return uid
+        # # 计数器加1
+        # self._overlay_counter += 1
+        # # 生成唯一ID
+        # uid = f"overlay_{self._overlay_counter}"
+        # # 解包圆心
+        # cx, cy = center
+        #
+        # # 创建画笔
+        # pen = QPen(color, 2)
+        # # 添加椭圆项（圆形）
+        # item = self._scene.addEllipse(cx - radius, cy - radius,
+        #                                radius * 2, radius * 2, pen)
+        # item.setZValue(10)
+        # # 图形项列表
+        # gfx_items = [item]
+        #
+        # # 如果有标签
+        # if label:
+        #     # 添加文本项
+        #     text_item = self._scene.addText(label, QFont("Segoe UI", 9))
+        #     text_item.setPos(cx - radius, cy - radius - 18)
+        #     text_item.setDefaultTextColor(color)
+        #     text_item.setZValue(11)
+        #     gfx_items.append(text_item)
+        #
+        # # 创建叠加项
+        # overlay = OverlayItem(
+        #     uid=uid,                                    # 唯一ID
+        #     type=OverlayType.CIRCLE,                   # 类型
+        #     geometry={"cx": cx, "cy": cy, "r": radius},  # 几何参数
+        #     label=label,                               # 标签
+        #     color=color,                               # 颜色
+        #     graphics_items=gfx_items,                  # 图形项列表
+        # )
+        # # 保存到字典
+        # self._overlays[uid] = overlay
+        # # 返回ID
+        # return uid
+        pass
 
     def add_line_overlay(self, x1: float, y1: float, x2: float, y2: float,
                           label: str = "",
@@ -911,40 +845,41 @@ class ImageViewer(QGraphicsView):
         返回：
             唯一叠加项ID
         """
-        # 计数器加1
-        self._overlay_counter += 1
-        # 生成唯一ID
-        uid = f"overlay_{self._overlay_counter}"
-        # 创建画笔
-        pen = QPen(color, 1)
-        # 添加线段项
-        item = self._scene.addLine(x1, y1, x2, y2, pen)
-        item.setZValue(10)
-        # 图形项列表
-        gfx_items = [item]
-
-        # 如果有标签
-        if label:
-            # 添加文本项
-            text_item = self._scene.addText(label, QFont("Segoe UI", 9))
-            text_item.setPos(x1, y1 - 18)
-            text_item.setDefaultTextColor(color)
-            text_item.setZValue(11)
-            gfx_items.append(text_item)
-
-        # 创建叠加项
-        overlay = OverlayItem(
-            uid=uid,                                          # 唯一ID
-            type=OverlayType.LINE,                           # 类型
-            geometry={"x1": x1, "y1": y1, "x2": x2, "y2": y2},  # 几何参数
-            label=label,                                     # 标签
-            color=color,                                     # 颜色
-            graphics_items=gfx_items,                        # 图形项列表
-        )
-        # 保存到字典
-        self._overlays[uid] = overlay
-        # 返回ID
-        return uid
+        # # 计数器加1
+        # self._overlay_counter += 1
+        # # 生成唯一ID
+        # uid = f"overlay_{self._overlay_counter}"
+        # # 创建画笔
+        # pen = QPen(color, 1)
+        # # 添加线段项
+        # item = self._scene.addLine(x1, y1, x2, y2, pen)
+        # item.setZValue(10)
+        # # 图形项列表
+        # gfx_items = [item]
+        #
+        # # 如果有标签
+        # if label:
+        #     # 添加文本项
+        #     text_item = self._scene.addText(label, QFont("Segoe UI", 9))
+        #     text_item.setPos(x1, y1 - 18)
+        #     text_item.setDefaultTextColor(color)
+        #     text_item.setZValue(11)
+        #     gfx_items.append(text_item)
+        #
+        # # 创建叠加项
+        # overlay = OverlayItem(
+        #     uid=uid,                                          # 唯一ID
+        #     type=OverlayType.LINE,                           # 类型
+        #     geometry={"x1": x1, "y1": y1, "x2": x2, "y2": y2},  # 几何参数
+        #     label=label,                                     # 标签
+        #     color=color,                                     # 颜色
+        #     graphics_items=gfx_items,                        # 图形项列表
+        # )
+        # # 保存到字典
+        # self._overlays[uid] = overlay
+        # # 返回ID
+        # return uid
+        pass
 
     def remove_overlay(self, uid: str):
         """根据ID移除单个叠加层
@@ -952,28 +887,30 @@ class ImageViewer(QGraphicsView):
         参数：
             uid: 叠加项ID
         """
-        # 弹出叠加项
-        overlay = self._overlays.pop(uid, None)
-        # 如果存在
-        if overlay:
-            # 移除所有图形项
-            for item in overlay.graphics_items:
-                self._scene.removeItem(item)
-            # 如果选中的是当前项，清除选中状态
-            if self._selected_uid == uid:
-                self._clear_selection()
+        # # 弹出叠加项
+        # overlay = self._overlays.pop(uid, None)
+        # # 如果存在
+        # if overlay:
+        #     # 移除所有图形项
+        #     for item in overlay.graphics_items:
+        #         self._scene.removeItem(item)
+        #     # 如果选中的是当前项，清除选中状态
+        #     if self._selected_uid == uid:
+        #         self._clear_selection()
+        pass
 
     def clear_overlays(self):
         """移除所有结构化叠加层"""
-        # 遍历所有叠加项
-        for overlay in list(self._overlays.values()):
-            # 移除图形项
-            for item in overlay.graphics_items:
-                self._scene.removeItem(item)
-        # 清空字典
-        self._overlays.clear()
-        # 清除选中状态
-        self._clear_selection()
+        # # 遍历所有叠加项
+        # for overlay in list(self._overlays.values()):
+        #     # 移除图形项
+        #     for item in overlay.graphics_items:
+        #         self._scene.removeItem(item)
+        # # 清空字典
+        # self._overlays.clear()
+        # # 清除选中状态
+        # self._clear_selection()
+        pass
 
     # ── 选择与高亮 ─────────────────────────────────────────
 
@@ -983,57 +920,60 @@ class ImageViewer(QGraphicsView):
         参数：
             uid: 叠加项ID
         """
-        # 如果已经是选中的，返回
-        if uid == self._selected_uid:
-            return
-        # 清除当前选中
-        self._clear_selection()
-        # 获取叠加项
-        overlay = self._overlays.get(uid)
-        if overlay is None:
-            return
-        # 标记为选中
-        overlay.selected = True
-        # 保存选中ID
-        self._selected_uid = uid
-
-        # 视觉：用高亮颜色重绘
-        highlight_color = QColor("#FFD700")  # 金色
-        # 只处理主要图形项（第一个）
-        for item in overlay.graphics_items[:1]:
-            # 获取画笔
-            pen = item.pen()
-            # 设置高亮颜色
-            pen.setColor(highlight_color)
-            # 设置线宽
-            pen.setWidth(3)
-            # 应用画笔
-            item.setPen(pen)
-
-        # 发出选中信号
-        self.overlay_selected.emit(uid)
+        # # 如果已经是选中的，返回
+        # if uid == self._selected_uid:
+        #     return
+        # # 清除当前选中
+        # self._clear_selection()
+        # # 获取叠加项
+        # overlay = self._overlays.get(uid)
+        # if overlay is None:
+        #     return
+        # # 标记为选中
+        # overlay.selected = True
+        # # 保存选中ID
+        # self._selected_uid = uid
+        #
+        # # 视觉：用高亮颜色重绘
+        # highlight_color = QColor("#FFD700")  # 金色
+        # # 只处理主要图形项（第一个）
+        # for item in overlay.graphics_items[:1]:
+        #     # 获取画笔
+        #     pen = item.pen()
+        #     # 设置高亮颜色
+        #     pen.setColor(highlight_color)
+        #     # 设置线宽
+        #     pen.setWidth(3)
+        #     # 应用画笔
+        #     item.setPen(pen)
+        #
+        # # 发出选中信号
+        # self.overlay_selected.emit(uid)
+        pass
 
     def deselect_overlay(self):
         """取消当前选中"""
-        self._clear_selection()
-        self.overlay_deselected.emit()
+        # self._clear_selection()
+        # self.overlay_deselected.emit()
+        pass
 
     def _clear_selection(self):
         """清除选中状态"""
-        # 如果有选中的ID且存在
-        if self._selected_uid and self._selected_uid in self._overlays:
-            # 获取叠加项
-            overlay = self._overlays[self._selected_uid]
-            # 标记未选中
-            overlay.selected = False
-            # 恢复原始颜色
-            for item in overlay.graphics_items[:1]:
-                pen = item.pen()
-                pen.setColor(overlay.color)
-                pen.setWidth(overlay.line_width)
-                item.setPen(pen)
-        # 清空选中ID
-        self._selected_uid = None
+        # # 如果有选中的ID且存在
+        # if self._selected_uid and self._selected_uid in self._overlays:
+        #     # 获取叠加项
+        #     overlay = self._overlays[self._selected_uid]
+        #     # 标记未选中
+        #     overlay.selected = False
+        #     # 恢复原始颜色
+        #     for item in overlay.graphics_items[:1]:
+        #         pen = item.pen()
+        #         pen.setColor(overlay.color)
+        #         pen.setWidth(overlay.line_width)
+        #         item.setPen(pen)
+        # # 清空选中ID
+        # self._selected_uid = None
+        pass
 
     def highlight_overlay(self, uid: str, highlight_color: QColor = QColor("#FFD700"),
                           duration_ms: int = 2000):
@@ -1044,26 +984,27 @@ class ImageViewer(QGraphicsView):
             highlight_color: 高亮颜色
             duration_ms: 高亮持续时间（毫秒）
         """
-        # 获取叠加项
-        overlay = self._overlays.get(uid)
-        if overlay is None:
-            return
-
-        # 缩放到该区域
-        rect = overlay.to_rect()
-        if rect:
-            self.zoom_to_rect(rect, padding=0.2, animate=True)
-
-        # 高亮处理
-        for item in overlay.graphics_items[:1]:
-            pen = item.pen()
-            pen.setColor(highlight_color)
-            pen.setWidth(4)
-            item.setPen(pen)
-
-        # 延迟恢复
-        from PyQt5.QtCore import QTimer
-        QTimer.singleShot(duration_ms, lambda: self._restore_highlight(uid))
+        # # 获取叠加项
+        # overlay = self._overlays.get(uid)
+        # if overlay is None:
+        #     return
+        #
+        # # 缩放到该区域
+        # rect = overlay.to_rect()
+        # if rect:
+        #     self.zoom_to_rect(rect, padding=0.2, animate=True)
+        #
+        # # 高亮处理
+        # for item in overlay.graphics_items[:1]:
+        #     pen = item.pen()
+        #     pen.setColor(highlight_color)
+        #     pen.setWidth(4)
+        #     item.setPen(pen)
+        #
+        # # 延迟恢复
+        # from PyQt5.QtCore import QTimer
+        # QTimer.singleShot(duration_ms, lambda: self._restore_highlight(uid))
+        pass
 
     def _restore_highlight(self, uid: str):
         """恢复高亮
@@ -1071,15 +1012,16 @@ class ImageViewer(QGraphicsView):
         参数：
             uid: 叠加项ID
         """
-        # 获取叠加项
-        overlay = self._overlays.get(uid)
-        # 如果存在且未选中
-        if overlay and not overlay.selected:
-            for item in overlay.graphics_items[:1]:
-                pen = item.pen()
-                pen.setColor(overlay.color)
-                pen.setWidth(overlay.line_width)
-                item.setPen(pen)
+        # # 获取叠加项
+        # overlay = self._overlays.get(uid)
+        # # 如果存在且未选中
+        # if overlay and not overlay.selected:
+        #     for item in overlay.graphics_items[:1]:
+        #         pen = item.pen()
+        #         pen.setColor(overlay.color)
+        #         pen.setWidth(overlay.line_width)
+        #         item.setPen(pen)
+        pass
 
     def _hit_test_overlays(self, view_pos: QPointF):
         """检查点击是否命中任何叠加层并选中
@@ -1087,31 +1029,32 @@ class ImageViewer(QGraphicsView):
         参数：
             view_pos: 视口坐标
         """
-        # 转换为场景坐标
-        scene_pos = self.mapToScene(view_pos)
-        x, y = scene_pos.x(), scene_pos.y()
-
-        # 按添加顺序逆序遍历（后添加的先命中）
-        for uid, overlay in reversed(list(self._overlays.items())):
-            # 获取几何参数
-            geo = overlay.geometry
-            # 如果是矩形、ROI或检测框类型
-            if overlay.type in (OverlayType.RECT, OverlayType.ROI, OverlayType.DETECTION):
-                gx, gy, gw, gh = geo.get("x", 0), geo.get("y", 0), geo.get("w", 0), geo.get("h", 0)
-                # 检查点是否在矩形内
-                if gx <= x <= gx + gw and gy <= y <= gy + gh:
-                    self.select_overlay(uid)
-                    return
-            # 如果是圆形类型
-            elif overlay.type == OverlayType.CIRCLE:
-                cx, cy, r = geo.get("cx", 0), geo.get("cy", 0), geo.get("r", 0)
-                # 检查点是否在圆形内
-                if (x - cx) ** 2 + (y - cy) ** 2 <= r ** 2:
-                    self.select_overlay(uid)
-                    return
-
-        # 没有命中任何叠加层
-        self.deselect_overlay()
+        # # 转换为场景坐标
+        # scene_pos = self.mapToScene(view_pos)
+        # x, y = scene_pos.x(), scene_pos.y()
+        #
+        # # 按添加顺序逆序遍历（后添加的先命中）
+        # for uid, overlay in reversed(list(self._overlays.items())):
+        #     # 获取几何参数
+        #     geo = overlay.geometry
+        #     # 如果是矩形、ROI或检测框类型
+        #     if overlay.type in (OverlayType.RECT, OverlayType.ROI, OverlayType.DETECTION):
+        #         gx, gy, gw, gh = geo.get("x", 0), geo.get("y", 0), geo.get("w", 0), geo.get("h", 0)
+        #         # 检查点是否在矩形内
+        #         if gx <= x <= gx + gw and gy <= y <= gy + gh:
+        #             self.select_overlay(uid)
+        #             return
+        #     # 如果是圆形类型
+        #     elif overlay.type == OverlayType.CIRCLE:
+        #         cx, cy, r = geo.get("cx", 0), geo.get("cy", 0), geo.get("r", 0)
+        #         # 检查点是否在圆形内
+        #         if (x - cx) ** 2 + (y - cy) ** 2 <= r ** 2:
+        #             self.select_overlay(uid)
+        #             return
+        #
+        # # 没有命中任何叠加层
+        # self.deselect_overlay()
+        pass
 
     # ── 兼容性便捷方法 ────────────────────────────────────
 
@@ -1127,7 +1070,8 @@ class ImageViewer(QGraphicsView):
         返回：
             叠加项ID
         """
-        return self.add_rect_overlay(rect, label, color, overlay_type=OverlayType.ROI)
+        # return self.add_rect_overlay(rect, label, color, overlay_type=OverlayType.ROI)
+        pass
 
     def add_detection_overlay(self, rect: tuple, label: str = "",
                                color: QColor = QColor(76, 175, 80),
@@ -1143,8 +1087,9 @@ class ImageViewer(QGraphicsView):
         返回：
             叠加项ID
         """
-        return self.add_rect_overlay(rect, label, color, score=score,
-                                     overlay_type=OverlayType.DETECTION)
+        # return self.add_rect_overlay(rect, label, color, score=score,
+        #                              overlay_type=OverlayType.DETECTION)
+        pass
 
     def get_overlay(self, uid: str) -> OverlayItem | None:
         """根据ID获取叠加项元数据
@@ -1155,7 +1100,8 @@ class ImageViewer(QGraphicsView):
         返回：
             叠加项对象或None
         """
-        return self._overlays.get(uid)
+        # return self._overlays.get(uid)
+        pass
 
     def get_all_overlays(self) -> dict[str, OverlayItem]:
         """获取所有叠加项
@@ -1163,7 +1109,8 @@ class ImageViewer(QGraphicsView):
         返回：
             叠加项字典
         """
-        return dict(self._overlays)
+        # return dict(self._overlays)
+        pass
 
     # ── 视频帧支持 ──────────────────────────────────────────
 
@@ -1177,16 +1124,17 @@ class ImageViewer(QGraphicsView):
             total_frames: 视频总帧数
             fps: 帧率
         """
-        # 设置图像
-        self.set_image(frame)
-        # 如果有总帧数信息
-        if total_frames > 0:
-            # 构建信息文本
-            info = f"视频帧 {frame_index + 1}/{total_frames}"
-            if fps > 0:
-                info += f" @ {fps:.1f} FPS"
-            # 显示帧叠加信息
-            self._show_frame_overlay(info)
+        # # 设置图像
+        # self.set_image(frame)
+        # # 如果有总帧数信息
+        # if total_frames > 0:
+        #     # 构建信息文本
+        #     info = f"视频帧 {frame_index + 1}/{total_frames}"
+        #     if fps > 0:
+        #         info += f" @ {fps:.1f} FPS"
+        #     # 显示帧叠加信息
+        #     self._show_frame_overlay(info)
+        pass
 
     def _show_frame_overlay(self, text: str):
         """在左上角显示半透明帧信息叠加层
@@ -1194,31 +1142,34 @@ class ImageViewer(QGraphicsView):
         参数：
             text: 显示文本
         """
-        # 清除现有帧叠加层
-        self._clear_frame_overlay()
-        # 添加背景矩形
-        overlay = self._scene.addRect(0, 0, 300, 28, QPen(Qt.NoPen),
-                                       QBrush(QColor(0, 0, 0, 140)))
-        overlay.setZValue(100)
-        self._frame_overlay_items = [overlay]
-        # 添加文本
-        txt = self._scene.addText(text, QFont("Segoe UI", 10))
-        txt.setDefaultTextColor(QColor("#00ff00"))
-        txt.setPos(6, 4)
-        txt.setZValue(101)
-        self._frame_overlay_items.append(txt)
+        # # 清除现有帧叠加层
+        # self._clear_frame_overlay()
+        # # 添加背景矩形
+        # overlay = self._scene.addRect(0, 0, 300, 28, QPen(Qt.NoPen),
+        #                                QBrush(QColor(0, 0, 0, 140)))
+        # overlay.setZValue(100)
+        # self._frame_overlay_items = [overlay]
+        # # 添加文本
+        # txt = self._scene.addText(text, QFont("Segoe UI", 10))
+        # txt.setDefaultTextColor(QColor("#00ff00"))
+        # txt.setPos(6, 4)
+        # txt.setZValue(101)
+        # self._frame_overlay_items.append(txt)
+        pass
 
     def _clear_frame_overlay(self):
         """清除帧叠加层"""
-        # 遍历帧叠加层项列表
-        for item in getattr(self, '_frame_overlay_items', []):
-            self._scene.removeItem(item)
-        # 清空列表
-        self._frame_overlay_items = []
+        # # 遍历帧叠加层项列表
+        # for item in getattr(self, '_frame_overlay_items', []):
+        #     self._scene.removeItem(item)
+        # # 清空列表
+        # self._frame_overlay_items = []
+        pass
 
     def clear_video_frame(self):
         """清除视频帧叠加层"""
-        self._clear_frame_overlay()
+        # self._clear_frame_overlay()
+        pass
 
     # ── 调整大小 ────────────────────────────────────────────────────────
 
@@ -1228,15 +1179,13 @@ class ImageViewer(QGraphicsView):
         参数：
             event: 大小改变事件对象
         """
-        # 调用父类的resizeEvent
-        super().resizeEvent(event)
-        # 如果需要适应窗口且像素图不为空
-        if self._fit_to_window and not self._pixmap_item.pixmap().isNull():
-            # 适应窗口
-            self.fit_to_window()
-
-
-# ── 图像查看器面板 ─────────────────────────────────────────────────────
+        # # 调用父类的resizeEvent
+        # super().resizeEvent(event)
+        # # 如果需要适应窗口且像素图不为空
+        # if self._fit_to_window and not self._pixmap_item.pixmap().isNull():
+        #     # 适应窗口
+        #     self.fit_to_window()
+        pass
 
 class ImageViewerPanel(QWidget):
     """带信息栏的ImageViewer面板封装"""
@@ -1254,46 +1203,29 @@ class ImageViewerPanel(QWidget):
 
     def _setup_ui(self):
         """设置UI界面"""
-        # 创建垂直布局
         layout = QVBoxLayout(self)
-        # 设置布局边距为0
         layout.setContentsMargins(0, 0, 0, 0)
-        # 设置布局间距为0
         layout.setSpacing(0)
 
-        # 创建图像查看器
         self.viewer = ImageViewer()
 
-        # 创建查看器宿主
         viewer_host = QWidget()
-        # 创建堆叠布局
         viewer_stack = QStackedLayout(viewer_host)
-        # 设置边距为0
         viewer_stack.setContentsMargins(0, 0, 0, 0)
-        # 设置堆叠模式为全部叠加
         viewer_stack.setStackingMode(QStackedLayout.StackAll)
-        # 添加查看器
         viewer_stack.addWidget(self.viewer)
 
-        # 创建叠加层
         overlay_layer = QWidget()
-        # 设置鼠标穿透
         overlay_layer.setAttribute(Qt.WA_TransparentForMouseEvents, True)
-        # 设置透明背景
         overlay_layer.setStyleSheet("background: transparent;")
-        # 创建垂直布局
         overlay_layout = QVBoxLayout(overlay_layer)
-        # 设置边距
         overlay_layout.setContentsMargins(8, 8, 8, 8)
-        # 设置间距
         overlay_layout.setSpacing(6)
 
-        # 顶部行
         top_row = QHBoxLayout()
         top_row.setContentsMargins(0, 0, 0, 0)
         top_row.setSpacing(6)
 
-        # 结果徽章
         self._result_badge = QLabel("无结果")
         self._result_badge.setStyleSheet(
             "QLabel {"
@@ -1302,13 +1234,10 @@ class ImageViewerPanel(QWidget):
             "padding: 6px 12px; font-size: 12px; font-weight: 600;"
             "}"
         )
-        # 添加到顶部行，左对齐顶部
         top_row.addWidget(self._result_badge, 0, Qt.AlignLeft | Qt.AlignTop)
 
-        # 添加弹性空间
         top_row.addStretch(1)
 
-        # 来源提示
         self._source_hint = QLabel("")
         self._source_hint.setStyleSheet(
             "QLabel {"
@@ -1317,15 +1246,11 @@ class ImageViewerPanel(QWidget):
             "}"
         )
         self._source_hint.hide()
-        # 添加到顶部行，右对齐顶部
         top_row.addWidget(self._source_hint, 0, Qt.AlignRight | Qt.AlignTop)
-        # 添加顶部行到布局
         overlay_layout.addLayout(top_row)
 
-        # 添加弹性空间
         overlay_layout.addStretch(1)
 
-        # 消息横幅
         self._message_banner = QLabel("")
         self._message_banner.setWordWrap(True)
         self._message_banner.setStyleSheet(
@@ -1335,10 +1260,8 @@ class ImageViewerPanel(QWidget):
             "}"
         )
         self._message_banner.hide()
-        # 添加到布局，左下对齐
         overlay_layout.addWidget(self._message_banner, 0, Qt.AlignLeft | Qt.AlignBottom)
 
-        # 文件信息条
         self._file_info_strip = QLabel("")
         self._file_info_strip.setWordWrap(False)
         self._file_info_strip.setStyleSheet(
@@ -1349,12 +1272,9 @@ class ImageViewerPanel(QWidget):
             "}"
         )
         self._file_info_strip.hide()
-        # 添加到布局，底部对齐
         overlay_layout.addWidget(self._file_info_strip, 0, Qt.AlignBottom)
 
-        # 添加叠加层
         viewer_stack.addWidget(overlay_layer)
-        # 添加查看器宿主到主布局，拉伸因子为1
         layout.addWidget(viewer_host, 1)
 
         # 信息栏
@@ -1366,7 +1286,6 @@ class ImageViewerPanel(QWidget):
         self._pos_label.setStyleSheet("font-size: 11px; color: #999;")
         info_layout.addWidget(self._pos_label)
 
-        # 弹性空间
         info_layout.addStretch()
 
         # 尺寸标签
@@ -1436,13 +1355,9 @@ class ImageViewerPanel(QWidget):
             text: 徽章文本
             accent: 强调色
         """
-        # 去除首尾空格
         text = (text or "无结果").strip()
-        # 设置文本
         self._result_badge.setText(text)
-        # 边框颜色
         border = accent or "#3f3f46"
-        # 设置样式
         self._result_badge.setStyleSheet(
             "QLabel {"
             "background: rgba(37, 37, 38, 0.92); color: #dcdcdc;"
@@ -1457,11 +1372,8 @@ class ImageViewerPanel(QWidget):
         参数：
             text: 提示文本
         """
-        # 去除首尾空格
         text = (text or "").strip()
-        # 根据是否有文本设置可见性
         self._source_hint.setVisible(bool(text))
-        # 设置文本
         self._source_hint.setText(text)
 
     def set_message_banner(self, text: str | None):
@@ -1470,11 +1382,8 @@ class ImageViewerPanel(QWidget):
         参数：
             text: 消息文本
         """
-        # 去除首尾空格
         text = (text or "").strip()
-        # 根据是否有文本设置可见性
         self._message_banner.setVisible(bool(text))
-        # 设置文本
         self._message_banner.setText(text)
 
     def set_file_info(self, text: str | None):
@@ -1483,11 +1392,8 @@ class ImageViewerPanel(QWidget):
         参数：
             text: 文件信息文本
         """
-        # 去除首尾空格
         text = (text or "").strip()
-        # 根据是否有文本设置可见性
         self._file_info_strip.setVisible(bool(text))
-        # 设置文本
         self._file_info_strip.setText(text)
 
     def set_image_info(self, file_path: str | None, pixel_w: int = 0, pixel_h: int = 0):
@@ -1505,8 +1411,7 @@ class ImageViewerPanel(QWidget):
             # 隐藏文件信息条
             self._file_info_strip.setVisible(False)
             return
-        import os
-        from datetime import datetime
+
         # 信息部分列表
         parts = [os.path.basename(file_path)]  # 文件名
         # 添加尺寸信息
@@ -1541,14 +1446,10 @@ class ImageViewerPanel(QWidget):
         self.set_message_banner("")
         self._file_info_strip.setVisible(False)
 
-    def set_roi_rect(self, rect: tuple[int, int, int, int] | None, label: str = "ROI"):
-        """设置ROI矩形
-
-        参数：
-            rect: 矩形 (x, y, w, h)
-            label: 标签
-        """
-        self.viewer.set_roi_rect(rect, label=label)
+    def set_roi_rect(self, rect: tuple[int, int, int, int] | None, label: str = "ROI",
+                     angle: float = 0.0, draw_type: str = "rect"):
+        """设置ROI矩形"""
+        self.viewer.set_roi_rect(rect, label=label, angle=angle, draw_type=draw_type)
 
     def clear_roi_rect(self):
         """清除ROI矩形"""
@@ -1561,7 +1462,8 @@ class ImageViewerPanel(QWidget):
             x: X坐标
             y: Y坐标
         """
-        self._pos_label.setText(f"位置: ({x}, {y})")
+        # self._pos_label.setText(f"位置: ({x}, {y})")
+        pass
 
     def _on_zoom_changed(self, zoom: float):
         """缩放变化回调
@@ -1569,7 +1471,8 @@ class ImageViewerPanel(QWidget):
         参数：
             zoom: 缩放比例
         """
-        self._zoom_label.setText(f"缩放: {zoom * 100:.0f}%")
+        # self._zoom_label.setText(f"缩放: {zoom * 100:.0f}%")
+        pass
 
     def _on_pixel_clicked(self, x: int, y: int, value: object):
         """像素点击回调
@@ -1579,4 +1482,5 @@ class ImageViewerPanel(QWidget):
             y: Y坐标
             value: 像素值
         """
-        self._pos_label.setText(f"位置: ({x}, {y}) | 值: {value}")
+        # self._pos_label.setText(f"位置: ({x}, {y}) | 值: {value}")
+        pass

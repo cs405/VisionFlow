@@ -15,9 +15,8 @@ from typing import TYPE_CHECKING
 import cv2
 import numpy as np
 
-from core.node_base import (
-    Base64MatchingNodeData, OpenCVNodeDataBase, Property, PropertyGroupNames,
-)
+from core.node_base import Property, PropertyGroupNames
+from core.node_selectable import Base64MatchingNodeData, OpenCVNodeDataBase
 from core.data_packet import FlowableResult
 
 if TYPE_CHECKING:

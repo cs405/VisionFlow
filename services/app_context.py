@@ -57,10 +57,13 @@ class AppContext:
         """
         # 事件总线
         self._event_bus = _ev.EventSystem()
-        # 节点分组（工具箱左侧面板）
-        self._node_groups = _ng.create_standard_groups()
-        # 节点注册表
-        self._node_registry = _reg.NodeRegistry()
+        # 节点分组（工具箱左侧面板）—— 清空后重新填充
+        self._node_groups = _ng.node_data_group_manager
+        self._node_groups.clear()
+        for g in _ng.create_standard_groups().get_all_groups():
+            self._node_groups.add_group(g)
+        self._node_registry = _reg.node_registry
+        self._node_registry.clear()
         # IoC 服务集合（依赖注入容器）
         self._service_collection = _ioc.ServiceCollection()
         # 插件管理器（动态节点发现）

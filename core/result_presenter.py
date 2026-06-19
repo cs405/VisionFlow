@@ -21,23 +21,23 @@ if TYPE_CHECKING:
 
 class ResultItemType(Enum):
     """结果项类型枚举"""
-    VALUE = "value"              # 普通值类型
-    RECTANGLE = "rectangle"      # 矩形/边界框
-    LINE = "line"                # 线段
+    VALUE = "value"                      # 普通值类型
+    RECTANGLE = "rectangle"              # 矩形/边界框
+    LINE = "line"                        # 线段
     SCORE_RECTANGLE = "score_rectangle"  # 带分数的边界框
-    IMAGE = "image"              # 图像
-    TABLE = "table"              # 表格
-    TEXT = "text"                # 文本
+    IMAGE = "image"                      # 图像
+    TABLE = "table"                      # 表格
+    TEXT = "text"                        # 文本
 
 
 @dataclass
 class ResultItem:
     """带名称和值的基础结果项。"""
-    name: str                                      # 结果名称
-    value: Any = None                              # 结果值
+    name: str                                         # 结果名称
+    value: Any = None                                 # 结果值
     item_type: ResultItemType = ResultItemType.VALUE  # 结果类型
-    description: str = ""                          # 描述
-    unit: str = ""                                 # 单位
+    description: str = ""                             # 描述
+    unit: str = ""                                    # 单位
 
     def to_dict(self) -> dict:
         """序列化为字典"""
@@ -52,8 +52,8 @@ class ResultItem:
 
 @dataclass
 class RectangleResultItem(ResultItem):
-    """矩形/边界框结果。
-
+    """
+    矩形/边界框结果。
     几何信息：图像坐标系中的 (x, y, width, height)
     """
     x: float = 0.0        # 左上角 X 坐标
@@ -65,7 +65,7 @@ class RectangleResultItem(ResultItem):
     @property
     def rect(self) -> tuple[float, float, float, float]:
         """获取矩形元组 (x, y, width, height)"""
-        return (self.x, self.y, self.width, self.height)
+        return self.x, self.y, self.width, self.height
 
     def to_dict(self) -> dict:
         """序列化为字典"""
@@ -86,7 +86,7 @@ class LineResultItem(ResultItem):
     @property
     def points(self) -> tuple[float, float, float, float]:
         """获取端点元组 (x1, y1, x2, y2)"""
-        return (self.x1, self.y1, self.x2, self.y2)
+        return self.x1, self.y1, self.x2, self.y2
 
     def to_dict(self) -> dict:
         """序列化为字典"""
@@ -125,14 +125,13 @@ class TableResultItem(ResultItem):
 
 
 # ── 结果集合 ──────────────────────────────────────────────────────
-
 # VisionMessage — 历史结果数据对象（纯数据，无 Qt 依赖）
 # 存储在 WorkflowEngine.messages 中，ResultPanel 从中读取；
 # WorkflowEngine.on_node_completed() 负责添加/原地更新条目。
 @dataclass
 class VisionMessage:
-    """ IVisionMessage / VisionMessage 1:1 移植。
-
+    """
+    IVisionMessage / VisionMessage 1:1 移植。
     存储在 ResultPanel（或 DiagramData）上，用于历史记录表显示。
     """
     index: int = 0                    # 执行序号
@@ -230,13 +229,11 @@ class ValueResultPresenter:
         """返回表格显示的行数据 (名称, 值字符串, 类型)"""
         if self._result is None:
             return []
-        rows: list[tuple[str, str, ResultItemType]] = []
-        rows.append((self.LABEL_NODE_NAME, self._result.node_name, ResultItemType.VALUE))
-        rows.append((self.LABEL_NODE_TYPE, self._result.node_type, ResultItemType.VALUE))
-        rows.append((self.LABEL_STATUS,
-                     self.LABEL_SUCCESS if self._result.success else self.LABEL_FAILURE,
-                     ResultItemType.VALUE))
-        rows.append((self.LABEL_MESSAGE, self._result.message or "-", ResultItemType.VALUE))
+        rows: list[tuple[str, str, ResultItemType]] = [
+            (self.LABEL_NODE_NAME, self._result.node_name, ResultItemType.VALUE),
+            (self.LABEL_NODE_TYPE, self._result.node_type, ResultItemType.VALUE),
+            (self.LABEL_STATUS, self.LABEL_SUCCESS if self._result.success else self.LABEL_FAILURE, ResultItemType.VALUE),
+            (self.LABEL_MESSAGE, self._result.message or "-", ResultItemType.VALUE)]
         if self._result.execution_time_ms > 0:
             rows.append((self.LABEL_DURATION, f"{self._result.execution_time_ms:.1f} ms",
                          ResultItemType.VALUE))

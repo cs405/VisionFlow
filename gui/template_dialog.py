@@ -1,5 +1,5 @@
-"""模板管理器对话框
-
+"""
+模板管理器对话框
 显示所有保存的模板，支持删除和选择添加。
 """
 
@@ -11,28 +11,25 @@ from core.project import ProjectItem
 
 
 class TemplateManagerDialog(QDialog):
-    """模板管理对话框 — 模板管理"""
+    """模板对话框 — 支持两种模式：add（从模板新建）和 manage（管理/删除）"""
 
-    def __init__(self, project: ProjectItem, parent=None):
-        """初始化模板管理器对话框
+    def __init__(self, project: ProjectItem, parent=None, mode: str = "manage"):
+        """初始化模板对话框
 
         参数：
             project: 项目对象
             parent: 父对象
+            mode: "add" 仅选择并添加, "manage" 可删除模板
         """
-        # 调用父类QDialog的构造函数
         super().__init__(parent)
-        # 保存项目引用
         self._project = project
-        # 当前选中的模板索引
         self._selected_index: int = -1
-        # 设置窗口标题
-        self.setWindowTitle("模板管理")
-        # 设置最小尺寸480x320
+        self._mode = mode
+
+        title = "从模板新建流程图" if mode == "add" else "模板管理"
+        self.setWindowTitle(title)
         self.setMinimumSize(480, 320)
-        # 设置UI界面
         self._setup_ui()
-        # 刷新模板列表
         self._refresh()
 
     def _setup_ui(self):
@@ -75,12 +72,12 @@ class TemplateManagerDialog(QDialog):
         # 设置按钮间距为6
         btn_row.setSpacing(6)
 
-        # 删除按钮
-        delete_btn = QPushButton("删除选中")
-        # 连接点击信号
-        delete_btn.clicked.connect(self._on_delete)
-        # 添加到按钮行
-        btn_row.addWidget(delete_btn)
+        # 删除按钮（仅管理模式显示）
+        self._delete_btn = QPushButton("删除选中")
+        self._delete_btn.clicked.connect(self._on_delete)
+        if self._mode == "add":
+            self._delete_btn.setVisible(False)
+        btn_row.addWidget(self._delete_btn)
 
         # 添加弹性空间
         btn_row.addStretch()

@@ -2,11 +2,11 @@
 数据包和流式结果类型
 定义了工作流执行期间在节点之间传递的数据结构。
 """
-
-from dataclasses import dataclass, field
-from enum import Enum, auto
-from typing import Any
+import logging
 import numpy as np
+from typing import Any
+from enum import Enum, auto
+from dataclasses import dataclass, field
 
 
 class FlowableResultState(Enum):
@@ -29,9 +29,9 @@ class FlowableResult:
     """
     节点调用的结果。携带数据、状态和消息。
     """
-    value: Any = None                              # 结果值
-    message: str = ""                             # 附加消息
-    state: FlowableResultState = FlowableResultState.OK  # 执行状态
+    value: Any = None                                    # 结果值
+    message: str = ""                                    # 附加消息
+    state: FlowableResultState = FlowableResultState.OK  # 执行状态, 默认值为 ok
 
     @property
     def is_ok(self) -> bool:
@@ -72,21 +72,20 @@ class FlowableResult:
 class DataPacket:
     """
     节点间流动的数据包。包含图像数据及元数据。
-    在 Python 中使用 numpy.ndarray 表示图像，
+    使用 numpy.ndarray 表示图像，
     使用 DataPacket 进行更丰富的数据交换（元数据、多输出等）。
     """
     # 单张图像数据（与 images 互斥：优先使用 image，images 用于多输出场景）
     image: np.ndarray | None = None
     # 多张图像列表（当节点产生多个独立输出时使用）
     images: list[np.ndarray] = field(default_factory=list)
-    numeric_value: float = 0.0                         # 数值数据
-    text_value: str = ""                               # 文本数据
-    metadata: dict[str, Any] = field(default_factory=dict)  # 元数据字典
+    numeric_value: float = 0.0                               # 数值数据
+    text_value: str = ""                                     # 文本数据
+    metadata: dict[str, Any] = field(default_factory=dict)   # 元数据字典
     result_objects: list[Any] = field(default_factory=list)  # 结果对象列表
 
     def __post_init__(self):
         if self.image is not None and self.images:
-            import logging
             logging.getLogger(__name__).warning(
                 "DataPacket: image and images are mutually exclusive; images cleared")
             self.images = []
@@ -115,3 +114,4 @@ class VisionResultImage:
     def dispose(self):
         """释放图像内存"""
         self.image = None
+

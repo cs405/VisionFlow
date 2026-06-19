@@ -4,64 +4,51 @@
 
 已从 6 层深继承重构为 Mixin 扁平化模式（见 node_vision.py）:
 
-    NodeBase  （端口、样式、图表数据、属性系统）                     ← node_base.py
+    NodeBase  （端口、样式、图表数据、属性系统）                         ← node_base.py
       └─ VisionNodeData  （+ HelpPresenterMixin, PropertyPresenterMixin）
            ├─ ROINodeData  （DrawROI / FromROI / InputROI）         ← node_roi.py
-           ├─ SelectableResultImageNodeData  （选择上游结果）        ← node_selectable.py
+           ├─ SelectableResultImageNodeData  （选择上游结果）         ← node_selectable.py
            │    └─ OpenCVNodeDataBase  （OpenCV 特有的 Mat 处理）
            ├─ SrcFilesVisionNodeData （基于文件的图像源）
            ├─ Base64MatchingNodeData  （模板匹配）
            ├─ ConditionNodeData  （条件分支）                        ← node_condition.py
            └─ WaitAllParallelNodeData  （并行同步屏障）
 
-向后兼容别名（定义于 node_vision.py）:
-    VisionNodeDataBase = NodeBase
-    ShowPropertyNodeDataBase = PropertyPresenterMixin
-    HelpNodeDataBase = HelpPresenterMixin
-    DemoNodeDataBase = DemoParamsMixin
-
 """
 
 from __future__ import annotations
 
 import uuid
+import functools
 import importlib
 import numpy as np
 from enum import Enum, auto
-from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Callable
+from abc import ABC
+from typing import Any, Callable, Generator, TYPE_CHECKING
 
 from contextlib import contextmanager
 
 from core.data_packet import FlowableResult, FlowableInvokeMode
 from core.events import EventType, event_system
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # 仅在类型检查时导入，避免循环依赖
     from core.workflow import WorkflowEngine
 
 
-# =============================================================================
-# 参数分组名称
-# =============================================================================
-
 class PropertyGroupNames:
-    """属性分组名称常量类，用于UI中分组显示节点参数"""
+    """属性分组名称常量类，用于双击节点显示设置面板UI中分组显示节点参数"""
 
-    RUN_PARAMETERS = "运行参数"  # 运行时相关参数（如执行次数、延时等）
-    BASE_PARAMETERS = "基本参数"  # 节点基础参数（如名称、描述等）
-    RESULT_PARAMETERS = "结果参数"  # 输出结果相关参数（如保存路径、格式等）
-    FLOW_PARAMETERS = "流程控制"  # 流程控制参数（如条件判断、循环等）
+    RUN_PARAMETERS = "运行参数"      # 运行时相关参数（如执行次数、延时等）
+    BASE_PARAMETERS = "基本参数"     # 节点基础参数（如名称、描述等）
+    RESULT_PARAMETERS = "结果参数"   # 输出结果相关参数（如保存路径、格式等）
+    FLOW_PARAMETERS = "流程控制"     # 流程控制参数（如条件判断、循环等）
     DISPLAY_PARAMETERS = "显示参数"  # UI显示相关参数（如颜色、透明度等）
-    OTHER_PARAMETERS = "其他参数"  # 未归类参数
+    OTHER_PARAMETERS = "其他参数"    # 未归类参数
 
-
-# =============================================================================
-# 属性描述符
-# =============================================================================
 
 class Property:
-    """带元数据的可观察属性描述符。
-
+    """
+    带元数据的可观察属性描述符。
     属性面板的扩展元数据：
       - editor: str | None  -> 自定义编辑器提示（"color", "roi", "file", "slider", "choices"）
       - choices: list | None -> 下拉选项
@@ -70,33 +57,29 @@ class Property:
       - step: float -> 步进值（用于数值调节控件）
       - decimals: int -> 浮点数显示的小数位数
     """
-
     def __init__(self, default: Any = None, *, name: str = "", group: str = "",
                  description: str = "", readonly: bool = False, order: int = 0,
                  editor: str = "", choices: list = None,
                  min_val: Any = None, max_val: Any = None,
-                 validator: callable = None,
+                 validator = None,
                  step: float = 0.1, decimals: int = 3):
-
-        self.default = default  # 属性的默认值
-        self.display_name = name  # 在UI中显示的属性名称
-        self.group = group  # 属性所属的分组（用于在属性面板中归类）
-        self.description = description  # 属性的描述文本（用于工具提示等）
-        self.readonly = readonly  # 是否为只读属性
-        self.order = order  # 在属性面板中的显示顺序（数值越小越靠前）
-        self.editor = editor  # 扩展元数据：自定义编辑器类型
+        self.default = default        # 属性默认值
+        self.display_name = name
+        self.group = group            # 属性所属的分组（用于在属性面板中归类）
+        self.description = description
+        self.readonly = readonly
+        self.order = order            # 在属性面板中的显示顺序（数值越小越靠前）
+        self.editor = editor          # 扩展元数据：自定义编辑器类型
         self.choices = choices or []  # 扩展元数据：下拉选项列表
-        self.min_val = min_val  # 扩展元数据：最小值约束
-        self.max_val = max_val  # 扩展元数据：最大值约束
+        self.min_val = min_val      # 扩展元数据：最小值约束
+        self.max_val = max_val      # 扩展元数据：最大值约束
         self.validator = validator  # 扩展元数据：验证函数
-        self.step = step  # 扩展元数据：步进值
-        self.decimals = decimals  # 扩展元数据：小数位数
+        self.step = step            # 扩展元数据：步进值
+        self.decimals = decimals    # 扩展元数据：小数位数
 
     def __set_name__(self, owner, name):
         """描述符协议：在类创建时被调用，用于设置属性名称"""
-        # 存储属性的私有变量名（以下划线开头）
-        self.attr_name = f"_{name}"
-        # 存储属性的公开名称
+        self.attr_name = f"_{name}"  # 实际存储属性值的私有变量名
         self.public_name = name
 
     def __get__(self, obj, objtype=None):
@@ -109,13 +92,9 @@ class Property:
 
     def __set__(self, obj, value):
         """描述符协议：设置属性值时被调用"""
-        import numpy as np
-        # 获取旧值
-        old = getattr(obj, self.attr_name, self.default)
-        # 设置新值
-        setattr(obj, self.attr_name, value)
-        # 如果值发生变化，通知属性变更
-        # 对 numpy 数组使用 array_equal 避免 ambiguity 错误
+        old = getattr(obj, self.attr_name, self.default)  # 获取旧值
+        setattr(obj, self.attr_name, value)               # 设置新值
+        # 如果值发生变化，通知属性变更（特殊处理 numpy 数组和一般对象的比较）
         changed = False
         if isinstance(old, np.ndarray) and isinstance(value, np.ndarray):
             changed = not np.array_equal(old, value)
@@ -128,24 +107,17 @@ class Property:
             obj._notify_property_changed(self.public_name, old, value)
 
 
-# =============================================================================
-# 端口类型
-# =============================================================================
-
 class PortType(Enum):
-    """端口类型枚举"""
-    INPUT = auto()   # 输入端口
-    OUTPUT = auto()  # 输出端口
-    BOTH = auto()    # 双向端口（既可作为输入也可作为输出）
+    INPUT = auto()    # 输入端口
+    OUTPUT = auto()   # 输出端口
+    BOTH = auto()     # 双向接口，即可作为输入，也可以作为输出
 
 
 class PortDock(Enum):
-    """端口停靠位置枚举"""
-    TOP = auto()     # 顶部停靠
-    BOTTOM = auto()  # 底部停靠
-    LEFT = auto()    # 左侧停靠
-    RIGHT = auto()   # 右侧停靠
-
+    TOP = auto()     # 顶部端口
+    BOTTOM = auto()  # 底部端口
+    LEFT = auto()    # 左侧端口
+    RIGHT = auto()   # 右侧端口
 
 
 class Port:
@@ -153,12 +125,10 @@ class Port:
     节点上的连接端口
     节点有4个端口：顶部（输入）、底部（输出）、左侧（输入）、右侧（输出）
     """
-
     def __init__(self, node_id: str, port_type: PortType, dock: PortDock,
                  port_id: str = None, name: str = ""):
-
-        self.port_id = port_id or str(uuid.uuid4())[:8]
-        self.node_id = node_id
+        self.node_id = node_id                           # 节点 id
+        self.port_id = port_id or str(uuid.uuid4())[:8]  # 端口 id 或者 使用 uuid64 的前 8 位
         self.port_type = port_type
         self.dock = dock
         self.name = name
@@ -189,30 +159,24 @@ class Port:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Port":
-        """从字典反序列化创建端口对象"""
+    def from_dict(cls, data: dict) -> Port:
+        """从字典数据创建 Port 实例"""
         return cls(
             node_id=data["node_id"],
-            port_type=PortType[data["port_type"]],  # 根据名称获取枚举值
-            dock=PortDock[data["dock"]],            # 根据名称获取枚举值
-            port_id=data.get("port_id"),            # 端口ID，反序列化时可能存在
-            name=data.get("name", ""),   # 端口显示名称，反序列化时可能存在
+            port_type=PortType[data["port_type"]],
+            dock=PortDock[data["dock"]],
+            port_id=data.get("port_id"),
+            name=data.get("name", "")
         )
 
-    def invoke(self, previors: "LinkData | None" = None,
-               diagram: "WorkflowEngine | None" = None) -> "FlowableResult":
+    def invoke(self, diagram = None) -> "FlowableResult":
         """
         执行端口级逻辑
         默认行为：发布 PORT_STARTED 事件 → 返回 OK 结果 → 发布 PORT_COMPLETED 事件。
         子类可重写此方法以实现自定义端口处理（验证、转换等）
         """
-        # 延迟导入避免循环依赖
-        from core.data_packet import FlowableResult
-        from core.events import EventType, event_system
-        # 发布端口开始执行事件
-        event_system.publish(EventType.PORT_STARTED, sender=self, diagram=diagram)
-        # 创建成功结果
-        result = FlowableResult.ok(message="port ok")
+        event_system.publish(EventType.PORT_STARTED, sender=self, diagram=diagram)  # 发布端口开始执行事件
+        result = FlowableResult.ok(message="port ok")                               # 创建成功结果
         # 发布端口执行完成事件
         event_system.publish(EventType.PORT_COMPLETED, sender=self, result=result,
                              diagram=diagram)
@@ -221,18 +185,16 @@ class Port:
 
 class LinkData:
     """连接两个端口的连线数据类"""
-
     def __init__(self, from_node_id: str = "", from_port_id: str = "",
                  to_node_id: str = "", to_port_id: str = "",
                  text: str = ""):
-
-        self.link_id = str(uuid.uuid4())[:8]
-        self.from_node_id = from_node_id
-        self.from_port_id = from_port_id
-        self.to_node_id = to_node_id
-        self.to_port_id = to_port_id
-        self.text = text
-        self.stroke_color = "#FF8C00"
+        self.link_id = str(uuid.uuid4())[:8]  # 连线 id，使用 uuid64 的前 8 位
+        self.from_node_id = from_node_id      # 来源节点 id
+        self.from_port_id = from_port_id      # 来源端口 id
+        self.to_node_id = to_node_id          # 目标节点 id
+        self.to_port_id = to_port_id          # 目标端口 id
+        self.text = text                      # 连线上的文本（如条件表达式）
+        self.stroke_color = "#FF8C00"         # 连线颜色
 
     def to_dict(self) -> dict:
         """将连线对象序列化为字典"""
@@ -247,7 +209,7 @@ class LinkData:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "LinkData":
+    def from_dict(cls, data: dict) -> LinkData:
         """从字典反序列化创建连线对象"""
         link = cls(
             from_node_id=data.get("from_node_id", ""),
@@ -260,25 +222,17 @@ class LinkData:
         link.stroke_color = data.get("stroke_color", link.stroke_color)
         return link
 
-    def invoke(self, diagram: "WorkflowEngine | None" = None) -> "FlowableResult":
+    def invoke(self) -> "FlowableResult":
         """
         执行连线级逻辑
         默认行为：发布 LINK_STARTED 事件 → 返回 OK 结果 → 发布 LINK_COMPLETED 事件。
         子类可重写此方法以实现自定义连线处理（过滤、转换等）
         """
-        from core.events import EventType, event_system
-        # 发布连线开始执行事件
-        event_system.publish(EventType.LINK_STARTED, sender=self)
-        # 创建成功结果
-        result = FlowableResult.ok(message="link ok")
-        # 发布连线执行完成事件
-        event_system.publish(EventType.LINK_COMPLETED, sender=self, result=result)
+        event_system.publish(EventType.LINK_STARTED, sender=self)                   # 发布连线开始执行事件
+        result = FlowableResult.ok(message="link ok")                               # 创建成功结果
+        event_system.publish(EventType.LINK_COMPLETED, sender=self, result=result)  # 发布连线执行完成事件
         return result
 
-
-# =============================================================================
-# 节点基类
-# =============================================================================
 
 class NodeBase(ABC):
     """
@@ -298,66 +252,44 @@ class NodeBase(ABC):
         cls._type_deserializers[type_name] = from_dict
 
     def __init__(self):
-        self._id = str(uuid.uuid4())[:8]
-        self._name = self.__class__.__name__
-        self._text = ""
-        self._title = ""
-
-        # 属性更改回调字典，键为属性名，值为回调函数列表
-        self._property_callbacks: dict[str, list[Callable]] = {}
-        # 批量更新标志
-        self._batch_updating: bool = False
-
-        # 样式属性
-        self.width: float = 120.0      # 节点宽度
-        self.height: float = 35.0      # 节点高度
-        self.corner_radius: float = 2.0  # 圆角半径
-        self.fill_color: str = "#FFFFFF"  # 填充颜色
-        self.flag_length: float = 10.0    # 标志长度
-
-        # 端口列表
-        self.ports: list[Port] = []
-        self._init_ports()  # 初始化端口
-
-        # 图表数据（工作流引擎引用）
-        self._diagram_data: WorkflowEngine | None = None
-        # 上游节点列表
-        self.from_node_datas: list[NodeBase] = []
-        # 下游节点列表
-        self.to_node_datas: list[NodeBase] = []
-
-        # 结果图像（来自 IResultImageSourceNodeData）
-        self.use_result_image_source: bool = True
-        # 结果图像源（GUI用QImage/QPixmap，内部用numpy数组）
-        self._result_image_source: Any = None
-
-        # Flowable相关
-        self.message: str = ""
-
-        # 执行模式
-        self.invoke_mode: FlowableInvokeMode = FlowableInvokeMode.SEQUENTIAL
-
-        # 工具箱排序顺序
-        self.order: int = 0
-
+        self._id = str(uuid.uuid4())[:8]                                      # 节点 id，使用 uuid64 的前 8 位
+        self._name = self.__class__.__name__                                  # 节点名称，默认为类名
+        self._title = ""                                                      # 节点标题
+        self._property_callbacks: dict[str, list[Callable]] = {}              # 属性更改回调字典，键为属性名，值为回调函数列表
+        self._batch_updating: bool = False                                    # 批量更新标志
+        self._pos_x: int = 0                                                  # 节点 X 坐标
+        self._pos_y: int = 0                                                  # 节点 Y 坐标
+        self.width: float = 120.0                                             # 节点宽度
+        self.height: float = 35.0                                             # 节点高度
+        self.corner_radius: float = 2.0                                       # 圆角半径
+        self.fill_color: str = "#FFFFFF"                                      # 填充颜色
+        self.flag_length: float = 10.0                                        # 标志长度
+        self.ports: list[Port] = []                                           # 端口列表
+        self._init_ports()                                                    # 初始化端口
+        self._diagram_data = None                                             # 图表数据（工作流引擎引用）
+        self.from_node_datas: list[NodeBase] = []                             # 上游节点列表
+        self.to_node_datas: list[NodeBase] = []                               # 下游节点列表
+        self.use_result_image_source: bool = True                             # 结果图像（来自 IResultImageSourceNodeData）
+        self._result_image_source: Any = None                                 # 结果图像源（GUI用QImage/QPixmap，内部用numpy数组）
+        self.message: str = ""                                                # 执行结果信息
+        self.invoke_mode: FlowableInvokeMode = FlowableInvokeMode.SEQUENTIAL  # 执行模式
+        self.order: int = 0                                                   # 工具箱排序顺序
         if not self._skip_load_default:
             self.load_default()
 
     # -- 属性变更通知 --
-
     def _notify_property_changed(self, name: str, old_value: Any, new_value: Any):
         """当属性值发生变化时，由 Property 描述符调用此方法"""
-        # 调用所有注册的回调函数
-        for cb in self._property_callbacks.get(name, []):
+
+        for cb in self._property_callbacks.get(name, []):  # 调用所有注册的回调函数
             cb(name, old_value, new_value)
-        # 批量更新模式下跳过事件发布，避免逐个属性变更时洪水式发布
-        # _batch_updating 仅在单线程（主线程）中设置，无需同步
+
         if not getattr(self, '_batch_updating', False):
             event_system.publish(EventType.NODE_PROPERTY_CHANGED,
                                 sender=self, name=name, old=old_value, new=new_value)
 
     @contextmanager
-    def batch_updates(self):
+    def batch_updates(self) -> Generator[None, None, None]:
         """批量属性更新上下文管理器。
 
         在此上下文中修改多个属性时，不会逐个发布 NODE_PROPERTY_CHANGED 事件。
@@ -379,7 +311,6 @@ class NodeBase(ABC):
         self._property_callbacks.setdefault(name, []).append(callback)
 
     # -- 标识属性 --
-
     @property
     def node_id(self) -> str:
         """获取节点ID"""
@@ -402,19 +333,18 @@ class NodeBase(ABC):
 
     @title.setter
     def title(self, value: str):
-        """设置节点标题，同时更新文本"""
+        """设置节点标题"""
         self._title = value
-        self._text = value
 
     @property
     def text(self) -> str:
-        """获取节点显示文本"""
-        return self._text or self._name
+        """获取节点显示文本（由 _title 驱动）"""
+        return self._title or self._name
 
     @text.setter
     def text(self, value: str):
-        """设置节点显示文本"""
-        self._text = value
+        """设置节点显示文本（等同于设置 title）"""
+        self._title = value
 
     @property
     def display_name(self) -> str:
@@ -422,14 +352,13 @@ class NodeBase(ABC):
         return self._name
 
     # -- 图表数据绑定 --
-
     @property
-    def diagram_data(self) -> WorkflowEngine | None:
+    def diagram_data(self):
         """获取工作流引擎引用"""
         return self._diagram_data
 
     @diagram_data.setter
-    def diagram_data(self, value: WorkflowEngine | None):
+    def diagram_data(self, value):
         """设置工作流引擎引用"""
         self._diagram_data = value
 
@@ -467,14 +396,13 @@ class NodeBase(ABC):
         return None
 
     # -- 端口管理 --
-
     def _init_ports(self):
         """初始化4个默认端口（上/下/左/右）"""
         self.ports = [
-            self._make_port(PortType.INPUT, PortDock.TOP),
-            self._make_port(PortType.OUTPUT, PortDock.BOTTOM),
-            self._make_port(PortType.INPUT, PortDock.LEFT),
-            self._make_port(PortType.OUTPUT, PortDock.RIGHT),
+            self._make_port(PortType.INPUT, PortDock.TOP),      # 上进
+            self._make_port(PortType.OUTPUT, PortDock.BOTTOM),  # 下出
+            self._make_port(PortType.INPUT, PortDock.LEFT),     # 左进
+            self._make_port(PortType.OUTPUT, PortDock.RIGHT),   # 右出
         ]
 
     def _make_port(self, port_type: PortType, dock: PortDock) -> Port:
@@ -490,16 +418,15 @@ class NodeBase(ABC):
         return [p for p in self.ports if p.is_output]
 
     def get_flowable_output_links(self, diagram: "WorkflowEngine") -> list["LinkData"]:
-        """获取应从本节点路由的输出连线。
-
+        """
+        获取应从本节点路由的输出连线。
         默认行为：返回所有连接到输出端口的连线。
         子类可重写以实现选择性端口路由（如条件分支）。
         """
-        active_port_ids = set()
-        active_port_name = getattr(self, '_active_output_port_name', None)
+        active_port_ids = set()                                             # 活跃节点集合
+        active_port_name = getattr(self, '_active_output_port_name', None)  # 当前活跃端口名称
         if active_port_name:
-            # 只路由到指定的活动端口
-            for p in self.get_output_ports():
+            for p in self.get_output_ports():                               # 只路由到指定的活动端口
                 if p.name == active_port_name:
                     active_port_ids.add(p.port_id)
         else:
@@ -510,7 +437,6 @@ class NodeBase(ABC):
                 if l.from_node_id == self.node_id and l.from_port_id in active_port_ids]
 
     # -- 结果图像 --
-
     @property
     def result_image_source(self) -> Any:
         """获取结果图像源"""
@@ -522,14 +448,14 @@ class NodeBase(ABC):
         self._result_image_source = value
 
     # -- 生命周期 --
-
     def load_default(self):
         """设置默认值。子类可重写"""
         pass
 
     @classmethod
+    @functools.lru_cache(maxsize=None)
     def get_property_descriptors(cls) -> list[tuple[str, Property]]:
-        """获取类层次结构中声明的所有 Property 描述符"""
+        """获取类层次结构中声明的所有 Property 描述符（结果已缓存）"""
         result: list[tuple[str, Property]] = []
         seen: set[str] = set()
         # 遍历MRO（方法解析顺序），从子类到父类
@@ -544,45 +470,45 @@ class NodeBase(ABC):
 
     def _serialize_property_value(self, value: Any) -> Any:
         """将属性值序列化为JSON可序列化的格式"""
-        # numpy整数转为Python int
-        if isinstance(value, (np.integer,)):
+
+        if isinstance(value, (np.integer,)):  # numpy整数转为Python int
             return int(value)
-        # numpy浮点数转为Python float
-        if isinstance(value, (np.floating,)):
+
+        if isinstance(value, (np.floating,)):  # numpy浮点数转为Python float
             return float(value)
-        # numpy数组 → base64 编码（保证数据完整、体积可控）
-        if isinstance(value, np.ndarray):
+
+        if isinstance(value, np.ndarray):  # numpy数组 → base64 编码（保证数据完整、体积可控）
             import base64
             return {
                 "__ndarray__": base64.b64encode(value.tobytes()).decode("ascii"),
                 "__ndarray_shape__": value.shape,
                 "__ndarray_dtype__": str(value.dtype),
             }
-        # 枚举类型
-        if isinstance(value, Enum):
+
+        if isinstance(value, Enum):  # 枚举类型
             return {
                 "__enum__": f"{value.__class__.__module__}.{value.__class__.__name__}",
                 "name": value.name,
             }
-        # 元组转为特殊字典
-        if isinstance(value, tuple):
+
+        if isinstance(value, tuple):  # 元组转为特殊字典
             return {"__tuple__": [self._serialize_property_value(v) for v in value]}
-        # 列表递归处理
-        if isinstance(value, list):
+
+        if isinstance(value, list):  # 列表递归处理
             return [self._serialize_property_value(v) for v in value]
-        # 字典递归处理
-        if isinstance(value, dict):
+
+        if isinstance(value, dict):  # 字典递归处理
             return {k: self._serialize_property_value(v) for k, v in value.items()}
-        # 基本类型直接返回
-        if value is None or isinstance(value, (str, int, float, bool)):
+
+        if value is None or isinstance(value, (str, int, float, bool)):  # 基本类型直接返回
             return value
-        # 有to_dict方法的对象
-        if hasattr(value, "to_dict") and callable(value.to_dict):
+
+        if hasattr(value, "to_dict") and callable(value.to_dict):  # 有to_dict方法的对象
             return {
                 "__type__": value.__class__.__name__,
                 "data": value.to_dict(),
             }
-        # 其他类型转为字符串
+
         return str(value)
 
     def _deserialize_property_value(self, value: Any) -> Any:
@@ -630,6 +556,7 @@ class NodeBase(ABC):
             if deserializer is not None:
                 return deserializer(data)
             return {k: self._deserialize_property_value(v) for k, v in value.items()}
+        return None
 
     def _serialize_properties(self) -> dict[str, Any]:
         """序列化所有 Property 值（可读和可写属性都保存）"""
@@ -643,8 +570,7 @@ class NodeBase(ABC):
         with self.batch_updates():
             self._id = data.get("id", self._id)
             self.name = data.get("name", self.name)
-            self._title = data.get("title", "")
-            self._text = data.get("text", "")
+            self._title = data.get("title", "") or data.get("text", "")
             self.width = data.get("width", 120.0)
             self.height = data.get("height", 35.0)
             self._pos_x = data.get("pos_x", 0.0)
@@ -687,7 +613,7 @@ class NodeBase(ABC):
             "type": self.__class__.__name__,
             "name": self.name,
             "title": self._title,
-            "text": self._text,
+            "text": self._title,
             "width": self.width,
             "height": self.height,
             "ports": [p.to_dict() for p in self.ports],
@@ -712,8 +638,7 @@ class NodeBase(ABC):
         for port in node.ports:
             port.node_id = node._id
         node.name = data.get("name", node.name)
-        node._title = data.get("title", "")
-        node._text = data.get("text", "")
+        node._title = data.get("title", "") or data.get("text", "")
         node.width = data.get("width", 120.0)
         node.height = data.get("height", 35.0)
         node.invoke_mode = FlowableInvokeMode[data.get("invoke_mode", "SEQUENTIAL")]
@@ -729,35 +654,11 @@ class NodeBase(ABC):
         return f"{self.__class__.__name__}(id={self.node_id}, name={self.name})"
 
 
-# =============================================================================
-# 从子模块重新导出，保持向后兼容
-# 注意：新代码应从子模块直接导入。这些 re-export 可能在未来主版本中移除。
-# =============================================================================
 
-from core.node_vision import (           # noqa: E402, F401
-    VisionNodeDataBase,
-    ShowPropertyNodeDataBase,
-    HelpNodeDataBase,
-    DemoNodeDataBase,
-    VisionNodeData,
-)
-from core.node_roi import (              # noqa: E402, F401
-    ROIBase,
-    FromROI,
-    DrawROI,
-    InputROI,
-    NoROI,
-    ROINodeData,
-)
-from core.node_selectable import (       # noqa: E402, F401
-    SelectableResultImageNodeData,
-    OpenCVNodeDataBase,
-    SrcFilesVisionNodeData,
-    Base64MatchingNodeData,
-)
-from core.node_condition import (        # noqa: E402, F401
-    LogicModuleNode,
-    ConditionNodeData,
-    VisionPropertyCondition,
-    WaitAllParallelNodeData,
-)
+
+
+
+
+
+
+

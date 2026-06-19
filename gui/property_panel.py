@@ -26,20 +26,11 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QScrollArea, QFormLayout,
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from gui.theme import theme_manager, connect_theme
 
-from core.node_base import (
-    Property,
-    PropertyGroupNames,
-    NodeBase,
-    VisionNodeData,
-    ROINodeData,
-    DrawROI,
-    InputROI,
-    FromROI,
-    NoROI,
-    ConditionNodeData,
-    VisionPropertyCondition,
-    SrcFilesVisionNodeData,
-)
+from core.node_base import Property, PropertyGroupNames, NodeBase
+from core.node_vision import VisionNodeData
+from core.node_selectable import SrcFilesVisionNodeData
+from core.node_roi import ROINodeData, DrawROI, InputROI, FromROI, NoROI
+from core.node_condition import ConditionNodeData, VisionPropertyCondition
 from gui.color_picker import ColorPickerDialog
 from gui.condition_editor import ConditionEditorDialog
 from gui.roi_editor import RoiEditorDialog
@@ -634,7 +625,7 @@ def _create_draw_source_editor(parent, prop_name, prop_desc, current_value):
     空选项 = 使用 pipeline 传递的原始图像（_original_mat）。
     """
     from PyQt5.QtWidgets import QComboBox
-    from core.node_base import VisionNodeData
+    from core.node_vision import VisionNodeData
 
     combo = QComboBox()
     combo.addItem("(原始图像)", "")
@@ -1333,47 +1324,43 @@ class PropertyPanel(QWidget):
         return None
 
     def _snapshot_roi_value(self, node: ROINodeData) -> dict:
-        """获取ROI值的快照
-
-        参数：
-            node: ROI节点
-
-        返回：
-            包含模式和矩形的字典
-        """
-        # 获取当前激活的ROI矩形
+        """获取ROI值的快照"""
         rect = node.get_active_roi_rect()
-        return {"mode": type(node.roi).__name__, "rect": tuple(rect) if rect else None}
+        snap = {"mode": type(node.roi).__name__, "rect": tuple(rect) if rect else None}
+        if isinstance(node.roi, DrawROI):
+            snap["roi_type"] = node.roi.roi_type
+            snap["angle"] = node.roi.angle
+        return snap
 
     def _format_roi_text(self, node: ROINodeData) -> str:
-        """格式化ROI显示文本
-
-        参数：
-            node: ROI节点
-
-        返回：
-            格式化后的字符串
-        """
-        # 获取当前激活的ROI矩形
+        """格式化ROI显示文本"""
         rect = node.get_active_roi_rect()
         if rect is None:
             return f"当前模式: {node.roi.name}（无有效 ROI）"
-        # 解包矩形
         x, y, w, h = rect
+        if isinstance(node.roi, DrawROI):
+            if node.roi.roi_type == "旋转矩形":
+                return f"当前模式: 旋转矩形 | X={x}, Y={y}, W={w}, H={h}, 角度={node.roi.angle:.1f}°"
+            if node.roi.roi_type == "圆形":
+                return f"当前模式: 圆形 | 中心=({x + w // 2}, {y + h // 2}), 半径={min(w, h) // 2}"
         return f"当前模式: {node.roi.name} | X={x}, Y={y}, W={w}, H={h}"
 
     def _update_roi_overlay(self, node: ROINodeData):
-        """更新ROI叠加层
-
-        参数：
-            node: ROI节点
-        """
-        # 如果没有图像查看器，返回
+        """更新ROI叠加层"""
         if self._image_viewer is None:
             return
-        # 设置ROI矩形
-        self._image_viewer.set_roi_rect(node.get_active_roi_rect(),
-                                         label=node.roi.name if node.roi else "ROI")
+        rect = node.get_active_roi_rect()
+        angle = 0.0
+        draw_type = "rect"
+        if isinstance(node.roi, DrawROI):
+            if node.roi.roi_type == "旋转矩形":
+                angle = node.roi.angle
+                draw_type = "rotated"
+            elif node.roi.roi_type == "圆形":
+                draw_type = "circle"
+        self._image_viewer.set_roi_rect(rect,
+                                        label=node.roi.name if node.roi else "ROI",
+                                        angle=angle, draw_type=draw_type)
 
     def _create_roi_widget(self) -> QWidget:
         """创建ROI控件
@@ -1459,17 +1446,25 @@ class PropertyPanel(QWidget):
                 return
             # 保存旧值快照
             old_value = self._snapshot_roi_value(node)
-            rect = RoiEditorDialog.edit_roi(
+            # 获取当前的 roi_type 和 angle
+            cur_type = getattr(node.roi, 'roi_type', '矩形') if isinstance(node.roi, DrawROI) else '矩形'
+            cur_angle = getattr(node.roi, 'angle', 0.0) if isinstance(node.roi, DrawROI) else 0.0
+            result = RoiEditorDialog.edit_roi(
                 image=self._get_current_image(),
                 rect=node.get_active_roi_rect() or None,
+                roi_type=cur_type,
+                angle=cur_angle,
                 parent=self,
             )
             # 如果取消，返回
-            if rect is None:
+            if result is None:
                 return
+            rect = result["rect"]
             # 如果是DrawROI或NoROI模式
             if isinstance(node.roi, (DrawROI, NoROI)):
                 node.draw_roi.rect = tuple(rect)
+                node.draw_roi.roi_type = result.get("type", "矩形")
+                node.draw_roi.angle = result.get("angle", 0.0)
                 node.roi = node.draw_roi
             # 如果是InputROI模式
             elif isinstance(node.roi, InputROI):
@@ -1572,7 +1567,7 @@ class PropertyPanel(QWidget):
         参数：
             line_edit: 行编辑框
         """
-        from core.node_base import SrcFilesVisionNodeData
+        from core.node_selectable import SrcFilesVisionNodeData
 
         # 如果是源节点
         if isinstance(self._current_node, SrcFilesVisionNodeData):
@@ -1603,7 +1598,7 @@ class PropertyPanel(QWidget):
 
     def _refresh_resource_panel(self):
         """通知FlowResourcePanel重新加载缩略图"""
-        from core.node_base import SrcFilesVisionNodeData
+        from core.node_selectable import SrcFilesVisionNodeData
         # 如果不是源节点，返回
         if not isinstance(self._current_node, SrcFilesVisionNodeData):
             return
@@ -1697,75 +1692,3 @@ class PropertyPanel(QWidget):
         if self._current_node:
             # 执行刷新
             self._do_refresh()
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# 节点属性对话框
-# ═══════════════════════════════════════════════════════════════════════════
-
-def open_node_dialog(node, parent=None):
-    """为节点打开标签页属性对话框
-
-    解耦：节点的 get_property_presenter() 方法提供要渲染 Property 描述符的对象。
-    不同的节点类型可以返回不同的展示器，用于类型特定的设置面板。
-
-    参数：
-        node: 节点数据对象
-        parent: 父对象
-    """
-    # 如果节点有 get_property_presenter 方法，使用其返回值；否则使用节点本身
-    presenter = node.get_property_presenter() if hasattr(node, 'get_property_presenter') else node
-    # 获取对话框标题：优先使用 presenter 的 title，其次 name，最后默认值
-    title = getattr(presenter, 'title', None) or getattr(presenter, 'name', '节点设置')
-
-    # 创建对话框
-    dlg = QDialog(parent)
-    # 设置窗口标题
-    dlg.setWindowTitle(title)
-    # 设置最小尺寸 560x380
-    dlg.setMinimumSize(560, 380)
-    # 设置初始尺寸 660x420
-    dlg.resize(660, 420)
-
-    # 创建垂直布局
-    layout = QVBoxLayout(dlg)
-    # 设置布局边距为0
-    layout.setContentsMargins(0, 0, 0, 0)
-    # 设置布局间距为0
-    layout.setSpacing(0)
-
-    # 创建属性面板
-    panel = PropertyPanel(dlg)
-    # 设置面板要编辑的节点
-    panel.set_node(presenter)
-    # 添加属性面板到布局，拉伸因子为1
-    layout.addWidget(panel, 1)
-
-    # 底部按钮栏
-    btn_row = QWidget()
-    # 设置按钮栏样式
-    btn_row.setStyleSheet("background: #2d2d30; border-top: 1px solid #3f3f46;")
-    # 创建水平布局
-    btn_layout = QHBoxLayout(btn_row)
-    # 设置布局边距
-    btn_layout.setContentsMargins(12, 8, 12, 8)
-
-    # 关闭按钮
-    close_btn = QPushButton("关闭")
-    # 设置按钮样式
-    close_btn.setStyleSheet(
-        "QPushButton { background: #3c3c3c; color: #dcdcdc; border: 1px solid #555;"
-        "border-radius: 3px; padding: 6px 24px; font-size: 12px; }"
-        "QPushButton:hover { background: #4a4a4a; }"
-    )
-    # 连接关闭按钮点击信号到对话框接受
-    close_btn.clicked.connect(dlg.accept)
-    # 添加弹性空间
-    btn_layout.addStretch()
-    # 添加关闭按钮
-    btn_layout.addWidget(close_btn)
-    # 添加按钮栏到布局
-    layout.addWidget(btn_row)
-
-    # 执行对话框（模态）
-    dlg.exec_()

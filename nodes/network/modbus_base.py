@@ -4,7 +4,8 @@ import time
 from datetime import datetime
 from enum import Enum
 
-from core.node_base import OpenCVNodeDataBase, Property, PropertyGroupNames
+from core.node_base import Property, PropertyGroupNames
+from core.node_selectable import OpenCVNodeDataBase
 
 
 class ModbusState(Enum):

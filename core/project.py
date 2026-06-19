@@ -11,11 +11,13 @@ import json
 import os
 import re
 import uuid
+import tempfile
 import traceback
 from datetime import datetime
 from core.events import EventType, event_system
 from core.workflow import WorkflowEngine
 from core.node_base import NodeBase
+from core.registry import node_registry
 
 # 使用 JSON 文件持久化最近项目列表，避免直接依赖 GUI 框架
 
@@ -35,28 +37,21 @@ def _get_templates_dir() -> str:
 # =============================================================================
 
 class DiagramData:
-    """项目中的单个图表/工作流。
-
+    """
+    项目中的单个图表/工作流。
     每个图表都有自己的工作流、名称、尺寸和画布位置。
     """
 
     def __init__(self, name: str = "流程图 1"):
-        # 图表唯一标识符
-        self.id: str = str(uuid.uuid4())
-        # 图表名称
-        self.name: str = name
-        # 图表描述
-        self.description: str = ""
-        # 图表宽度
-        self.width: float = 1000.0
-        # 图表高度
-        self.height: float = 1500.0
-        # 画布滚动位置 "x,y"
-        self.location: str = "0,0"
-        # 运行模式结果
-        self.run_mode_result: bool | None = None
-        # 关联的工作流引擎
-        self.workflow: "WorkflowEngine | None" = None
+
+        self.id: str = str(uuid.uuid4())               # 图表唯一标识符
+        self.name: str = name                          # 图表名称
+        self.description: str = ""                     # 图表描述
+        self.width: float = 1000.0                     # 图表宽度
+        self.height: float = 1500.0                    # 图表高度
+        self.location: str = "0,0"                     # 画布滚动位置 "x,y"
+        self.run_mode_result: bool | None = None       # 运行模式结果
+        self.workflow: "WorkflowEngine | None" = None  # 关联的工作流引擎
 
     @property
     def display_name(self) -> str:
@@ -78,17 +73,13 @@ class DiagramData:
     @classmethod
     def from_dict(cls, data: dict, node_factory) -> "DiagramData":
         """从字典反序列化"""
-        from core.workflow import WorkflowEngine
-        # 创建图表对象
-        d = cls(name=data.get("name", "流程图"))
-        # 恢复基本属性
-        d.id = data.get("id", str(uuid.uuid4()))
+        d = cls(name=data.get("name", "流程图"))      # 创建图表对象
+        d.id = data.get("id", str(uuid.uuid4()))            # 恢复基本属性
         d.description = data.get("description", "")
         d.width = data.get("width", 1000.0)
         d.height = data.get("height", 1500.0)
         d.location = data.get("location", "0,0")
-        # 创建并恢复工作流
-        wf = WorkflowEngine(name=d.name)
+        wf = WorkflowEngine(name=d.name)                        # 创建并恢复工作流
         wf_data = data.get("workflow", {"nodes": [], "links": []})
         wf.from_dict(wf_data, node_factory)
         d.workflow = wf
@@ -96,9 +87,7 @@ class DiagramData:
 
     def duplicate(self) -> "DiagramData":
         """通过 JSON 往返创建深拷贝"""
-        from core.workflow import WorkflowEngine
-        # 创建克隆图表
-        clone = DiagramData(name=self.name + " (副本)")
+        clone = DiagramData(name=self.name + " (副本)")  # 创建克隆图表
         # 复制属性
         clone.description = self.description
         clone.width = self.width
@@ -108,7 +97,6 @@ class DiagramData:
         if self.workflow:
             d = self.workflow.to_dict()
             wf = WorkflowEngine(name=clone.name)
-            from core.registry import node_registry
             # 定义节点工厂函数
             def factory(type_name: str):
                 return node_registry.create(type_name)
@@ -125,26 +113,17 @@ class ProjectItem:
     """包含多个图表/工作流集合的项目。"""
 
     def __init__(self, name: str = "新建项目", file_path: str = ""):
-        # 项目名称
-        self.name: str = name
-        # 项目文件路径
-        self.file_path: str = file_path
-        # 创建时间
-        self.created_at: str = datetime.now().isoformat()
-        # 修改时间
-        self.modified_at: str = self.created_at
-        # 项目版本
-        self.version: str = "2.0.0"
-        # 项目描述
-        self.description: str = ""
-        # 作者
-        self.author: str = ""
-        # 多图支持：图表列表
-        self.diagrams: list[DiagramData] = []
-        # 当前选中的图表索引
-        self._selected_diagram_index: int = 0
-        # 模板存储
-        self._templates: list[DiagramData] = []
+
+        self.name: str = name                              # 项目名称
+        self.file_path: str = file_path                    # 项目文件路径
+        self.created_at: str = datetime.now().isoformat()  # 创建时间
+        self.modified_at: str = self.created_at  # 修改时间
+        self.version: str = "2.0.0"              # 项目版本
+        self.description: str = ""               # 项目描述
+        self.author: str = ""                    # 作者
+        self.diagrams: list[DiagramData] = []    # 多图支持：图表列表
+        self._selected_diagram_index: int = 0    # 当前选中的图表索引
+        self._templates: list[DiagramData] = []  # 模板存储
 
     @property
     def _templates_dir(self) -> str:
@@ -152,41 +131,8 @@ class ProjectItem:
         return _get_templates_dir()
 
     def _persist_templates(self):
-        """将模板列表持久化到目录（原子替换：先写临时文件，成功后再清理旧文件）。"""
-        import tempfile
-        tmpl_dir = self._templates_dir
-        new_files: list[str] = []
-        try:
-            for i, t in enumerate(self._templates):
-                name = re.sub(r'[\\/:*?"<>|]', '_', t.name or f"template_{i}")
-                fd, tmp_path = tempfile.mkstemp(
-                    suffix=".json", prefix=".tmp_tmpl_", dir=tmpl_dir)
-                try:
-                    json_str = json.dumps(t.to_dict(), ensure_ascii=False, indent=2, default=str)
-                    with os.fdopen(fd, "w", encoding="utf-8") as f:
-                        f.write(json_str)
-                except Exception:
-                    os.remove(tmp_path)
-                    raise
-                final_path = os.path.join(tmpl_dir, f"{i:03d}_{name}.json")
-                os.replace(tmp_path, final_path)
-                new_files.append(final_path)
-        except Exception:
-            for f in new_files:
-                try:
-                    os.remove(f)
-                except OSError:
-                    pass
-            raise
-
-        # 清理不在新文件列表中的旧模板文件
-        for fname in os.listdir(tmpl_dir):
-            fpath = os.path.join(tmpl_dir, fname)
-            if _TEMPLATE_FILE_RE.match(fname) and fpath not in new_files:
-                try:
-                    os.remove(fpath)
-                except OSError:
-                    pass
+        """将模板列表持久化到目录，委托给 ProjectService"""
+        project_service.save_templates(self._templates)
 
     # -- 图表管理 --
 
@@ -366,56 +312,16 @@ class ProjectItem:
 class ProjectService:
     """
     用于保存/加载多图项目文件（.json）的服务
-    支持：多图项目、最近项目持久化、模板
+    支持：多图项目、模板
     """
 
     FILE_EXTENSION = ".json"
     FILE_FILTER = "VisionFlow 项目文件 (*.json)"
-    MAX_RECENT_PROJECTS = 10
-
-    # JSON 文件路径用于持久化最近项目列表（替代 QSettings）
-    _RECENT_PROJECTS_FILE = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)), ".recent_projects.json")
 
     def __init__(self):
-        # 当前打开的项目
-        self.current_project: ProjectItem | None = None
-        # 最近项目列表
-        self._recent_projects: list[str] = []
-        # 最近项目列表（惰性加载，避免构造时 I/O）
-        self._recent_projects_loaded: bool = False
-        # 模板列表
-        self._templates: list[DiagramData] = []
 
-    @staticmethod
-    def _read_settings_file() -> list[str]:
-        """从 JSON 文件读取最近项目列表。"""
-        try:
-            with open(ProjectService._RECENT_PROJECTS_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                return data if isinstance(data, list) else []
-        except (FileNotFoundError, json.JSONDecodeError):
-            return []
-
-    @staticmethod
-    def _write_settings_file(paths: list[str]):
-        """将最近项目列表写入 JSON 文件。"""
-        import tempfile
-        try:
-            target_dir = os.path.dirname(ProjectService._RECENT_PROJECTS_FILE)
-            os.makedirs(target_dir, exist_ok=True)
-            fd, tmp_path = tempfile.mkstemp(
-                suffix=".json", prefix=".tmp_",
-                dir=target_dir)
-            try:
-                with os.fdopen(fd, "w", encoding="utf-8") as f:
-                    json.dump(paths, f, ensure_ascii=False)
-                os.replace(tmp_path, ProjectService._RECENT_PROJECTS_FILE)
-            except Exception:
-                os.remove(tmp_path)
-                raise
-        except OSError:
-            pass
+        self.current_project: ProjectItem | None = None  # 当前打开的项目
+        self._templates: list[DiagramData] = []          # 模板列表
 
     # ── 模板持久化 ──
 
@@ -428,11 +334,13 @@ class ProjectService:
         """从 workflow_templates/ 目录加载所有模板"""
         templates: list[DiagramData] = []
         tmpl_dir = self._templates_dir
+
         if not os.path.isdir(tmpl_dir):
             return templates
-        from core.registry import node_registry
+
         def factory(type_name: str):
             return node_registry.create(type_name)
+
         for fname in sorted(os.listdir(tmpl_dir)):
             if not fname.endswith(".json"):
                 continue
@@ -447,7 +355,6 @@ class ProjectService:
 
     def save_templates(self, templates: list[DiagramData]):
         """将模板列表持久化到 workflow_templates/ 目录（原子写入）。"""
-        import tempfile
         tmpl_dir = self._templates_dir
         new_files: list[str] = []
         try:
@@ -481,89 +388,11 @@ class ProjectService:
                 except OSError:
                     pass
 
-    # -- 最近项目（QSettings 持久化） --
-
-    @property
-    def recent_projects(self) -> list[str]:
-        """获取最近项目列表（首次访问时惰性加载）"""
-        if not self._recent_projects_loaded:
-            self._load_recent_projects()
-            self._recent_projects_loaded = True
-        self.cleanup_recent_projects(save=False)
-        return list(self._recent_projects)
-
-    def _load_recent_projects(self):
-        """从 JSON 文件加载最近项目"""
-        raw = self._read_settings_file()
-        self._recent_projects = []
-        for path in raw:
-            normalized = self._normalize_path(path)
-            if normalized and normalized not in self._recent_projects:
-                self._recent_projects.append(normalized)
-        self.cleanup_recent_projects(save=True)
-
-    def _save_recent_projects(self):
-        """保存最近项目到 JSON 文件（原子写入）"""
-        self._write_settings_file(self._recent_projects)
-
     def _normalize_path(self, file_path: str) -> str:
         """标准化文件路径"""
         if not file_path:
             return ""
         return os.path.abspath(os.path.normpath(file_path))
-
-    def add_recent(self, file_path: str):
-        """添加项目到最近列表"""
-        file_path = self._normalize_path(file_path)
-        if not file_path:
-            return
-        # 如果已存在，先移除
-        if file_path in self._recent_projects:
-            self._recent_projects.remove(file_path)
-        # 插入到开头
-        self._recent_projects.insert(0, file_path)
-        # 限制最大数量
-        self._recent_projects = self._recent_projects[:self.MAX_RECENT_PROJECTS]
-        self._save_recent_projects()
-
-    def remove_recent(self, file_path: str):
-        """从最近列表中移除项目"""
-        file_path = self._normalize_path(file_path)
-        if file_path in self._recent_projects:
-            self._recent_projects.remove(file_path)
-            self._save_recent_projects()
-
-    def clear_recent_projects(self):
-        """清空最近项目列表"""
-        self._recent_projects.clear()
-        self._save_recent_projects()
-
-    def cleanup_recent_projects(self, save: bool = True):
-        """清理不存在的项目路径"""
-        cleaned: list[str] = []
-        for path in self._recent_projects:
-            normalized = self._normalize_path(path)
-            # 只保留存在的路径
-            if normalized and os.path.exists(normalized) and normalized not in cleaned:
-                cleaned.append(normalized)
-        cleaned = cleaned[:self.MAX_RECENT_PROJECTS]
-        changed = cleaned != self._recent_projects
-        self._recent_projects = cleaned
-        if changed and save:
-            self._save_recent_projects()
-
-    def get_recent_projects_info(self) -> list[dict]:
-        """返回最近项目信息用于UI显示（名称、路径、修改时间）"""
-        info = []
-        for path in self.recent_projects:
-            name = os.path.splitext(os.path.basename(path))[0]
-            mtime = ""
-            try:
-                mtime = datetime.fromtimestamp(os.path.getmtime(path)).strftime("%Y-%m-%d %H:%M")
-            except OSError:
-                pass
-            info.append({"name": name, "path": path, "modified": mtime})
-        return info
 
     # -- 保存 --
 
@@ -577,8 +406,6 @@ class ProjectService:
         # 序列化
         data = self._serialize(project)
         try:
-            # 先写临时文件，再原子替换，防止写入中断损坏原文件
-            import tempfile
             fd, tmp_path = tempfile.mkstemp(
                 suffix=".json", prefix=".tmp_",
                 dir=os.path.dirname(project.file_path))
@@ -589,7 +416,6 @@ class ProjectService:
             except Exception:
                 os.remove(tmp_path)
                 raise
-            self.add_recent(project.file_path)
             event_system.publish(EventType.PROJECT_SAVED, sender=self, project=project)
             return True
         except Exception as e:
@@ -608,7 +434,6 @@ class ProjectService:
         """加载项目"""
         file_path = self._normalize_path(file_path)
         if not file_path or not os.path.exists(file_path):
-            self.remove_recent(file_path)
             event_system.publish(EventType.MESSAGE_ERROR, sender=self, message=f"文件不存在: {file_path}")
             return None
         try:
@@ -620,7 +445,6 @@ class ProjectService:
             if not project.diagrams:
                 project.add_diagram(project.name)
             self.current_project = project
-            self.add_recent(file_path)
             # 发布加载事件
             event_system.publish(EventType.PROJECT_LOADED, sender=self, project=project)
             return project
@@ -657,9 +481,6 @@ class ProjectService:
 
     def _deserialize(self, data: dict, file_path: str) -> ProjectItem:
         """从字典反序列化项目"""
-        from core.registry import node_registry
-        from core.workflow import WorkflowEngine
-
         # 创建项目对象
         project = ProjectItem(
             name=data.get("name", "新建项目"),
@@ -711,7 +532,6 @@ class ProjectService:
         try:
             if os.path.exists(file_path):
                 os.remove(file_path)
-            self.remove_recent(file_path)
             return True
         except OSError:
             return False

@@ -419,7 +419,8 @@ class ConditionsPresenter:
         if self._owner_node is None:
             return snapshots
 
-        from core.node_base import VisionNodeData, PropertyGroupNames
+        from core.node_vision import VisionNodeData
+        from core.node_base import PropertyGroupNames
         all_nodes = self._owner_node.get_all_from_this_node_datas()
 
         for node in all_nodes:

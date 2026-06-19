@@ -6,7 +6,8 @@ import os
 import cv2
 import numpy as np
 
-from core.node_base import OpenCVNodeDataBase, SrcFilesVisionNodeData, Property, PropertyGroupNames
+from core.node_base import Property, PropertyGroupNames
+from core.node_selectable import OpenCVNodeDataBase, SrcFilesVisionNodeData
 from core.data_packet import FlowableResult
 from core.workflow import WorkflowEngine
 

@@ -12,7 +12,7 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                               QTextBrowser, QPushButton, QTableWidget,
                               QTableWidgetItem, QHeaderView, QSplitter)
 from PyQt5.QtCore import Qt, QUrl
-from PyQt5.QtGui import QDesktopServices, QFont
+from PyQt5.QtGui import QDesktopServices
 
 from gui.theme import theme_manager, connect_theme
 
@@ -22,59 +22,41 @@ class HelpPanel(QWidget):
 
     可以嵌入到标签页中或作为独立对话框显示。
     """
-
     def __init__(self, parent=None):
         """初始化帮助面板
 
         参数：
             parent: 父对象
         """
-        # 调用父类QWidget的构造函数
         super().__init__(parent)
-        # 当前显示的节点对象
         self._current_node = None
-        # 帮助URL
         self._help_url = ""
-        # 设置UI界面
         self._setup_ui()
-        # 连接主题变化信号
         connect_theme(self._refresh_qss)
 
     def _setup_ui(self):
         """设置UI界面"""
-        # 创建垂直布局
         layout = QVBoxLayout(self)
-        # 设置布局边距
         layout.setContentsMargins(8, 8, 8, 8)
-        # 设置布局间距
         layout.setSpacing(6)
 
         # 头部水平布局
         header = QHBoxLayout()
 
-        # 标题标签
         self._title_label = QLabel("节点帮助")
-        # 添加到头部布局
         header.addWidget(self._title_label)
 
-        # 添加弹性空间
         header.addStretch()
 
-        # 源文件标签
         self._source_label = QLabel("")
-        # 允许换行
         self._source_label.setWordWrap(True)
-        # 添加到头部布局
         header.addWidget(self._source_label)
 
-        # 添加头部布局
         layout.addLayout(header)
 
-        # 描述标签
         self._desc_label = QLabel("选择一个节点以查看帮助信息")
-        # 允许换行
         self._desc_label.setWordWrap(True)
-        # 添加到布局
+
         layout.addWidget(self._desc_label)
 
         # 分割器：参数表格 | 详细文本
@@ -84,7 +66,6 @@ class HelpPanel(QWidget):
         self._param_table = QTableWidget(0, 4)
         # 设置表头标签
         self._param_table.setHorizontalHeaderLabels(["参数名", "类型/默认值", "分组", "说明"])
-        # 最后一列拉伸填充
         self._param_table.horizontalHeader().setStretchLastSection(True)
         # 设置列宽为适应内容
         self._param_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
@@ -101,10 +82,8 @@ class HelpPanel(QWidget):
         self._detail_browser = QTextBrowser()
         # 允许打开外部链接
         self._detail_browser.setOpenExternalLinks(True)
-        # 添加到分割器
         self._splitter.addWidget(self._detail_browser)
 
-        # 添加分割器到布局，拉伸因子为1
         layout.addWidget(self._splitter, 1)
 
         # 底部栏
@@ -112,25 +91,19 @@ class HelpPanel(QWidget):
 
         # 在线文档按钮
         self._url_btn = QPushButton("\U0001F4D6 在线文档")
-        # 连接点击信号
         self._url_btn.clicked.connect(self._open_help_url)
-        # 初始不可见
         self._url_btn.setVisible(False)
-        # 添加到底部布局
+
         bottom.addWidget(self._url_btn)
 
-        # 添加弹性空间
         bottom.addStretch()
 
         # 状态标签
         self._status_label = QLabel("")
-        # 添加到底部布局
         bottom.addWidget(self._status_label)
 
-        # 添加底部布局
         layout.addLayout(bottom)
 
-        # 应用初始样式
         self._refresh_qss()
 
     # ── 主题刷新 ──────────────────────────────────────────────────
@@ -205,16 +178,14 @@ class HelpPanel(QWidget):
     # -- 公共API --
 
     def set_node(self, node):
-        """显示节点的帮助信息
-
+        """
+        显示节点的帮助信息
         参数：
             node: 节点数据对象
         """
-        # 保存当前节点
         self._current_node = node
-        # 如果节点为空
+
         if node is None:
-            # 清空显示
             self._clear()
             return
 
@@ -262,8 +233,8 @@ class HelpPanel(QWidget):
         self._status_label.setText(f"类型: {type(node).__name__}")
 
     def _populate_param_table(self, node, help_info: dict):
-        """从节点的Property描述符填充参数表格
-
+        """
+        从节点的Property描述符填充参数表格
         参数：
             node: 节点对象
             help_info: 帮助信息字典（未使用）
@@ -274,26 +245,16 @@ class HelpPanel(QWidget):
         rows = []
 
         # 从节点类收集Property描述符
-        for attr_name in dir(type(node)):
-            # 跳过私有属性
-            if attr_name.startswith('_'):
-                continue
+        for attr_name, attr in node.get_property_descriptors():
             try:
-                # 获取类属性
-                attr = getattr(type(node), attr_name)
-                # 如果是Property描述符（有display_name和group属性）
-                if hasattr(attr, 'display_name') and hasattr(attr, 'group'):
-                    # 获取属性值
-                    val = getattr(node, attr_name, "")
-                    # 格式化值
-                    val_str = self._format_value(val, attr)
-                    # 添加到行列表
-                    rows.append((
-                        attr.display_name or attr_name,  # 参数名
-                        val_str,                          # 值（类型/默认值）
-                        attr.group or "",                 # 分组
-                        attr.description or "",           # 说明
-                    ))
+                val = getattr(node, attr_name, "")
+                val_str = self._format_value(val, attr)
+                rows.append((
+                    attr.display_name or attr_name,
+                    val_str,
+                    attr.group or "",
+                    attr.description or "",
+                ))
             except Exception:
                 pass
 
@@ -314,8 +275,8 @@ class HelpPanel(QWidget):
             self._param_table.setItem(i, 3, QTableWidgetItem(pdesc))
 
     def _format_value(self, val, attr) -> str:
-        """格式化属性值显示
-
+        """
+        格式化属性值显示
         参数：
             val: 属性值
             attr: 属性描述符
@@ -346,8 +307,8 @@ class HelpPanel(QWidget):
         return str(val) if val else "—"
 
     def _populate_detail(self, node, help_info: dict):
-        """填充详细文本浏览器
-
+        """
+        填充详细文本浏览器
         参数：
             node: 节点对象
             help_info: 帮助信息字典

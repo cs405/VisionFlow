@@ -31,9 +31,18 @@
 # See gui/font_icons.py for the FontIcons class that imports from here.
 """
 
+NODE_MIN_WIDTH = 120.0      # 节点最小宽度
+NODE_MIN_HEIGHT = 35.0      # 节点最小高度
+NODE_CORNER_RADIUS = 2.0    # 圆角半径
+BAR_WIDTH = 30.0            # 左侧状态条宽度
+ICON_SIZE = 14              # 图标大小
+TEXT_FONT_SIZE = 9          # 文字字体大小
+NODE_MARGIN = 2             # 节点边距
+
 # Icon string constants (Segoe Fluent Icons Unicode codepoints)
-ICON_CAMERA = ""
+ICON_CAMERA = ""
 ICON_PHOTO2 = ""
+ICON_PREPROCESS = ""
 ICON_COLOR = ""
 ICON_IN_PRIVATE = ""
 ICON_ANNOTATION = ""
@@ -70,9 +79,9 @@ _ALIAS_TO_CHINESE: dict[str, str] = {
 # Group metadata config
 GROUP_META = {
     # Chinese groups
-    "图像数据源": {"color": "#4a9eff", "icon": ICON_PHOTO2},
+    "图像数据源": {"color": "#4a9eff", "icon": ICON_CAMERA},
     "系统数据源": {"color": "#5c6bc0", "icon": ICON_PHOTO2},
-    "图像预处理模块": {"color": "#ff8c00", "icon": ICON_COLOR},
+    "图像预处理模块": {"color": "#ff8c00", "icon": ICON_PREPROCESS},
     "滤波模块": {"color": "#9c27b0", "icon": ICON_IN_PRIVATE},
     "图像分割提取模块": {"color": "#e91e63", "icon": ICON_ANNOTATION},
     "形态学模块": {"color": "#00bcd4", "icon": ICON_HOME_GROUP},

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from core.node_base import ConditionNodeData, OpenCVNodeDataBase, LogicModuleNode
+from core.node_condition import ConditionNodeData, LogicModuleNode
+from core.node_selectable import OpenCVNodeDataBase
 from core.data_packet import FlowableResult
 
 if TYPE_CHECKING:

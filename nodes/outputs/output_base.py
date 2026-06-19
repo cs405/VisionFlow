@@ -1,7 +1,7 @@
 """输出节点基类 — 透传图像。通知节点显示 Qt 消息框"""
 
 from PyQt5.QtWidgets import QMessageBox
-from core.node_base import OpenCVNodeDataBase
+from core.node_selectable import OpenCVNodeDataBase
 from core.data_packet import FlowableResult
 
 

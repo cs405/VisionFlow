@@ -7,7 +7,8 @@ from typing import TYPE_CHECKING
 import cv2
 import numpy as np
 
-from core.node_base import OpenCVNodeDataBase, Property, PropertyGroupNames
+from core.node_base import Property, PropertyGroupNames
+from core.node_selectable import OpenCVNodeDataBase
 from core.data_packet import FlowableResult
 from nodes.detectors.detector_base import IDetectorGroupableNode
 

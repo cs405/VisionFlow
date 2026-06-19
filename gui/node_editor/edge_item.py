@@ -12,7 +12,7 @@ from PyQt5.QtCore import Qt, QPointF, QRectF, pyqtSignal
 from PyQt5.QtGui import (QPen, QBrush, QColor, QPainterPath, QPainter,
                           QPolygonF, QFont, QPainterPathStroker)
 
-from core.node_base import LinkData, PortDock
+from core.node_base import PortDock
 from gui.node_editor.link_drawer import ILinkDrawer, BrokenLinkDrawer
 from gui.theme import theme_manager
 
@@ -422,11 +422,7 @@ class EdgeItem(QGraphicsObject):
         # 根据状态覆盖颜色和样式
         # 如果是运行中状态
         if self._state == EdgeState.RUNNING:
-            # 创建运行中状态画笔：颜色从主题获取，线宽2.0，圆头端点，圆角连接
-            pen = QPen(_edge_color("edge_running"), 2.0, cap=Qt.RoundCap, join=Qt.RoundJoin)
-            # 设置虚线样式为运行中虚线
-            pen.setDashPattern(DASH_RUNNING)
-            return pen
+            return QPen(_edge_color("edge_running"), 2.0, cap=Qt.RoundCap, join=Qt.RoundJoin)
 
         # 如果是成功状态
         if self._state == EdgeState.SUCCESS:

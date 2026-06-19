@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 
 import cv2
 
-from core.node_base import OpenCVNodeDataBase
+from core.node_selectable import OpenCVNodeDataBase
 from core.data_packet import FlowableResult
 
 if TYPE_CHECKING:

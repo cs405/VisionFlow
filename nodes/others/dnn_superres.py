@@ -1,6 +1,7 @@
 import os
 import cv2
-from core.node_base import OpenCVNodeDataBase, Property, PropertyGroupNames
+from core.node_base import Property, PropertyGroupNames
+from core.node_selectable import OpenCVNodeDataBase
 from core.data_packet import FlowableResult
 
 

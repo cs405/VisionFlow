@@ -13,8 +13,7 @@ import json
 from pathlib import Path
 
 from PyQt5.QtGui import QColor, QPalette
-from PyQt5.QtCore import Qt, pyqtSignal, QObject
-from PyQt5.QtWidgets import QFrame
+from PyQt5.QtCore import pyqtSignal, QObject
 
 from gui.theme_data import THEMES, ThemeDef
 
@@ -430,14 +429,13 @@ class ThemePickerDialog(QDialog):
         return card
 
     def _select(self, theme_id: str):
-        """点击时立即预览主题"""
-        theme_manager.set_theme(theme_id)
+        """点击卡片时仅更新高亮，不实际切换主题"""
         self._selected_id = theme_id
         self._update_card_highlights()
 
     def _update_card_highlights(self):
         """更新卡片边框高亮"""
-        current = theme_manager.current_theme_id
+        current = self._selected_id or theme_manager.current_theme_id
         for tid, card in self._cards.items():
             tdef = next((t for t in theme_manager.available_themes if t.id == tid), None)
             if tdef is None:
@@ -451,11 +449,12 @@ class ThemePickerDialog(QDialog):
             """)
 
     def _on_accept(self):
+        if self._selected_id is not None:
+            theme_manager.set_theme(self._selected_id)
         self.accept()
 
     def _on_cancel(self):
-        if self._original_theme != theme_manager.current_theme_id:
-            theme_manager.set_theme(self._original_theme)
+        # 主题未实际变更，直接关闭
         self.reject()
 
     def exec_(self) -> int:
@@ -463,7 +462,6 @@ class ThemePickerDialog(QDialog):
         if result != QDialog.Accepted:
             self._on_cancel()
         return bool(self._selected_id) or (result == QDialog.Accepted)
-
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 主题感知控件工厂

@@ -243,26 +243,57 @@ class BrokenLinkDrawer(ILinkDrawer):
         return points[-1] if points else QPointF()
 
     def _build_polyline(self, pts: list) -> QPainterPath:
-        """从点列表构建 QPainterPath"""
-        # 创建新的路径对象
+        """从点列表构建带圆角拐弯的 QPainterPath"""
         path = QPainterPath()
-        # 如果点列表为空，返回空路径
         if not pts:
             return path
-        # 将画笔移动到第一个点
+        if len(pts) < 3:
+            path.moveTo(pts[0])
+            for p in pts[1:]:
+                path.lineTo(p)
+            return path
+
+        corner_r = 10.0  # 拐角圆角半径
         path.moveTo(pts[0])
-        # 遍历剩余的点
-        for p in pts[1:]:
-            # 从上一个点画直线到当前点
-            path.lineTo(p)
-        # 返回路径
+
+        for i in range(1, len(pts) - 1):
+            p0 = pts[i - 1]
+            p1 = pts[i]
+            p2 = pts[i + 1]
+
+            # 入 / 出向量
+            v1 = QPointF(p1.x() - p0.x(), p1.y() - p0.y())
+            len1 = (v1.x() ** 2 + v1.y() ** 2) ** 0.5
+            v2 = QPointF(p2.x() - p1.x(), p2.y() - p1.y())
+            len2 = (v2.x() ** 2 + v2.y() ** 2) ** 0.5
+
+            r = min(corner_r, len1 / 2, len2 / 2)
+            if r < 1.0:
+                path.lineTo(p1)
+                continue
+
+            u1 = QPointF(v1.x() / len1, v1.y() / len1)
+            u2 = QPointF(v2.x() / len2, v2.y() / len2)
+
+            start_arc = QPointF(p1.x() - u1.x() * r, p1.y() - u1.y() * r)
+            end_arc = QPointF(p1.x() + u2.x() * r, p1.y() + u2.y() * r)
+
+            path.lineTo(start_arc)
+            path.quadTo(p1, end_arc)
+
+        path.lineTo(pts[-1])
         return path
 
     def draw_path(self, start, end, from_dock=PortDock.BOTTOM, to_dock=PortDock.TOP):
         """ BrokenLinkDrawer.DrawPath — 完整的正交路由算法"""
-        # 计算起点侧的内点（从起点沿端口方向偏移inner_span距离）
+        # 起点终点 X/Y 接近时直接画直线，不走折线路由
+        if abs(start.x() - end.x()) < 2.0 or abs(start.y() - end.y()) < 2.0:
+            path = QPainterPath()
+            path.moveTo(start)
+            path.lineTo(end)
+            return path
+
         inner1 = changed_point(start, from_dock, self.inner_span)
-        # 计算终点侧的内点（从终点沿端口反方向偏移inner_span距离）
         inner2 = changed_point(end, to_dock, self.inner_span)
 
         # 第一种交叉配置：先垂直后水平（连接 inner1.x 和 inner2.y）

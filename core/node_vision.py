@@ -1,34 +1,32 @@
 """
-VisionNodeData hierarchy - visual processing node classes.
-Extracted from node_base.py, flattened with Mixin pattern.
+VisionNodeData 层次结构 - 视觉处理节点类。
 
-Current structure (2-level with Mixins):
-    NodeBase -> VisionNodeData (with PropertyPresenterMixin,
-                                HelpPresenterMixin + DemoParamsMixin opt-in)
+从 node_base.py 提取，使用 Mixin 模式扁平化。
+NodeBase → VisionNodeData（包含 PropertyPresenterMixin、HelpPresenterMixin，以及可选的 DemoParamsMixin）
 """
 
 from __future__ import annotations
 
 import time
 import inspect
+import traceback
 import numpy as np
-from abc import abstractmethod
+
 from typing import TYPE_CHECKING, Any, Callable
 
-from core.data_packet import FlowableResult, FlowableInvokeMode, VisionResultImage
+from core.data_packet import FlowableResult, FlowableResultState, VisionResultImage
 from core.events import EventType, event_system
-from core.node_base import NodeBase, Property, PropertyGroupNames, Port, LinkData
+from core.node_base import NodeBase, Property, PropertyGroupNames, LinkData
 
 if TYPE_CHECKING:
-    from core.workflow import WorkflowEngine, WorkflowState
+    from core.workflow import WorkflowEngine
 
 
 # =============================================================================
 # Mixins — 扁平化替代深层继承链
 # =============================================================================
-
 class PropertyPresenterMixin:
-    """为属性面板提供属性展示器（原 ShowPropertyNodeDataBase）。"""
+    """为属性面板提供属性展示器"""
 
     def get_property_presenter(self) -> Any:
         """返回在属性面板中显示的对象。默认返回自身。"""
@@ -36,7 +34,7 @@ class PropertyPresenterMixin:
 
 
 class HelpPresenterMixin:
-    """提供带文档URL的帮助展示器（原 HelpNodeDataBase）。"""
+    """提供带文档URL的帮助展示器"""
 
     def create_help_presenter(self) -> dict:
         """返回帮助面板所需的帮助信息。子类可重写以自定义。"""
@@ -65,16 +63,6 @@ class DemoParamsMixin:
         return None
 
 
-# =============================================================================
-# Backward compatibility aliases（保持旧类名可用）
-# =============================================================================
-
-VisionNodeDataBase = NodeBase           # 原空标记类，现等同于 NodeBase
-ShowPropertyNodeDataBase = PropertyPresenterMixin
-HelpNodeDataBase = HelpPresenterMixin
-DemoNodeDataBase = DemoParamsMixin       # VisionNodeData 不再继承此 Mixin,
-                                         # 仅作为独立 Mixin 供需要演示参数的节点使用
-
 
 # =============================================================================
 # VisionNodeData - 核心视觉处理节点
@@ -92,25 +80,18 @@ class VisionNodeData(HelpPresenterMixin, PropertyPresenterMixin, NodeBase):
         - 图像处理管理
     """
 
-    # UseInvokedPart - 控制输出是否进入历史记录/预览
+    # 控制输出是否进入历史记录/预览
     use_invoked_part = Property(True, name="启用输出历史记录", group=PropertyGroupNames.DISPLAY_PARAMETERS,
                                 description="用于控制是否输出到历史记录和预览图像")
 
     def __init__(self):
         super().__init__()
-        # 当前图像数据（NumPy数组）
-        self._mat: np.ndarray | None = None
-        # 原始图像数据（未经处理的源图像）
-        self._original_mat: np.ndarray | None = None
-        # 预处理后的输入图像（用于invoke_core处理）
-        self._prepared_input: np.ndarray | None = None
-        # 结果展示器
-        self._result_presenter: Any = None
-        # 累积裁剪偏移量 (x, y, w, h)，相对于原始图像
-        # 由 ROINodeData / 匹配节点自动维护，ROIMapBackNode 只读不写
-        self._crop_chain_offset: tuple = (0, 0, 0, 0)
-        # 本轮执行状态: None(未执行) / "completed"(成功) / "error"(失败) / "break"(中断)
-        self._execution_state: str | None = None
+        self._mat: np.ndarray | None = None              # 当前图像数据（NumPy数组）
+        self._original_mat: np.ndarray | None = None     # 原始图像数据（未经处理的源图像）
+        self._prepared_input: np.ndarray | None = None   # 预处理后的输入图像（用于invoke_core处理）
+        self._result_presenter: Any = None               # 结果展示器
+        self._crop_chain_offset: tuple = (0, 0, 0, 0)    # 累积裁剪偏移量 (x, y, w, h)，相对于原始图像
+        self._execution_state: str | None = None         # 本轮执行状态: None(未执行) / "completed"(成功) / "error"(失败) / "break"(中断)
 
     # -- Mat（当前图像/数据） --
 
@@ -124,12 +105,21 @@ class VisionNodeData(HelpPresenterMixin, PropertyPresenterMixin, NodeBase):
         """设置当前图像数据"""
         self._mat = value
 
-    def get_input_mat(self, fallback: np.ndarray | None = None) -> np.ndarray | None:
-        """获取用于 invoke_core 处理的有效输入图像。
+    def reset_execution_state(self):
+        """清除本轮执行的所有临时数据，确保下轮执行不受污染。"""
+        self._mat = None
+        self._original_mat = None
+        self._prepared_input = None
+        self._execution_state = None
+        self._result_presenter = None
+        self._result_image_source = None
+        self.message = ""
 
+    def get_input_mat(self, fallback: np.ndarray | None = None) -> np.ndarray | None:
+        """
+        获取用于 invoke_core 处理的有效输入图像。
         如果 _prepared_input 已设置（例如由 image_source_mode 或 ROI 逻辑设置），
         则返回 _prepared_input，否则返回 fallback（通常来自 from_node.mat）。
-        这避免了修改 UI 线程可见的上游节点的 _mat。
         """
         return self._prepared_input if self._prepared_input is not None else fallback
 
@@ -160,8 +150,8 @@ class VisionNodeData(HelpPresenterMixin, PropertyPresenterMixin, NodeBase):
     # -- 主要的 invoke 方法 --
 
     def invoke(self, previors: LinkData | None, diagram: "WorkflowEngine") -> FlowableResult:
-        """工作流引擎调用的入口点。
-
+        """
+        工作流引擎调用的入口点。
         1. 查找源节点（ISrcVisionNodeData）
         2. 查找上游节点（IVisionNodeData）
         3. 传递上游的原始图像
@@ -173,16 +163,8 @@ class VisionNodeData(HelpPresenterMixin, PropertyPresenterMixin, NodeBase):
         from_data = self._find_from_node(diagram, previors)
 
         # 传递上游的原始图像，使每个节点都能访问未处理的源图像
-        if isinstance(from_data, VisionNodeData):
-            # 子类（如 ROINodeData）可能已设置 _original_mat，跳过重复拷贝
-            if self._original_mat is not None:
-                pass
-            else:
-                upstream_original = getattr(from_data, '_original_mat', None)
-                if upstream_original is not None:
-                    self._original_mat = upstream_original
-                elif from_data.mat is not None:
-                    self._original_mat = from_data.mat.copy()
+        if isinstance(from_data, VisionNodeData) and self._original_mat is None:
+            self._propagate_upstream_state(from_data)
 
         # 执行核心处理
         return self._invoke_action(lambda: self.invoke_core(src_data, from_data or src_data, diagram))
@@ -193,7 +175,6 @@ class VisionNodeData(HelpPresenterMixin, PropertyPresenterMixin, NodeBase):
         if self.diagram_data is None:
             return None
         # 如果工作流正在运行，则不执行
-        from core.workflow import WorkflowState
         if hasattr(self.diagram_data, 'state') and self.diagram_data.state == WorkflowState.RUNNING:
             return None
 
@@ -228,13 +209,12 @@ class VisionNodeData(HelpPresenterMixin, PropertyPresenterMixin, NodeBase):
         try:
             result = action()
         except Exception as e:
-            import traceback
-            self._execution_state = "error"
+            self._execution_state = FlowableResultState.ERROR
             error_result = FlowableResult.error(
                 message=f"{e}\n{traceback.format_exc()}"
             )
             self._post_invoke(error_result)
-            raise
+            return error_result
         self._post_invoke(result)
         return result
 
@@ -253,8 +233,8 @@ class VisionNodeData(HelpPresenterMixin, PropertyPresenterMixin, NodeBase):
         if self.use_result_image_source:
             self._update_result_image_source()
 
-        if self._result_presenter is None:
-            self._result_presenter = self.create_result_presenter()
+        # if self._result_presenter is None:
+        #     self._result_presenter = self.create_result_presenter()
 
         state = "Success" if result.is_ok else "Error"
         ts = time.strftime("%H:%M:%S")
@@ -262,11 +242,11 @@ class VisionNodeData(HelpPresenterMixin, PropertyPresenterMixin, NodeBase):
             self.diagram_data.on_node_completed(self, state, ts)
 
         if result.is_error:
-            self._execution_state = "error"
+            self._execution_state = FlowableResultState.ERROR
         elif result.is_break:
-            self._execution_state = "break"
+            self._execution_state = FlowableResultState.BREAK
         else:
-            self._execution_state = "completed"
+            self._execution_state = FlowableResultState.OK
 
         if result.is_ok:
             event_system.publish(EventType.NODE_COMPLETED, sender=self, result=result)
@@ -285,11 +265,11 @@ class VisionNodeData(HelpPresenterMixin, PropertyPresenterMixin, NodeBase):
         """检查输入图像是否有效。子类可重写。"""
         return mat is not None
 
-    @abstractmethod
     def invoke_core(self, src_image_node_data: "VisionNodeData | None",
                     from_node_data: "VisionNodeData | None",
                     diagram: "WorkflowEngine") -> FlowableResult:
-        """核心处理逻辑。子类实现此方法。
+        """核心处理逻辑。子类可重写以自定义处理。
+        默认行为：透传上游图像。
 
         参数：
             src_image_node_data: 源图像节点（数据来源）
@@ -299,14 +279,13 @@ class VisionNodeData(HelpPresenterMixin, PropertyPresenterMixin, NodeBase):
         返回：
             包含处理后的图像和元数据的 FlowableResult
         """
-        ...
+        return FlowableResult.ok(from_node_data.mat if from_node_data else None)
 
     def _update_result_image_source(self):
         """更新图像结果图像源"""
-        self._result_image_source = self._mat if self._mat is not None else None
+        self._result_image_source = self._mat
 
     # -- 流程控制辅助函数 --
-
     def ok(self, mat: np.ndarray | None, message: str = "运行成功",
            result_presenter: Any = None) -> FlowableResult:
         """返回成功结果"""
@@ -326,10 +305,9 @@ class VisionNodeData(HelpPresenterMixin, PropertyPresenterMixin, NodeBase):
         return FlowableResult.break_(mat, message)
 
     # -- 内部辅助方法 --
-
     def _find_source_node(self, diagram: "WorkflowEngine") -> "VisionNodeData | None":
-        """查找当前节点在拓扑中的真正上游源节点（数据来源）。
-
+        """
+        查找当前节点在拓扑中的真正上游源节点（数据来源）。
         优先级：通过 from_node_datas 追溯 > 返回第一个起始节点
         """
         if diagram is None:
@@ -371,8 +349,15 @@ class VisionNodeData(HelpPresenterMixin, PropertyPresenterMixin, NodeBase):
                 return n
         return None
 
-    # -- 序列化 --
+    def _propagate_upstream_state(self, from_node: "VisionNodeData") -> None:
+        """从上游节点传递原始图像（_original_mat），使每个节点都能访问未处理的源图像。"""
+        upstream_original = getattr(from_node, '_original_mat', None)
+        if upstream_original is not None:
+            self._original_mat = upstream_original
+        elif from_node.mat is not None:
+            self._original_mat = from_node.mat.copy()
 
+    # -- 序列化 --
     def to_dict(self) -> dict:
         """序列化节点为字典"""
         data = super().to_dict()

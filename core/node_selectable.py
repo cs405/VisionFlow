@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import cv2
 import base64
+import ctypes
 import numpy as np
 from core.data_packet import FlowableResult, VisionResultImage
 from core.node_base import Property, PropertyGroupNames
@@ -19,7 +20,6 @@ def _is_hidden_or_system(path: str) -> bool:
     """
     if os.name == 'nt':
         try:
-            import ctypes
             attrs = ctypes.windll.kernel32.GetFileAttributesW(path)
             if attrs != -1 and attrs & (2 | 4):
                 return True
@@ -106,33 +106,24 @@ class OpenCVNodeDataBase(SelectableResultImageNodeData):
 # =============================================================================
 
 class SrcFilesVisionNodeData(ROINodeData):
-    """从文件加载图像的节点基类。
+    """
+    从文件加载图像的节点基类。
     提供文件列表管理、图像属性（宽度/高度/颜色类型）。
     """
-
-    # 图像宽度（只读，用于显示结果信息）
     pixel_width = Property(0, name="图像宽度", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)
-    # 图像高度（只读，用于显示结果信息）
     pixel_height = Property(0, name="图像高度", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)
-    # 颜色类型（只读，如灰度、RGB、BGR等）
     image_color_type = Property(0, name="颜色类型", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)
-    # 是否使用所有图像（True：循环使用所有图像，False：只使用当前图像）
     use_all_image = Property(False, name="使用所有图像", group=PropertyGroupNames.RUN_PARAMETERS)
-    # 是否自动切换（True：自动切换到下一张，False：手动切换）
     use_auto_switch = Property(True, name="自动切换", group=PropertyGroupNames.RUN_PARAMETERS)
-    # 当前选中的文件路径
     src_file_path = Property("", name="当前文件", group=PropertyGroupNames.RUN_PARAMETERS)
-    # 执行延迟（毫秒），用于控制连续执行时的帧率
     invoke_milliseconds_delay = Property(33, name="执行延迟", group=PropertyGroupNames.FLOW_PARAMETERS,
                                          description="连续执行时，每次采集图像的目标间隔（毫秒）。33ms≈30FPS，500ms≈2FPS")
 
     def __init__(self):
         super().__init__()
-        # 文件路径列表（在 super().__init__ 之后初始化，确保 load_default 已执行）
         if not hasattr(self, 'src_file_paths'):
             self.src_file_paths: list[str] = []
-        # 此节点可以作为流程起始节点
-        self.use_start = True
+        self.use_start = True  # 此节点可以作为流程起始节点
 
     # 支持的图像文件扩展名列表
     _IMAGE_EXTENSIONS = (
@@ -143,13 +134,12 @@ class SrcFilesVisionNodeData(ROINodeData):
     @classmethod
     def collect_image_files(cls, folder_path: str, recursive: bool = True,
                             image_extensions: tuple = None) -> list[str]:
-        """从文件夹中收集所有图像文件，可选择是否递归扫描子目录。
-
+        """
+        从文件夹中收集所有图像文件，可选择是否递归扫描子目录。
         参数：
             folder_path: 要扫描的根文件夹路径
             recursive: 是否递归扫描子目录
             image_extensions: 覆盖默认的图像扩展名元组
-
         返回：
             匹配图像扩展名的文件绝对路径列表（已排序）
         """
@@ -275,8 +265,8 @@ class SrcFilesVisionNodeData(ROINodeData):
         return self.src_file_path is not None, ""
 
     def load_default(self):
-        """加载默认设置：从 assets/images 文件夹添加示例图片。
-
+        """
+        加载默认设置：从 assets/images 文件夹添加示例图片。
         注意：在打包部署（PyInstaller 等）或 zip 内运行时，
         assets/images 目录可能不存在，此时静默跳过。
         """
@@ -303,8 +293,8 @@ class SrcFilesVisionNodeData(ROINodeData):
 
     @classmethod
     def from_dict(cls, data: dict) -> "SrcFilesVisionNodeData":
-        """从字典反序列化节点。
-
+        """
+        从字典反序列化节点。
         注意：工作流反序列化走 restore_from_dict 路径，此方法可能未被调用。
         """
         node = super().from_dict(data)
@@ -323,7 +313,6 @@ class Base64MatchingNodeData(ROINodeData):
     继承自 ROINodeData 以提供 ROI 基础设施，下游节点可通过
     "来自上游" ROI 模式引用匹配结果区域。
     """
-
     # 匹配数量结果（只读）
     matching_count_result = Property(0, name="匹配数量", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)
     # 置信度结果（只读）
@@ -342,8 +331,8 @@ class Base64MatchingNodeData(ROINodeData):
         self._base64_string: str = ""
 
     def _on_post_invoke(self, result: FlowableResult):
-        """匹配成功后，将匹配偏移量累加到 _crop_chain_offset。
-
+        """
+        匹配成功后，将匹配偏移量累加到 _crop_chain_offset。
         所有模板匹配节点（XFeat、SIFT、SURF、ORB、Template等）自动适配，
         无需逐个修改。
         """
@@ -387,17 +376,15 @@ class Base64MatchingNodeData(ROINodeData):
         return cv2.imdecode(arr, cv2.IMREAD_COLOR)
 
     # ── ROI 暴露：将匹配结果作为下游可用的 ROI ──
-
     def get_active_roi_rect(self) -> tuple | None:
         """如果匹配成功，返回匹配矩形作为 ROI，供下游节点"来自上游"截取。"""
         if getattr(self, "matched", False):
             x, y, w, h = self.match_x, self.match_y, self.match_w, self.match_h
             if w > 0 and h > 0:
-                return (int(x), int(y), int(w), int(h))
+                return int(x), int(y), int(w), int(h)
         return super().get_active_roi_rect()
 
     # ── 序列化 ──
-
     def to_dict(self) -> dict:
         data = super().to_dict()
         data["base64_string"] = self._base64_string

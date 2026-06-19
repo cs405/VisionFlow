@@ -4,15 +4,14 @@
 """
 
 from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any
-
 import threading
 
 from core.data_packet import FlowableResult, FlowableInvokeMode
 from core.events import EventType, event_system
 from core.node_base import NodeBase, Property, PropertyGroupNames, Port, LinkData
 from core.node_vision import VisionNodeData
+from core.conditions import ConditionBranch, PropertyCondition, FilterOperate
 
 if TYPE_CHECKING:
     from core.workflow import WorkflowEngine
@@ -23,28 +22,26 @@ if TYPE_CHECKING:
 # =============================================================================
 
 class LogicModuleNode:
-    """标记接口：实现此接口的节点自动归入"逻辑模块"分组。
+    """
+    标记接口：实现此接口的节点自动归入"逻辑模块"分组。
     解耦了"属于逻辑模块"和"是 ConditionNodeData 子类"之间的强绑定。
     """
     pass
 
 
-# ConditionNodeData - 条件分支节点
-# =============================================================================
-
 class ConditionNodeData(VisionNodeData):
-    """基于上游节点结果评估条件并实现流程分支的节点。
+    """
+    基于上游节点结果评估条件并实现流程分支的节点。
     """
 
     def __init__(self):
         super().__init__()
         self.use_invoked_part = False
-
-    # -- ConditionsPresenter (lazy init) --
+        self._data_loaded = False  # 标记 load_data() 是否已在本轮 invoke 中调用过
 
     @property
     def conditions_presenter(self):
-        """获取条件分支集合管理器。延迟导入避免循环依赖。"""
+        """获取条件分支集合管理器。延迟导入避免循环依赖"""
         if getattr(self, '_conditions_presenter', None) is None:
             from core.conditions import ConditionsPresenter
             self._conditions_presenter = ConditionsPresenter()
@@ -53,8 +50,6 @@ class ConditionNodeData(VisionNodeData):
     @conditions_presenter.setter
     def conditions_presenter(self, value):
         self._conditions_presenter = value
-
-    # -- 兼容旧 API (deprecated, 映射到 presenter.branches[0]) --
 
     @property
     def conditions(self) -> list:
@@ -66,7 +61,7 @@ class ConditionNodeData(VisionNodeData):
         self._set_legacy_conditions(value)
 
     def _legacy_conditions(self) -> list:
-        """将 presenter 的 branches 转回旧版 VisionPropertyCondition 格式（仅用于兼容）。"""
+        """将 presenter 的 branches 转回旧版 VisionPropertyCondition 格式。"""
         result = []
         for branch in self.conditions_presenter.branches:
             for cond in branch.conditions:
@@ -79,7 +74,6 @@ class ConditionNodeData(VisionNodeData):
         return result
 
     def _set_legacy_conditions(self, value: list):
-        from core.conditions import ConditionBranch, PropertyCondition, FilterOperate
         self.conditions_presenter.clear()
         for old in value:
             op_name = PropertyCondition._migrate_operator(getattr(old, 'operator', '>'))
@@ -94,7 +88,6 @@ class ConditionNodeData(VisionNodeData):
             self.conditions_presenter.branches.append(branch)
 
     def add_condition(self, condition: "VisionPropertyCondition"):
-        from core.conditions import ConditionBranch, PropertyCondition, FilterOperate
         op_name = PropertyCondition._migrate_operator(condition.operator)
         pc = PropertyCondition(
             property_name=condition.property_name,
@@ -165,18 +158,16 @@ class ConditionNodeData(VisionNodeData):
 
         # 传播上游 _original_mat（ROINodeData.invoke 的正常行为，条件分支也需要）
         if isinstance(from_node, VisionNodeData):
-            upstream_original = getattr(from_node, '_original_mat', None)
-            if upstream_original is not None:
-                self._original_mat = upstream_original
-            elif from_node.mat is not None:
-                self._original_mat = from_node.mat.copy()
+            self._propagate_upstream_state(from_node)
             # 传播上游累积裁剪偏移量（ROINodeData.invoke 的正常行为）
             self._crop_chain_offset = getattr(from_node, '_crop_chain_offset', (0, 0, 0, 0))
 
         src_data = self._find_source_node(diagram)
 
         # 加载节点数据到 presenter（恢复节点引用）
+        self._data_loaded = False
         self.conditions_presenter.load_data(self)
+        self._data_loaded = True
 
         # 调用 invoke_core 执行透传
         return self._invoke_action(lambda: self.invoke_core(src_data, from_node or src_data, diagram))
@@ -184,7 +175,8 @@ class ConditionNodeData(VisionNodeData):
     def get_flowable_output_links(self, diagram: "WorkflowEngine") -> list["LinkData"]:
         """根据条件分支匹配结果，路由到对应的输出端口。
         """
-        self.conditions_presenter.load_data(self)
+        if not self._data_loaded:
+            self.conditions_presenter.load_data(self)
         upstream_snapshots = self.conditions_presenter.collect_upstream_snapshots()
         matching_output_ids = self.conditions_presenter.get_matching_output_node_ids(upstream_snapshots)
 
@@ -209,9 +201,6 @@ class ConditionNodeData(VisionNodeData):
 
     def _update_result_image_source(self):
         self._result_image_source = self._mat
-
-    def invoke_core(self, src_image_node_data, from_node_data, diagram) -> FlowableResult:
-        return self.ok(from_node_data.mat if from_node_data else None)
 
     # -- 序列化 --
 
@@ -339,9 +328,6 @@ class WaitAllParallelNodeData(VisionNodeData, LogicModuleNode):
             lambda: self.on_all_parallels_invoked(src_data, from_node, diagram)
         )
 
-    def _update_result_image_source(self):
-        self._result_image_source = self._mat
-
     def on_parallel_from_invoked(self, src_image_node_data, from_node, diagram):
         """每个并行分支完成时调用。子类可重写以累积结果。"""
         pass
@@ -349,14 +335,6 @@ class WaitAllParallelNodeData(VisionNodeData, LogicModuleNode):
     def on_all_parallels_invoked(self, src_image_node_data, from_node, diagram) -> FlowableResult:
         """所有并行分支都完成时调用。子类可重写以合并结果。"""
         return self.ok(from_node.mat if from_node else None)
-
-    def _update_result_image_source(self):
-        """更新结果图像源"""
-        self._result_image_source = self._mat
-
-    def invoke_core(self, src_image_node_data, from_node_data, diagram) -> FlowableResult:
-        """核心调用方法（透传上游图像）"""
-        return self.ok(from_node_data.mat if from_node_data else None)
 
     def to_dict(self) -> dict:
         """序列化节点为字典"""

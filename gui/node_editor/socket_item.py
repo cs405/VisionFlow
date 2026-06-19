@@ -67,41 +67,24 @@ class SocketItem(QGraphicsObject):
             port: 端口数据对象
             parent: 父对象
         """
-        # 调用父类QGraphicsObject的构造函数
         super().__init__(parent)
-        # 保存端口数据
-        self.port = port
-        # 鼠标悬停标志，初始为False
-        self._hovered = False
-        # 与该插座相连的连线列表
-        self._connected_edges: list = []
-        # 画笔对象
-        self._pen = QPen()
-        # 画刷对象
-        self._brush = QBrush()
-        # 端口矩形区域（中心在原点）
-        self._rect = QRectF(-PORT_RADIUS, -PORT_RADIUS, PORT_DIAMETER, PORT_DIAMETER)
+        self.port = port                  # 保存端口数据
+        self._hovered = False             # 鼠标悬停标志，初始为False
+        self._connected_edges: list = []  # 与该插座相连的连线列表
+        self._pen = QPen()                # 画笔对象
+        self._brush = QBrush()            # 画刷对象
 
-        # 获取端口的数据类型字符串
-        dt_str = getattr(port, 'data_type', 'image') or 'image'
+        self._rect = QRectF(-PORT_RADIUS, -PORT_RADIUS, PORT_DIAMETER, PORT_DIAMETER)  # 端口矩形区域（中心在原点）
+        dt_str = getattr(port, 'data_type', 'image') or 'image'               # 获取端口的数据类型字符串
         try:
-            # 尝试从PortDataType枚举中获取对应的数据类型
-            self._data_type = PortDataType[dt_str.upper()]
+            self._data_type = PortDataType[dt_str.upper()]                    # 尝试从PortDataType枚举中获取对应的数据类型
         except KeyError:
-            # 如果找不到，默认使用图像类型
-            self._data_type = PortDataType.IMAGE
-
-        # 启用鼠标悬停事件
-        self.setAcceptHoverEvents(True)
-        # 设置图形项在位置变化时发送几何变化通知
-        self.setFlag(QGraphicsObject.ItemSendsGeometryChanges, True)
-        # 设置Z序为20（高于节点和连线）
-        self.setZValue(20)
-        # 设置光标样式为十字光标
-        self.setCursor(Qt.CrossCursor)
-
-        # 更新样式
-        self._update_style()
+            self._data_type = PortDataType.IMAGE                              # 如果找不到，默认使用图像类型
+        self.setAcceptHoverEvents(True)                                       # 启用鼠标悬停事件
+        self.setFlag(QGraphicsObject.ItemSendsGeometryChanges, True)  # 设置图形项在位置变化时发送几何变化通知
+        self.setZValue(20)                                                    # 设置Z序为20（高于节点和连线）
+        self.setCursor(Qt.CrossCursor)                                        # 设置光标样式为十字光标
+        self._update_style()                                                  # 更新样式
 
     # ── 样式 ─────────────────────────────────────────────────────────────
 

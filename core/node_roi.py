@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
+
 from core.data_packet import FlowableResult
 from core.node_base import LinkData, NodeBase
 from core.node_vision import VisionNodeData
@@ -16,6 +18,9 @@ from core.node_vision import VisionNodeData
 if TYPE_CHECKING:
     from core.workflow import WorkflowEngine
 
+
+IMAGE_SOURCE_ORIGINAL = "原图"
+IMAGE_SOURCE_PROCESSED = "处理后图片"
 
 # =============================================================================
 # ROINodeData - ROI支持（NoROI / DrawROI / FromROI / InputROI）
@@ -29,6 +34,7 @@ class ROIBase:
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         ROIBase._roi_registry[cls.__name__] = cls
+        NodeBase.register_deserializer(cls.__name__, ROIBase.from_dict)
 
     @classmethod
     def unregister(cls, name: str):
@@ -43,70 +49,73 @@ class ROIBase:
 
     @classmethod
     def from_dict(cls, data: dict) -> "ROIBase":
-        roi_type = data.get("type", "ROIBase")
-        roi_cls = cls._roi_registry.get(roi_type, FromROI)
-        roi = roi_cls()
-        if roi_type == "DrawROI":
-            raw = data.get("rect")
-            roi.rect = tuple(raw) if raw else None
-        elif roi_type == "InputROI":
-            roi.x = int(data.get("x", roi.x))
-            roi.y = int(data.get("y", roi.y))
-            roi.width = int(data.get("width", roi.width))
-            roi.height = int(data.get("height", roi.height))
-        return roi
+        roi_type = data.get("type", "ROIBase")        # 默认类型
+        roi_cls = cls._roi_registry.get(roi_type, FromROI)        # 默认使用 FromROI, 来自上游ROI
+        return roi_cls._from_dict(data)
+
+    @classmethod
+    def _from_dict(cls, data: dict) -> "ROIBase":
+        """子类可重写以处理自身特有字段的反序列化。"""
+        return cls()
 
 
 class FromROI(ROIBase):
-    """从上游节点获取的ROI区域。"""
-
+    """从上游节点获取的ROI区域，继承"""
     def __init__(self, source_node: NodeBase = None):
         super().__init__("使用上游ROI")
-        self.source_node = source_node
+        self.source_node = source_node  # 上游节点引用
         self._source_node_id: str = ""  # 序列化时保存，反序列化后由 load_data 恢复
 
     def to_dict(self) -> dict:
-        data = super().to_dict()
-        if self.source_node is not None:
-            data["source_node_id"] = self.source_node.node_id
+        data = super().to_dict()                               # 获取基类的字典表示
+        if self.source_node is not None:                       # 如果有上游节点，保存其 ID
+            data["source_node_id"] = self.source_node.node_id  # 保存上游节点的 ID
         return data
 
 
 class DrawROI(ROIBase):
-    """在图像上交互式绘制的ROI区域。"""
+    """在图像上交互式绘制的ROI区域"""
 
     def __init__(self):
         super().__init__("绘制ROI")
-        self.image_source: Any = None
+        self.image_source: Any = None   # 图像数据源（可以是节点输出的图像数据）
         self.rect: tuple | None = None  # None=未绘制，等用户在编辑器中画
+        self.roi_type: str = "矩形"     # ROI类型：矩形/旋转矩形/圆形
+        self.angle: float = 0.0         # 旋转角度（仅旋转矩形有效）
 
     def to_dict(self) -> dict:
         """序列化为字典"""
         data = super().to_dict()
-        # 将矩形区域转为列表存储
-        data["rect"] = list(self.rect or (0, 0, 100, 100))
+        data["rect"] = list(self.rect)  # 将矩形区域转为列表存储
+        data["roi_type"] = self.roi_type
+        data["angle"] = self.angle
         return data
+
+    @classmethod
+    def _from_dict(cls, data: dict) -> "DrawROI":
+        """反序列化 DrawROI，恢复 rect 字段。"""
+        roi = cls()
+        raw = data.get("rect")
+        roi.rect = tuple(raw) if raw else None
+        roi.roi_type = data.get("roi_type", "矩形")
+        roi.angle = data.get("angle", 0.0)
+        return roi
 
 
 class InputROI(ROIBase):
     """手动输入数值的ROI区域。"""
-
     def __init__(self):
         # 调用父类构造函数，设置ROI名称为"输入ROI"
         super().__init__("输入ROI")
-        # 左上角X坐标
-        self.x: int = 0
-        # 左上角Y坐标
-        self.y: int = 0
-        # ROI宽度
-        self.width: int = 100
-        # ROI高度
-        self.height: int = 100
+        self.x: int = None       # 左上角X坐标
+        self.y: int = None       # 左上角Y坐标
+        self.width: int = None   # ROI宽度
+        self.height: int = None  # ROI高度
 
     def to_dict(self) -> dict:
         """序列化为字典"""
-        data = super().to_dict()
-        # 添加坐标和尺寸信息
+        data = super().to_dict()  # 获取基类的字典表示
+        # 更新坐标和尺寸信息
         data.update({
             "x": self.x,
             "y": self.y,
@@ -115,25 +124,22 @@ class InputROI(ROIBase):
         })
         return data
 
+    @classmethod
+    def _from_dict(cls, data: dict) -> "InputROI":
+        """反序列化 InputROI，恢复坐标和尺寸字段。"""
+        roi = cls()
+        roi.x = int(data.get("x", roi.x))
+        roi.y = int(data.get("y", roi.y))
+        roi.width = int(data.get("width", roi.width))
+        roi.height = int(data.get("height", roi.height))
+        return roi
+
 
 class NoROI(ROIBase):
     """无ROI — 不应用任何感兴趣区域。"""
-
     def __init__(self):
         # 调用父类构造函数，设置ROI名称为"无"
         super().__init__("无")
-
-
-# Sentinel for old-format DrawROI default rect (distinct from legitimate user input)
-_DRAW_ROI_LEGACY_DEFAULT = (0, 0, 100, 100)
-
-# Register ROI types for property deserialization
-from core.node_base import NodeBase as _NodeBase
-_NodeBase.register_deserializer("ROIBase", ROIBase.from_dict)
-_NodeBase.register_deserializer("FromROI", ROIBase.from_dict)
-_NodeBase.register_deserializer("DrawROI", ROIBase.from_dict)
-_NodeBase.register_deserializer("InputROI", ROIBase.from_dict)
-_NodeBase.register_deserializer("NoROI", ROIBase.from_dict)
 
 
 class ROINodeData(VisionNodeData):
@@ -145,16 +151,11 @@ class ROINodeData(VisionNodeData):
 
     def __init__(self):
         super().__init__()
-        # 无ROI模式实例
-        self.no_roi = NoROI()
-        # 使用上游ROI模式实例，源节点指向自身
-        self.from_roi = FromROI(source_node=self)
-        # 绘制ROI模式实例
-        self.draw_roi = DrawROI()
-        # 输入ROI模式实例
-        self.input_roi = InputROI()
-        # 当前激活的ROI，默认为无ROI
-        self._roi: ROIBase = self.no_roi
+        self.no_roi = NoROI()  # 无ROI模式实例
+        self.from_roi = FromROI(source_node=self)  # 使用上游ROI模式实例，源节点指向自身
+        self.draw_roi = DrawROI()                  # 绘制ROI模式实例
+        self.input_roi = InputROI()                # 输入ROI模式实例
+        self._roi: ROIBase = self.no_roi           # 当前激活的ROI，默认为无ROI
 
     @property
     def roi(self) -> ROIBase:
@@ -172,18 +173,14 @@ class ROINodeData(VisionNodeData):
 
     def get_active_roi_rect(self) -> tuple | None:
         """获取当前激活的ROI矩形区域，返回 (x, y, w, h) 或 None"""
-        # 无ROI模式：返回None
-        if isinstance(self._roi, NoROI):
+        if isinstance(self._roi, NoROI):  # 无ROI模式：返回None
             return None
-        # 绘制ROI模式：返回绘制的矩形区域
-        if isinstance(self._roi, DrawROI):
+        if isinstance(self._roi, DrawROI):  # 绘制ROI模式：返回绘制的矩形区域
             if self._roi.rect:
                 return self._roi.rect
-        # 输入ROI模式：返回手动输入的坐标和尺寸
-        elif isinstance(self._roi, InputROI):
-            return (self._roi.x, self._roi.y, self._roi.width, self._roi.height)
-        # 使用上游ROI模式：递归向上游节点获取ROI
-        elif isinstance(self._roi, FromROI):
+        elif isinstance(self._roi, InputROI):  # 输入ROI模式：返回手动输入的坐标和尺寸
+            return self._roi.x, self._roi.y, self._roi.width, self._roi.height
+        elif isinstance(self._roi, FromROI):  # 使用上游ROI模式：递归向上游节点获取ROI
             src = self._roi.source_node
             if isinstance(src, ROINodeData) and src is not self:
                 return src.get_active_roi_rect()
@@ -191,7 +188,7 @@ class ROINodeData(VisionNodeData):
 
     @staticmethod
     def _validate_roi_rect(roi_rect: tuple | None,
-                           input_mat: "np.ndarray | None") -> tuple | None:
+                           input_mat: np.ndarray | None) -> tuple | None:
         """验证 ROI 矩形并裁剪到图像边界内。返回 (x,y,w,h) 或 None。"""
         if roi_rect is None or input_mat is None:
             return None
@@ -201,12 +198,11 @@ class ROINodeData(VisionNodeData):
         w, h = min(w, w_img - x), min(h, h_img - y)
         if w <= 0 or h <= 0:
             return None
-        return (x, y, w, h)
+        return x, y, w, h
 
     def invoke(self, previors: LinkData | None, diagram: "WorkflowEngine") -> FlowableResult:
         """执行节点处理，支持ROI裁剪"""
-        # 查找上游节点
-        from_data = self._find_from_node(diagram, previors)
+        from_data = self._find_from_node(diagram, previors)  # 查找上游节点
 
         # 为 FromROI 模式连接上游ROI（仅在用户未手动指定源节点时自动连接）
         if isinstance(from_data, ROINodeData) and from_data is not self:
@@ -215,18 +211,14 @@ class ROINodeData(VisionNodeData):
 
         # 传递上游的原始图像
         if isinstance(from_data, VisionNodeData):
-            upstream_original = getattr(from_data, '_original_mat', None)
-            if upstream_original is not None:
-                self._original_mat = upstream_original
-            elif from_data.mat is not None:
-                self._original_mat = from_data.mat.copy()
+            self._propagate_upstream_state(from_data)
 
         # 传播上游累积裁剪偏移量
         upstream_offset = getattr(from_data, '_crop_chain_offset', (0, 0, 0, 0))
 
-        # 根据图像源模式确定有效的输入图像
+        # 根据图像源模式确定有效地输入图像
         # "原图"模式优先：即使上游mat为None，也能用完整原图
-        if hasattr(self, 'image_source_mode') and self.image_source_mode == "原图" and self._original_mat is not None:
+        if hasattr(self, 'image_source_mode') and self.image_source_mode == IMAGE_SOURCE_ORIGINAL and self._original_mat is not None:
             input_mat = self._original_mat
         elif from_data is not None and from_data.mat is not None:
             input_mat = from_data.mat
@@ -261,6 +253,12 @@ class ROINodeData(VisionNodeData):
         self.draw_roi.image_source = self._result_image_source
         return result
 
+    def invoke_core(self, src_image_node_data: "VisionNodeData | None",
+                    from_node_data: "VisionNodeData | None",
+                    diagram: "WorkflowEngine") -> FlowableResult:
+        """ROI 裁剪已在 invoke() 中完成，此处为无处理直通。"""
+        return FlowableResult()
+
     def to_dict(self) -> dict:
         """序列化节点为字典"""
         data = super().to_dict()
@@ -278,10 +276,9 @@ class ROINodeData(VisionNodeData):
         if isinstance(self._roi, NoROI):
             self._roi = self.no_roi
         elif isinstance(self._roi, DrawROI):
-            r = tuple(self._roi.rect) if self._roi.rect else None
-            if r == _DRAW_ROI_LEGACY_DEFAULT:
-                r = None  # 忽略旧版预设值
-            self.draw_roi.rect = r
+            self.draw_roi.rect = tuple(self._roi.rect) if self._roi.rect else None
+            self.draw_roi.roi_type = getattr(self._roi, 'roi_type', '矩形')
+            self.draw_roi.angle = getattr(self._roi, 'angle', 0.0)
             self._roi = self.draw_roi
         elif isinstance(self._roi, InputROI):
             self.input_roi.x = int(self._roi.x)

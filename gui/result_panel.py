@@ -11,18 +11,18 @@
 """
 
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem,
-                              QTabWidget, QLabel, QHeaderView, QTextEdit,
+                              QTabWidget, QLabel, QTextEdit,
                               QStyledItemDelegate, QStyle)
 from PyQt5.QtCore import Qt, pyqtSignal, QRect
 from gui.theme import theme_manager, connect_theme
-from PyQt5.QtGui import QColor, QFont, QPainter, QPixmap
+from PyQt5.QtGui import QColor, QFont, QPainter
 
 from core.node_vision import VisionNodeData
 from gui.image_viewer import OverlayType
 from core.result_presenter import (ResultItem, RectangleResultItem, LineResultItem,
                                     ScoreRectangleResultItem, VisionMessage,
                                     ResultItemType)
-from gui.font_icons import FontIcons, ICON_FONT_FAMILY
+from gui.font_icons import FontIcons
 
 
 # ── 项类型的颜色映射 ───────────────────────────────────────────
@@ -103,8 +103,7 @@ class IconTextDelegate(QStyledItemDelegate):
         tm = theme_manager
         # 如果单元格被选中
         if option.state & QStyle.State_Selected:
-            # 绘制选中背景色
-            painter.fillRect(option.rect, QColor("#094771"))
+            painter.fillRect(option.rect, tm.color('accent'))
         else:
             # 奇数行使用交替背景色，偶数行使用表面背景色
             bg = tm.color('bg_surface') if index.row() % 2 == 0 else tm.color('bg_alternating')
@@ -123,7 +122,7 @@ class IconTextDelegate(QStyledItemDelegate):
         # 绘制字体图标
         if icon:
             # 创建图标字体
-            font = QFont(ICON_FONT_FAMILY, 11)
+            font = QFont("Segoe MDL2 Assets", 11)
             font.setStyleStrategy(QFont.PreferAntialias)
             # 设置字体
             painter.setFont(font)
@@ -195,6 +194,8 @@ class ResultPanel(QWidget):
         self._icon_delegate: IconTextDelegate | None = None
         # 工作流引用（用于历史消息）
         self._workflow = None
+        # 注册到工作流的回调引用（用于解绑）
+        self._history_callback = None
         # 设置UI
         self._setup_ui()
 
@@ -209,7 +210,8 @@ class ResultPanel(QWidget):
         参数：
             viewer: 图像查看器对象
         """
-        self._image_viewer = viewer
+        # self._image_viewer = viewer
+        pass
 
     def _setup_ui(self):
         """设置UI界面"""
@@ -363,19 +365,21 @@ class ResultPanel(QWidget):
             QTabBar::tab {{ padding: 6px 12px; font-size: 11px; }}
             QTabBar::tab:focus {{ outline: 0; }}
         """)
-        # 如果有历史表格，刷新样式
+        accent = tm.color("accent").name()
+        table_qss = f"""
+            QTableWidget {{ background: {tm.color('bg_surface').name()}; color: {tm.color('text_primary').name()};
+                           border: none; gridline-color: {tm.color('border').name()};
+                           alternate-background-color: {tm.color('bg_alternating').name()}; }}
+            QHeaderView::section {{ background: {tm.color('bg_surface_raised').name()};
+                                   color: {tm.color('text_secondary').name()}; padding: 4px 8px;
+                                   border: none; border-bottom: 1px solid {tm.color('border').name()}; font-size: 11px; }}
+            QTableWidget::item {{ padding: 3px 6px; font-size: 11px; }}
+            QTableWidget::item:selected {{ background: {accent}; color: {tm.color('text_primary').name()}; }}
+        """
         if hasattr(self, '_history_table'):
-            self._history_table.setStyleSheet(f"""
-                QTableWidget {{ background: {tm.color('bg_surface').name()}; color: {tm.color('text_primary').name()};
-                               border: none; gridline-color: {tm.color('border').name()};
-                               alternate-background-color: {tm.color('bg_alternating').name()}; }}
-                QHeaderView::section {{ background: {tm.color('bg_surface_raised').name()};
-                                       color: {tm.color('text_secondary').name()}; padding: 4px 8px;
-                                       border: none; border-bottom: 1px solid {tm.color('border').name()}; font-size: 11px; }}
-                QTableWidget::item {{ padding: 3px 6px; font-size: 11px; }}
-                QTableWidget::item:selected {{ background: #094771; color: {tm.color('text_primary').name()}; }}
-            """)
-        # 如果有帮助文本编辑框，刷新样式
+            self._history_table.setStyleSheet(table_qss)
+        if hasattr(self, '_current_table'):
+            self._current_table.setStyleSheet(table_qss)
         if hasattr(self, '_help_text'):
             self._help_text.setStyleSheet(f"""
                 QTextEdit, QPlainTextEdit {{ background: {tm.color('bg_surface').name()};
@@ -402,12 +406,11 @@ class ResultPanel(QWidget):
             return
 
         # 结果项列表
-        items: list[ResultItem] = []
+        items: list[ResultItem] = [ResultItem("名称", node.name, ResultItemType.VALUE),
+                                   ResultItem("类型", type(node).__name__, ResultItemType.VALUE),
+                                   ResultItem("消息", node.message or "-", ResultItemType.VALUE),
+                                   ResultItem("节点ID", node.node_id, ResultItemType.VALUE)]
         # 添加基本信息
-        items.append(ResultItem("名称", node.name, ResultItemType.VALUE))
-        items.append(ResultItem("类型", type(node).__name__, ResultItemType.VALUE))
-        items.append(ResultItem("消息", node.message or "-", ResultItemType.VALUE))
-        items.append(ResultItem("节点ID", node.node_id, ResultItemType.VALUE))
 
         # 添加结果图像信息
         for img in node.result_images:
@@ -474,12 +477,19 @@ class ResultPanel(QWidget):
         参数：
             workflow: 工作流引擎
         """
+        # 解绑旧工作流（避免旧工作流继续触发已失效的回调）
+        if (self._workflow is not None
+                and hasattr(self._workflow, 'off_history_changed')
+                and self._history_callback is not None):
+            self._workflow.off_history_changed(self._history_callback)
         # 保存工作流引用
         self._workflow = workflow
+        self._history_callback = None
         # 如果工作流存在且有on_history_changed方法
         if workflow and hasattr(workflow, 'on_history_changed'):
             # 注册回调函数
-            workflow.on_history_changed(lambda: self._history_sync_requested.emit())
+            self._history_callback = lambda: self._history_sync_requested.emit()
+            workflow.on_history_changed(self._history_callback)
 
     def sync_history_from_workflow(self):
         """从工作流的messages重建历史表格
@@ -600,7 +610,7 @@ class ResultPanel(QWidget):
         if self._icon_delegate:
             self._icon_delegate.set_row_icon(row, icon, color)
 
-    def _on_history_cell_clicked(self, row: int, col: int):
+    def _on_history_cell_clicked(self, row: int):
         """处理历史行点击 — 更新主图像 + 跳转到节点
 
         SelectedMessageChangedCommand → SetResultNodeData(message)
@@ -635,7 +645,7 @@ class ResultPanel(QWidget):
 
     # ── 交互 ───────────────────────────────────────────────────
 
-    def _on_current_result_clicked(self, row: int, col: int):
+    def _on_current_result_clicked(self, row: int):
         """处理结果点击 — 在图像查看器上显示叠加层 + 缩放到矩形
 
         参数：
@@ -727,30 +737,19 @@ class ResultPanel(QWidget):
             """
 
         # 从Property描述符获取参数表
-        for attr_name in sorted(dir(cls)):
-            # 跳过私有属性
-            if attr_name.startswith('_'):
-                continue
+        for attr_name, attr in node.get_property_descriptors():
             try:
-                # 获取类属性
-                attr = getattr(cls, attr_name)
-                # 如果是Property描述符
-                if hasattr(attr, 'display_name') and hasattr(attr, 'group'):
-                    # 获取属性值
-                    val = getattr(node, attr_name, "")
-                    # 格式化值
-                    val_str = str(val) if val else "—"
-                    # 如果值太长，截断
-                    if isinstance(val, str) and len(val_str) > 50:
-                        val_str = val_str[:50] + "..."
-                    # 添加表格行
-                    html += (
-                        f'<tr style="border-bottom:1px solid #3f3f46;">'
-                        f'<td style="padding:3px 8px; color:#ccc;">{attr.display_name or attr_name}</td>'
-                        f'<td style="padding:3px 8px; color:#999;">{val_str}</td>'
-                        f'<td style="padding:3px 8px; color:#666; font-size:10px;">{attr.group or ""}</td>'
-                        f'</tr>'
-                    )
+                val = getattr(node, attr_name, "")
+                val_str = str(val) if val else "—"
+                if isinstance(val, str) and len(val_str) > 50:
+                    val_str = val_str[:50] + "..."
+                html += (
+                    f'<tr style="border-bottom:1px solid #3f3f46;">'
+                    f'<td style="padding:3px 8px; color:#ccc;">{attr.display_name or attr_name}</td>'
+                    f'<td style="padding:3px 8px; color:#999;">{val_str}</td>'
+                    f'<td style="padding:3px 8px; color:#666; font-size:10px;">{attr.group or ""}</td>'
+                    f'</tr>'
+                )
             except Exception:
                 pass
 
@@ -775,6 +774,11 @@ class ResultPanel(QWidget):
 
     def clear(self):
         """清空所有表格和状态"""
+        # 解绑旧工作流
+        if (self._workflow is not None
+                and hasattr(self._workflow, 'off_history_changed')
+                and self._history_callback is not None):
+            self._workflow.off_history_changed(self._history_callback)
         # 清空当前结果表格
         self._current_table.setRowCount(0)
         # 清空历史表格
@@ -783,6 +787,7 @@ class ResultPanel(QWidget):
         self._overlay_map.clear()
         # 清空工作流引用
         self._workflow = None
+        self._history_callback = None
         # 清空当前节点
         self._current_node = None
 

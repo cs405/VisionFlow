@@ -7,7 +7,9 @@ from typing import TYPE_CHECKING
 import cv2
 import numpy as np
 
-from core.node_base import OpenCVNodeDataBase, Property, PropertyGroupNames, LogicModuleNode
+from core.node_base import Property, PropertyGroupNames
+from core.node_selectable import OpenCVNodeDataBase
+from core.node_condition import LogicModuleNode
 from core.data_packet import FlowableResult
 
 if TYPE_CHECKING:

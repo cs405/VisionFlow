@@ -16,8 +16,8 @@ from PyQt5.QtWidgets import (
     QTableWidgetItem,
     QVBoxLayout,
 )
-
-from core.node_base import ConditionNodeData, VisionNodeData
+from core.node_vision import VisionNodeData
+from core.node_condition import ConditionNodeData
 from core.conditions import (
     ConditionBranch,
     ConditionOperate,

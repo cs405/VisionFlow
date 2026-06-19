@@ -1,6 +1,6 @@
 """节点注册表 - 节点类型的快速查找和实例化。"""
 
-from typing import Type, Callable
+from typing import Type
 
 from core.node_base import NodeBase
 

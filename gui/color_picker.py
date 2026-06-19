@@ -23,6 +23,8 @@ from PyQt5.QtWidgets import (
     QSizePolicy,
 )
 
+from gui.widget_utils import wrap_layout
+
 
 class ImagePickLabel(QLabel):
     """可点击取色的图像标签
@@ -264,12 +266,7 @@ class ColorPickerDialog(QDialog):
 
     def _wrap_layout(self, layout: QHBoxLayout) -> QWidget:
         """将水平布局包装成控件"""
-        # 创建容器控件
-        widget = QWidget()
-        # 设置布局
-        widget.setLayout(layout)
-        # 返回控件
-        return widget
+        return wrap_layout(layout)
 
     def _rgb_to_hsv(self, rgb: tuple[int, int, int]) -> tuple[int, int, int]:
         """将RGB颜色转换为OpenCV HSV颜色
