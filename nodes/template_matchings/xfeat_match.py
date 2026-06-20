@@ -19,15 +19,15 @@ _global_xfeat = None
 
 
 def _get_xfeat(top_k=2048):
-    """延迟加载 XFeat 模型和 PyTorch，避免调试器 DLL 注入冲突。"""
+    """延迟加载 XFeat 模型，强制 CPU 以防 CUDA 兼容性问题（RTX 50 系列等）。"""
     global _global_xfeat
     if _global_xfeat is None:
-        import os as _os
-        _os.environ["CUDA_VISIBLE_DEVICES"] = ""
-        global torch
         import torch
         from nodes.modules.xfeat import XFeat
-        _global_xfeat = XFeat(top_k=top_k).eval()
+        model = XFeat(top_k=top_k)
+        model.dev = torch.device('cpu')
+        model.to('cpu')
+        _global_xfeat = model.eval()
     return _global_xfeat
 
 

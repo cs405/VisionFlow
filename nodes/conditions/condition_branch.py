@@ -28,4 +28,6 @@ class OpenCVConditionNode(ConditionNodeData, OpenCVNodeDataBase, LogicModuleNode
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
         mat = self._require_input_mat(from_node)
+        if mat is None and src is not None:
+            mat = src.mat
         return self.ok(mat)

@@ -72,4 +72,4 @@ class DataCollectorNode(OpenCVNodeDataBase, LogicModuleNode):
         if all_true:
             return self.ok(mat, msg)
         else:
-            return self.error(mat, msg)
+            return self.ok(mat, msg)
