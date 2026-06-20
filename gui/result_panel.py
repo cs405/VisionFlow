@@ -14,8 +14,9 @@ from enum import Enum
 
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem,
                               QTabWidget, QLabel, QTextEdit,
-                              QStyledItemDelegate, QStyle)
-from PyQt5.QtCore import Qt, pyqtSignal, QRect
+                              QStyledItemDelegate, QStyle, QMenu, QAction,
+                              QApplication)
+from PyQt5.QtCore import Qt, pyqtSignal, QRect, QPoint
 from gui.theme import theme_manager, connect_theme
 from PyQt5.QtGui import QColor, QFont, QPainter
 
@@ -293,6 +294,8 @@ class ResultPanel(QWidget):
         """)
         # 连接单元格点击信号
         self._history_table.cellClicked.connect(self._on_history_cell_clicked)
+        self._history_table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self._history_table.customContextMenuRequested.connect(self._on_history_context_menu)
         # 添加历史表格到标签页
         self._tabs.addTab(self._history_table, "历史结果")
 
@@ -652,6 +655,39 @@ class ResultPanel(QWidget):
         # 跳转到节点 + 更新属性面板
         if msg.result_node_data and hasattr(msg.result_node_data, 'node_id'):
             self.node_jump_requested.emit(msg.result_node_data.node_id)
+
+    def _on_history_context_menu(self, pos: QPoint):
+        """历史表格右击菜单 — 复制单元格内容"""
+        row = self._history_table.rowAt(pos.y())
+        col = self._history_table.columnAt(pos.x())
+        if row < 0:
+            return
+        item = self._history_table.item(row, col)
+        if item is None:
+            return
+        text = item.text()
+        if not text:
+            return
+
+        header = self._history_table.horizontalHeaderItem(col)
+        col_name = header.text() if header else f"列{col}"
+
+        menu = QMenu(self)
+        copy_action = QAction(f"复制「{col_name}」: {text[:50]}{'…' if len(text) > 50 else ''}", self)
+        copy_action.triggered.connect(lambda: QApplication.clipboard().setText(text))
+        menu.addAction(copy_action)
+
+        copy_row = QAction("复制整行内容", self)
+        def _copy_row():
+            parts = []
+            for c in range(self._history_table.columnCount()):
+                it = self._history_table.item(row, c)
+                parts.append(it.text() if it else "")
+            QApplication.clipboard().setText("\t".join(parts))
+        copy_row.triggered.connect(_copy_row)
+        menu.addAction(copy_row)
+
+        menu.exec_(self._history_table.viewport().mapToGlobal(pos))
 
     # ── 交互 ───────────────────────────────────────────────────
 
