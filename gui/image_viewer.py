@@ -245,16 +245,14 @@ class ImageViewer(QGraphicsView):
         参数：
             factor: 缩放因子
         """
-        # # 限制在允许范围内
-        # self._zoom = max(self.MIN_ZOOM, min(self.MAX_ZOOM, factor))
-        # # 重置变换
-        # self.resetTransform()
-        # # 应用缩放
-        # self.scale(self._zoom, self._zoom)
-        # # 标记不再适应窗口
-        # self._fit_to_window = False
-        pass
-
+        # 限制在允许范围内
+        self._zoom = max(self.MIN_ZOOM, min(self.MAX_ZOOM, factor))
+        # 重置变换
+        self.resetTransform()
+        # 应用缩放
+        self.scale(self._zoom, self._zoom)
+        # 标记不再适应窗口
+        self._fit_to_window = False
     @property
     def zoom_level(self) -> float:
         """获取当前缩放级别"""
@@ -272,36 +270,35 @@ class ImageViewer(QGraphicsView):
             padding: 视口内边距比例
             animate: 是否使用动画
         """
-        # # 解包矩形参数
-        # x, y, w, h = rect
-        # # 如果尺寸无效，返回
-        # if w <= 0 or h <= 0:
-        #     return
-        #
-        # # 计算内边距
-        # pw = w * padding
-        # ph = h * padding
-        # # 计算目标矩形
-        # target_rect = QRectF(x - pw, y - ph, w + 2 * pw, h + 2 * ph)
-        #
-        # # 停止现有动画
-        # if animate and hasattr(self, '_zoom_anim') and self._zoom_anim is not None:
-        #     self._zoom_anim.stop()
-        #
-        # # 如果需要动画且目标矩形有效
-        # if animate and not target_rect.isEmpty():
-        #     # 执行动画
-        #     self._animate_to_rect(target_rect)
-        # else:
-        #     # 直接适应目标矩形
-        #     self.fitInView(target_rect, Qt.KeepAspectRatio)
-        #     # 获取当前缩放比例
-        #     self._zoom = self.transform().m11()
-        #     # 标记不再适应窗口
-        #     self._fit_to_window = False
-        #     # 发出缩放变化信号
-        #     self.zoom_changed.emit(self._zoom)
-        pass
+        # 解包矩形参数
+        x, y, w, h = rect
+        # 如果尺寸无效，返回
+        if w <= 0 or h <= 0:
+            return
+
+        # 计算内边距
+        pw = w * padding
+        ph = h * padding
+        # 计算目标矩形
+        target_rect = QRectF(x - pw, y - ph, w + 2 * pw, h + 2 * ph)
+
+        # 停止现有动画
+        if animate and hasattr(self, '_zoom_anim') and self._zoom_anim is not None:
+            self._zoom_anim.stop()
+
+        # 如果需要动画且目标矩形有效
+        if animate and not target_rect.isEmpty():
+            # 执行动画
+            self._animate_to_rect(target_rect)
+        else:
+            # 直接适应目标矩形
+            self.fitInView(target_rect, Qt.KeepAspectRatio)
+            # 获取当前缩放比例
+            self._zoom = self.transform().m11()
+            # 标记不再适应窗口
+            self._fit_to_window = False
+            # 发出缩放变化信号
+            self.zoom_changed.emit(self._zoom)
 
     def _animate_to_rect(self, target_rect: QRectF):
         """平滑动画导航到目标矩形
@@ -309,56 +306,54 @@ class ImageViewer(QGraphicsView):
         参数：
             target_rect: 目标矩形
         """
-        # # 获取当前视口矩形
-        # start_rect = self.viewport_rect_in_scene()
-        # # 如果当前矩形无效
-        # if start_rect.isEmpty():
-        #     # 直接适应
-        #     self.fitInView(target_rect, Qt.KeepAspectRatio)
-        #     # 获取缩放比例
-        #     self._zoom = self.transform().m11()
-        #     # 标记不再适应窗口
-        #     self._fit_to_window = False
-        #     # 发出缩放变化信号
-        #     self.zoom_changed.emit(self._zoom)
-        #     return
-        #
-        # # 创建动画对象
-        # self._zoom_anim = QVariantAnimation(self)
-        # # 设置动画时长250毫秒
-        # self._zoom_anim.setDuration(250)
-        # # 设置缓动曲线为三次缓出
-        # self._zoom_anim.setEasingCurve(QEasingCurve.OutCubic)
-        # # 设置起始值
-        # self._zoom_anim.setStartValue(start_rect)
-        # # 设置结束值
-        # self._zoom_anim.setEndValue(target_rect)
-        #
-        # # 定义步进函数
-        # def _step(rect):
-        #     # 适应当前矩形
-        #     self.fitInView(rect, Qt.KeepAspectRatio)
-        #     # 获取缩放比例
-        #     self._zoom = self.transform().m11()
-        #     # 标记不再适应窗口
-        #     self._fit_to_window = False
-        #
-        # # 连接值变化信号
-        # self._zoom_anim.valueChanged.connect(_step)
-        # # 连接完成信号
-        # self._zoom_anim.finished.connect(lambda: (
-        #     self.zoom_changed.emit(self._zoom),   # 发出缩放变化信号
-        #     setattr(self, '_zoom_anim', None)      # 清空动画引用
-        # ))
-        # # 启动动画
-        # self._zoom_anim.start()
-        pass
+        # 获取当前视口矩形
+        start_rect = self.viewport_rect_in_scene()
+        # 如果当前矩形无效
+        if start_rect.isEmpty():
+            # 直接适应
+            self.fitInView(target_rect, Qt.KeepAspectRatio)
+            # 获取缩放比例
+            self._zoom = self.transform().m11()
+            # 标记不再适应窗口
+            self._fit_to_window = False
+            # 发出缩放变化信号
+            self.zoom_changed.emit(self._zoom)
+            return
+
+        # 创建动画对象
+        self._zoom_anim = QVariantAnimation(self)
+        # 设置动画时长250毫秒
+        self._zoom_anim.setDuration(250)
+        # 设置缓动曲线为三次缓出
+        self._zoom_anim.setEasingCurve(QEasingCurve.OutCubic)
+        # 设置起始值
+        self._zoom_anim.setStartValue(start_rect)
+        # 设置结束值
+        self._zoom_anim.setEndValue(target_rect)
+
+        # 定义步进函数
+        def _step(rect):
+            # 适应当前矩形
+            self.fitInView(rect, Qt.KeepAspectRatio)
+            # 获取缩放比例
+            self._zoom = self.transform().m11()
+            # 标记不再适应窗口
+            self._fit_to_window = False
+
+        # 连接值变化信号
+        self._zoom_anim.valueChanged.connect(_step)
+        # 连接完成信号
+        self._zoom_anim.finished.connect(lambda: (
+            self.zoom_changed.emit(self._zoom),   # 发出缩放变化信号
+            setattr(self, '_zoom_anim', None)      # 清空动画引用
+        ))
+        # 启动动画
+        self._zoom_anim.start()
 
     def viewport_rect_in_scene(self) -> QRectF:
         """获取当前视口在场景中的矩形"""
         # 将视口矩形映射到场景坐标，返回边界矩形
-        # return self.mapToScene(self.viewport().rect()).boundingRect()
-        pass
+        return self.mapToScene(self.viewport().rect()).boundingRect()
 
     # ── 平移 ───────────────────────────────────────────────────────────
 
@@ -529,12 +524,11 @@ class ImageViewer(QGraphicsView):
             event: 鼠标事件对象
         """
         # 如果是左键
-        # if event.button() == Qt.LeftButton:
-        #     # 适应窗口
-        #     self.fit_to_window()
-        # # 调用父类的mouseDoubleClickEvent
-        # super().mouseDoubleClickEvent(event)
-        pass
+        if event.button() == Qt.LeftButton:
+            # 适应窗口
+            self.fit_to_window()
+        # 调用父类的mouseDoubleClickEvent
+        super().mouseDoubleClickEvent(event)
 
     def _emit_pixel_pos(self, pos: QPointF):
         """发出像素位置信号
@@ -553,13 +547,12 @@ class ImageViewer(QGraphicsView):
         参数：
             pos: 视口坐标
         """
-        # # 转换为场景坐标
-        # scene_pos = self.mapToScene(pos)
-        # # 获取整数坐标
-        # x, y = int(scene_pos.x()), int(scene_pos.y())
-        # # 调用取色方法
-        # self.pick_color_at(x, y)
-        pass
+        # 转换为场景坐标
+        scene_pos = self.mapToScene(pos)
+        # 获取整数坐标
+        x, y = int(scene_pos.x()), int(scene_pos.y())
+        # 调用取色方法
+        self.pick_color_at(x, y)
 
     def pick_color_at(self, x: int, y: int) -> dict | None:
         """直接从图像坐标取色
@@ -571,40 +564,39 @@ class ImageViewer(QGraphicsView):
         返回：
             颜色信息字典
         """
-        # # 检查图像是否存在且坐标有效
-        # if self._image is None or not (0 <= y < self._image.shape[0] and 0 <= x < self._image.shape[1]):
-        #     return None
-        # # 获取像素值
-        # pixel = self._image[y, x]
-        # # 如果是灰度图
-        # if np.isscalar(pixel):
-        #     gray = int(pixel)
-        #     bgr = (gray, gray, gray)
-        # else:
-        #     # 转换为列表
-        #     values = [int(v) for v in pixel.tolist()]
-        #     if len(values) >= 3:
-        #         bgr = tuple(values[:3])
-        #     elif len(values) == 1:
-        #         bgr = (values[0], values[0], values[0])
-        #     else:
-        #         return None
-        # # 转换为HSV
-        # hsv = cv2.cvtColor(np.array([[bgr]], dtype=np.uint8), cv2.COLOR_BGR2HSV)[0, 0].tolist()
-        # # 转换为RGB
-        # rgb = (bgr[2], bgr[1], bgr[0])
-        # # 构建返回数据
-        # payload = {
-        #     "x": x, "y": y,                                   # 坐标
-        #     "bgr": bgr,                                       # BGR值
-        #     "rgb": rgb,                                       # RGB值
-        #     "hsv": tuple(int(v) for v in hsv),                # HSV值
-        #     "hex": "#{:02X}{:02X}{:02X}".format(*rgb),        # HEX值
-        # }
-        # # 发出颜色拾取信号
-        # self.color_picked.emit(payload)
-        # return payload
-        pass
+        # 检查图像是否存在且坐标有效
+        if self._image is None or not (0 <= y < self._image.shape[0] and 0 <= x < self._image.shape[1]):
+            return None
+        # 获取像素值
+        pixel = self._image[y, x]
+        # 如果是灰度图
+        if np.isscalar(pixel):
+            gray = int(pixel)
+            bgr = (gray, gray, gray)
+        else:
+            # 转换为列表
+            values = [int(v) for v in pixel.tolist()]
+            if len(values) >= 3:
+                bgr = tuple(values[:3])
+            elif len(values) == 1:
+                bgr = (values[0], values[0], values[0])
+            else:
+                return None
+        # 转换为HSV
+        hsv = cv2.cvtColor(np.array([[bgr]], dtype=np.uint8), cv2.COLOR_BGR2HSV)[0, 0].tolist()
+        # 转换为RGB
+        rgb = (bgr[2], bgr[1], bgr[0])
+        # 构建返回数据
+        payload = {
+            "x": x, "y": y,                                   # 坐标
+            "bgr": bgr,                                       # BGR值
+            "rgb": rgb,                                       # RGB值
+            "hsv": tuple(int(v) for v in hsv),                # HSV值
+            "hex": "#{:02X}{:02X}{:02X}".format(*rgb),        # HEX值
+        }
+        # 发出颜色拾取信号
+        self.color_picked.emit(payload)
+        return payload
 
     def _scene_rect_to_tuple(self, rect: QRectF) -> tuple[int, int, int, int]:
         """将场景矩形转换为整数元组
@@ -632,10 +624,9 @@ class ImageViewer(QGraphicsView):
         参数：
             enabled: 是否启用
         """
-        # self._color_pick_mode = enabled
+        self._color_pick_mode = enabled
         # # 设置光标样式
-        # self.setCursor(Qt.CrossCursor if enabled else Qt.ArrowCursor)
-        pass
+        self.setCursor(Qt.CrossCursor if enabled else Qt.ArrowCursor)
 
     def set_roi_pick_mode(self, enabled: bool):
         """设置ROI拾取模式"""
@@ -733,49 +724,48 @@ class ImageViewer(QGraphicsView):
         返回：
             唯一叠加项ID
         """
-        # # 计数器加1
-        # self._overlay_counter += 1
-        # # 生成唯一ID
-        # uid = f"overlay_{self._overlay_counter}"
-        # # 解包矩形
-        # x, y, w, h = rect
-        #
-        # # 创建画笔
-        # pen = QPen(color, 2)
-        # # 根据类型设置画笔样式
-        # pen.setStyle(Qt.DashLine if overlay_type == OverlayType.ROI else Qt.SolidLine)
-        # # 添加矩形项
-        # rect_item = self._scene.addRect(x, y, w, h, pen)
-        # rect_item.setZValue(10)
-        # # 图形项列表
-        # gfx_items = [rect_item]
-        #
-        # # 如果有标签或分数
-        # if label or score > 0:
-        #     # 构建文本
-        #     text_str = f"{label} {score:.2f}" if score > 0 else label
-        #     # 添加文本项
-        #     text_item = self._scene.addText(text_str, QFont("Segoe UI", 9))
-        #     text_item.setPos(x, y - 18)
-        #     text_item.setDefaultTextColor(color)
-        #     text_item.setZValue(11)
-        #     gfx_items.append(text_item)
-        #
-        # # 创建叠加项
-        # overlay = OverlayItem(
-        #     uid=uid,                              # 唯一ID
-        #     type=overlay_type,                   # 类型
-        #     geometry={"x": x, "y": y, "w": w, "h": h},  # 几何参数
-        #     label=label,                         # 标签
-        #     color=color,                         # 颜色
-        #     score=score,                         # 分数
-        #     graphics_items=gfx_items,            # 图形项列表
-        # )
-        # # 保存到字典
-        # self._overlays[uid] = overlay
-        # # 返回ID
-        # return uid
-        pass
+        # 计数器加1
+        self._overlay_counter += 1
+        # 生成唯一ID
+        uid = f"overlay_{self._overlay_counter}"
+        # 解包矩形
+        x, y, w, h = rect
+
+        # 创建画笔
+        pen = QPen(color, 2)
+        # 根据类型设置画笔样式
+        pen.setStyle(Qt.DashLine if overlay_type == OverlayType.ROI else Qt.SolidLine)
+        # 添加矩形项
+        rect_item = self._scene.addRect(x, y, w, h, pen)
+        rect_item.setZValue(10)
+        # 图形项列表
+        gfx_items = [rect_item]
+
+        # 如果有标签或分数
+        if label or score > 0:
+            # 构建文本
+            text_str = f"{label} {score:.2f}" if score > 0 else label
+            # 添加文本项
+            text_item = self._scene.addText(text_str, QFont("Segoe UI", 9))
+            text_item.setPos(x, y - 18)
+            text_item.setDefaultTextColor(color)
+            text_item.setZValue(11)
+            gfx_items.append(text_item)
+
+        # 创建叠加项
+        overlay = OverlayItem(
+            uid=uid,                              # 唯一ID
+            type=overlay_type,                   # 类型
+            geometry={"x": x, "y": y, "w": w, "h": h},  # 几何参数
+            label=label,                         # 标签
+            color=color,                         # 颜色
+            score=score,                         # 分数
+            graphics_items=gfx_items,            # 图形项列表
+        )
+        # 保存到字典
+        self._overlays[uid] = overlay
+        # 返回ID
+        return uid
 
     def add_circle_overlay(self, center: tuple, radius: float,
                             label: str = "",
@@ -791,45 +781,44 @@ class ImageViewer(QGraphicsView):
         返回：
             唯一叠加项ID
         """
-        # # 计数器加1
-        # self._overlay_counter += 1
-        # # 生成唯一ID
-        # uid = f"overlay_{self._overlay_counter}"
-        # # 解包圆心
-        # cx, cy = center
-        #
-        # # 创建画笔
-        # pen = QPen(color, 2)
-        # # 添加椭圆项（圆形）
-        # item = self._scene.addEllipse(cx - radius, cy - radius,
-        #                                radius * 2, radius * 2, pen)
-        # item.setZValue(10)
-        # # 图形项列表
-        # gfx_items = [item]
-        #
-        # # 如果有标签
-        # if label:
-        #     # 添加文本项
-        #     text_item = self._scene.addText(label, QFont("Segoe UI", 9))
-        #     text_item.setPos(cx - radius, cy - radius - 18)
-        #     text_item.setDefaultTextColor(color)
-        #     text_item.setZValue(11)
-        #     gfx_items.append(text_item)
-        #
-        # # 创建叠加项
-        # overlay = OverlayItem(
-        #     uid=uid,                                    # 唯一ID
-        #     type=OverlayType.CIRCLE,                   # 类型
-        #     geometry={"cx": cx, "cy": cy, "r": radius},  # 几何参数
-        #     label=label,                               # 标签
-        #     color=color,                               # 颜色
-        #     graphics_items=gfx_items,                  # 图形项列表
-        # )
-        # # 保存到字典
-        # self._overlays[uid] = overlay
-        # # 返回ID
-        # return uid
-        pass
+        # 计数器加1
+        self._overlay_counter += 1
+        # 生成唯一ID
+        uid = f"overlay_{self._overlay_counter}"
+        # 解包圆心
+        cx, cy = center
+
+        # 创建画笔
+        pen = QPen(color, 2)
+        # 添加椭圆项（圆形）
+        item = self._scene.addEllipse(cx - radius, cy - radius,
+                                       radius * 2, radius * 2, pen)
+        item.setZValue(10)
+        # 图形项列表
+        gfx_items = [item]
+
+        # 如果有标签
+        if label:
+            # 添加文本项
+            text_item = self._scene.addText(label, QFont("Segoe UI", 9))
+            text_item.setPos(cx - radius, cy - radius - 18)
+            text_item.setDefaultTextColor(color)
+            text_item.setZValue(11)
+            gfx_items.append(text_item)
+
+        # 创建叠加项
+        overlay = OverlayItem(
+            uid=uid,                                    # 唯一ID
+            type=OverlayType.CIRCLE,                   # 类型
+            geometry={"cx": cx, "cy": cy, "r": radius},  # 几何参数
+            label=label,                               # 标签
+            color=color,                               # 颜色
+            graphics_items=gfx_items,                  # 图形项列表
+        )
+        # 保存到字典
+        self._overlays[uid] = overlay
+        # 返回ID
+        return uid
 
     def add_line_overlay(self, x1: float, y1: float, x2: float, y2: float,
                           label: str = "",
@@ -845,41 +834,40 @@ class ImageViewer(QGraphicsView):
         返回：
             唯一叠加项ID
         """
-        # # 计数器加1
-        # self._overlay_counter += 1
-        # # 生成唯一ID
-        # uid = f"overlay_{self._overlay_counter}"
-        # # 创建画笔
-        # pen = QPen(color, 1)
-        # # 添加线段项
-        # item = self._scene.addLine(x1, y1, x2, y2, pen)
-        # item.setZValue(10)
-        # # 图形项列表
-        # gfx_items = [item]
-        #
-        # # 如果有标签
-        # if label:
-        #     # 添加文本项
-        #     text_item = self._scene.addText(label, QFont("Segoe UI", 9))
-        #     text_item.setPos(x1, y1 - 18)
-        #     text_item.setDefaultTextColor(color)
-        #     text_item.setZValue(11)
-        #     gfx_items.append(text_item)
-        #
-        # # 创建叠加项
-        # overlay = OverlayItem(
-        #     uid=uid,                                          # 唯一ID
-        #     type=OverlayType.LINE,                           # 类型
-        #     geometry={"x1": x1, "y1": y1, "x2": x2, "y2": y2},  # 几何参数
-        #     label=label,                                     # 标签
-        #     color=color,                                     # 颜色
-        #     graphics_items=gfx_items,                        # 图形项列表
-        # )
-        # # 保存到字典
-        # self._overlays[uid] = overlay
-        # # 返回ID
-        # return uid
-        pass
+        # 计数器加1
+        self._overlay_counter += 1
+        # 生成唯一ID
+        uid = f"overlay_{self._overlay_counter}"
+        # 创建画笔
+        pen = QPen(color, 1)
+        # 添加线段项
+        item = self._scene.addLine(x1, y1, x2, y2, pen)
+        item.setZValue(10)
+        # 图形项列表
+        gfx_items = [item]
+
+        # 如果有标签
+        if label:
+            # 添加文本项
+            text_item = self._scene.addText(label, QFont("Segoe UI", 9))
+            text_item.setPos(x1, y1 - 18)
+            text_item.setDefaultTextColor(color)
+            text_item.setZValue(11)
+            gfx_items.append(text_item)
+
+        # 创建叠加项
+        overlay = OverlayItem(
+            uid=uid,                                          # 唯一ID
+            type=OverlayType.LINE,                           # 类型
+            geometry={"x1": x1, "y1": y1, "x2": x2, "y2": y2},  # 几何参数
+            label=label,                                     # 标签
+            color=color,                                     # 颜色
+            graphics_items=gfx_items,                        # 图形项列表
+        )
+        # 保存到字典
+        self._overlays[uid] = overlay
+        # 返回ID
+        return uid
 
     def remove_overlay(self, uid: str):
         """根据ID移除单个叠加层
@@ -887,30 +875,28 @@ class ImageViewer(QGraphicsView):
         参数：
             uid: 叠加项ID
         """
-        # # 弹出叠加项
-        # overlay = self._overlays.pop(uid, None)
-        # # 如果存在
-        # if overlay:
-        #     # 移除所有图形项
-        #     for item in overlay.graphics_items:
-        #         self._scene.removeItem(item)
-        #     # 如果选中的是当前项，清除选中状态
-        #     if self._selected_uid == uid:
-        #         self._clear_selection()
-        pass
+        # 弹出叠加项
+        overlay = self._overlays.pop(uid, None)
+        # 如果存在
+        if overlay:
+            # 移除所有图形项
+            for item in overlay.graphics_items:
+                self._scene.removeItem(item)
+            # 如果选中的是当前项，清除选中状态
+            if self._selected_uid == uid:
+                self._clear_selection()
 
     def clear_overlays(self):
         """移除所有结构化叠加层"""
-        # # 遍历所有叠加项
-        # for overlay in list(self._overlays.values()):
-        #     # 移除图形项
-        #     for item in overlay.graphics_items:
-        #         self._scene.removeItem(item)
-        # # 清空字典
-        # self._overlays.clear()
-        # # 清除选中状态
-        # self._clear_selection()
-        pass
+        # 遍历所有叠加项
+        for overlay in list(self._overlays.values()):
+            # 移除图形项
+            for item in overlay.graphics_items:
+                self._scene.removeItem(item)
+        # 清空字典
+        self._overlays.clear()
+        # 清除选中状态
+        self._clear_selection()
 
     # ── 选择与高亮 ─────────────────────────────────────────
 
@@ -920,60 +906,57 @@ class ImageViewer(QGraphicsView):
         参数：
             uid: 叠加项ID
         """
-        # # 如果已经是选中的，返回
-        # if uid == self._selected_uid:
-        #     return
-        # # 清除当前选中
-        # self._clear_selection()
-        # # 获取叠加项
-        # overlay = self._overlays.get(uid)
-        # if overlay is None:
-        #     return
-        # # 标记为选中
-        # overlay.selected = True
-        # # 保存选中ID
-        # self._selected_uid = uid
-        #
-        # # 视觉：用高亮颜色重绘
-        # highlight_color = QColor("#FFD700")  # 金色
-        # # 只处理主要图形项（第一个）
-        # for item in overlay.graphics_items[:1]:
-        #     # 获取画笔
-        #     pen = item.pen()
-        #     # 设置高亮颜色
-        #     pen.setColor(highlight_color)
-        #     # 设置线宽
-        #     pen.setWidth(3)
-        #     # 应用画笔
-        #     item.setPen(pen)
-        #
-        # # 发出选中信号
-        # self.overlay_selected.emit(uid)
-        pass
+        # 如果已经是选中的，返回
+        if uid == self._selected_uid:
+            return
+        # 清除当前选中
+        self._clear_selection()
+        # 获取叠加项
+        overlay = self._overlays.get(uid)
+        if overlay is None:
+            return
+        # 标记为选中
+        overlay.selected = True
+        # 保存选中ID
+        self._selected_uid = uid
+
+        # 视觉：用高亮颜色重绘
+        highlight_color = QColor("#FFD700")  # 金色
+        # 只处理主要图形项（第一个）
+        for item in overlay.graphics_items[:1]:
+            # 获取画笔
+            pen = item.pen()
+            # 设置高亮颜色
+            pen.setColor(highlight_color)
+            # 设置线宽
+            pen.setWidth(3)
+            # 应用画笔
+            item.setPen(pen)
+
+        # 发出选中信号
+        self.overlay_selected.emit(uid)
 
     def deselect_overlay(self):
         """取消当前选中"""
-        # self._clear_selection()
-        # self.overlay_deselected.emit()
-        pass
+        self._clear_selection()
+        self.overlay_deselected.emit()
 
     def _clear_selection(self):
         """清除选中状态"""
-        # # 如果有选中的ID且存在
-        # if self._selected_uid and self._selected_uid in self._overlays:
-        #     # 获取叠加项
-        #     overlay = self._overlays[self._selected_uid]
-        #     # 标记未选中
-        #     overlay.selected = False
-        #     # 恢复原始颜色
-        #     for item in overlay.graphics_items[:1]:
-        #         pen = item.pen()
-        #         pen.setColor(overlay.color)
-        #         pen.setWidth(overlay.line_width)
-        #         item.setPen(pen)
-        # # 清空选中ID
-        # self._selected_uid = None
-        pass
+        # 如果有选中的ID且存在
+        if self._selected_uid and self._selected_uid in self._overlays:
+            # 获取叠加项
+            overlay = self._overlays[self._selected_uid]
+            # 标记未选中
+            overlay.selected = False
+            # 恢复原始颜色
+            for item in overlay.graphics_items[:1]:
+                pen = item.pen()
+                pen.setColor(overlay.color)
+                pen.setWidth(overlay.line_width)
+                item.setPen(pen)
+        # 清空选中ID
+        self._selected_uid = None
 
     def highlight_overlay(self, uid: str, highlight_color: QColor = QColor("#FFD700"),
                           duration_ms: int = 2000):
@@ -984,27 +967,26 @@ class ImageViewer(QGraphicsView):
             highlight_color: 高亮颜色
             duration_ms: 高亮持续时间（毫秒）
         """
-        # # 获取叠加项
-        # overlay = self._overlays.get(uid)
-        # if overlay is None:
-        #     return
-        #
-        # # 缩放到该区域
-        # rect = overlay.to_rect()
-        # if rect:
-        #     self.zoom_to_rect(rect, padding=0.2, animate=True)
-        #
-        # # 高亮处理
-        # for item in overlay.graphics_items[:1]:
-        #     pen = item.pen()
-        #     pen.setColor(highlight_color)
-        #     pen.setWidth(4)
-        #     item.setPen(pen)
-        #
-        # # 延迟恢复
-        # from PyQt5.QtCore import QTimer
-        # QTimer.singleShot(duration_ms, lambda: self._restore_highlight(uid))
-        pass
+        # 获取叠加项
+        overlay = self._overlays.get(uid)
+        if overlay is None:
+            return
+
+        # 缩放到该区域
+        rect = overlay.to_rect()
+        if rect:
+            self.zoom_to_rect(rect, padding=0.2, animate=True)
+
+        # 高亮处理
+        for item in overlay.graphics_items[:1]:
+            pen = item.pen()
+            pen.setColor(highlight_color)
+            pen.setWidth(4)
+            item.setPen(pen)
+
+        # 延迟恢复
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(duration_ms, lambda: self._restore_highlight(uid))
 
     def _restore_highlight(self, uid: str):
         """恢复高亮
@@ -1012,16 +994,15 @@ class ImageViewer(QGraphicsView):
         参数：
             uid: 叠加项ID
         """
-        # # 获取叠加项
-        # overlay = self._overlays.get(uid)
-        # # 如果存在且未选中
-        # if overlay and not overlay.selected:
-        #     for item in overlay.graphics_items[:1]:
-        #         pen = item.pen()
-        #         pen.setColor(overlay.color)
-        #         pen.setWidth(overlay.line_width)
-        #         item.setPen(pen)
-        pass
+        # 获取叠加项
+        overlay = self._overlays.get(uid)
+        # 如果存在且未选中
+        if overlay and not overlay.selected:
+            for item in overlay.graphics_items[:1]:
+                pen = item.pen()
+                pen.setColor(overlay.color)
+                pen.setWidth(overlay.line_width)
+                item.setPen(pen)
 
     def _hit_test_overlays(self, view_pos: QPointF):
         """检查点击是否命中任何叠加层并选中
@@ -1029,32 +1010,31 @@ class ImageViewer(QGraphicsView):
         参数：
             view_pos: 视口坐标
         """
-        # # 转换为场景坐标
-        # scene_pos = self.mapToScene(view_pos)
-        # x, y = scene_pos.x(), scene_pos.y()
-        #
-        # # 按添加顺序逆序遍历（后添加的先命中）
-        # for uid, overlay in reversed(list(self._overlays.items())):
-        #     # 获取几何参数
-        #     geo = overlay.geometry
-        #     # 如果是矩形、ROI或检测框类型
-        #     if overlay.type in (OverlayType.RECT, OverlayType.ROI, OverlayType.DETECTION):
-        #         gx, gy, gw, gh = geo.get("x", 0), geo.get("y", 0), geo.get("w", 0), geo.get("h", 0)
-        #         # 检查点是否在矩形内
-        #         if gx <= x <= gx + gw and gy <= y <= gy + gh:
-        #             self.select_overlay(uid)
-        #             return
-        #     # 如果是圆形类型
-        #     elif overlay.type == OverlayType.CIRCLE:
-        #         cx, cy, r = geo.get("cx", 0), geo.get("cy", 0), geo.get("r", 0)
-        #         # 检查点是否在圆形内
-        #         if (x - cx) ** 2 + (y - cy) ** 2 <= r ** 2:
-        #             self.select_overlay(uid)
-        #             return
-        #
-        # # 没有命中任何叠加层
-        # self.deselect_overlay()
-        pass
+        # 转换为场景坐标
+        scene_pos = self.mapToScene(view_pos)
+        x, y = scene_pos.x(), scene_pos.y()
+
+        # 按添加顺序逆序遍历（后添加的先命中）
+        for uid, overlay in reversed(list(self._overlays.items())):
+            # 获取几何参数
+            geo = overlay.geometry
+            # 如果是矩形、ROI或检测框类型
+            if overlay.type in (OverlayType.RECT, OverlayType.ROI, OverlayType.DETECTION):
+                gx, gy, gw, gh = geo.get("x", 0), geo.get("y", 0), geo.get("w", 0), geo.get("h", 0)
+                # 检查点是否在矩形内
+                if gx <= x <= gx + gw and gy <= y <= gy + gh:
+                    self.select_overlay(uid)
+                    return
+            # 如果是圆形类型
+            elif overlay.type == OverlayType.CIRCLE:
+                cx, cy, r = geo.get("cx", 0), geo.get("cy", 0), geo.get("r", 0)
+                # 检查点是否在圆形内
+                if (x - cx) ** 2 + (y - cy) ** 2 <= r ** 2:
+                    self.select_overlay(uid)
+                    return
+
+        # 没有命中任何叠加层
+        self.deselect_overlay()
 
     # ── 兼容性便捷方法 ────────────────────────────────────
 
@@ -1070,8 +1050,7 @@ class ImageViewer(QGraphicsView):
         返回：
             叠加项ID
         """
-        # return self.add_rect_overlay(rect, label, color, overlay_type=OverlayType.ROI)
-        pass
+        return self.add_rect_overlay(rect, label, color, overlay_type=OverlayType.ROI)
 
     def add_detection_overlay(self, rect: tuple, label: str = "",
                                color: QColor = QColor(76, 175, 80),
@@ -1087,9 +1066,8 @@ class ImageViewer(QGraphicsView):
         返回：
             叠加项ID
         """
-        # return self.add_rect_overlay(rect, label, color, score=score,
-        #                              overlay_type=OverlayType.DETECTION)
-        pass
+        return self.add_rect_overlay(rect, label, color, score=score,
+                                     overlay_type=OverlayType.DETECTION)
 
     def get_overlay(self, uid: str) -> OverlayItem | None:
         """根据ID获取叠加项元数据
@@ -1100,8 +1078,7 @@ class ImageViewer(QGraphicsView):
         返回：
             叠加项对象或None
         """
-        # return self._overlays.get(uid)
-        pass
+        return self._overlays.get(uid)
 
     def get_all_overlays(self) -> dict[str, OverlayItem]:
         """获取所有叠加项
@@ -1109,8 +1086,7 @@ class ImageViewer(QGraphicsView):
         返回：
             叠加项字典
         """
-        # return dict(self._overlays)
-        pass
+        return dict(self._overlays)
 
     # ── 视频帧支持 ──────────────────────────────────────────
 
@@ -1124,17 +1100,16 @@ class ImageViewer(QGraphicsView):
             total_frames: 视频总帧数
             fps: 帧率
         """
-        # # 设置图像
-        # self.set_image(frame)
-        # # 如果有总帧数信息
-        # if total_frames > 0:
-        #     # 构建信息文本
-        #     info = f"视频帧 {frame_index + 1}/{total_frames}"
-        #     if fps > 0:
-        #         info += f" @ {fps:.1f} FPS"
-        #     # 显示帧叠加信息
-        #     self._show_frame_overlay(info)
-        pass
+        # 设置图像
+        self.set_image(frame)
+        # 如果有总帧数信息
+        if total_frames > 0:
+            # 构建信息文本
+            info = f"视频帧 {frame_index + 1}/{total_frames}"
+            if fps > 0:
+                info += f" @ {fps:.1f} FPS"
+            # 显示帧叠加信息
+            self._show_frame_overlay(info)
 
     def _show_frame_overlay(self, text: str):
         """在左上角显示半透明帧信息叠加层
@@ -1142,34 +1117,31 @@ class ImageViewer(QGraphicsView):
         参数：
             text: 显示文本
         """
-        # # 清除现有帧叠加层
-        # self._clear_frame_overlay()
-        # # 添加背景矩形
-        # overlay = self._scene.addRect(0, 0, 300, 28, QPen(Qt.NoPen),
-        #                                QBrush(QColor(0, 0, 0, 140)))
-        # overlay.setZValue(100)
-        # self._frame_overlay_items = [overlay]
-        # # 添加文本
-        # txt = self._scene.addText(text, QFont("Segoe UI", 10))
-        # txt.setDefaultTextColor(QColor("#00ff00"))
-        # txt.setPos(6, 4)
-        # txt.setZValue(101)
-        # self._frame_overlay_items.append(txt)
-        pass
+        # 清除现有帧叠加层
+        self._clear_frame_overlay()
+        # 添加背景矩形
+        overlay = self._scene.addRect(0, 0, 300, 28, QPen(Qt.NoPen),
+                                       QBrush(QColor(0, 0, 0, 140)))
+        overlay.setZValue(100)
+        self._frame_overlay_items = [overlay]
+        # 添加文本
+        txt = self._scene.addText(text, QFont("Segoe UI", 10))
+        txt.setDefaultTextColor(QColor("#00ff00"))
+        txt.setPos(6, 4)
+        txt.setZValue(101)
+        self._frame_overlay_items.append(txt)
 
     def _clear_frame_overlay(self):
         """清除帧叠加层"""
-        # # 遍历帧叠加层项列表
-        # for item in getattr(self, '_frame_overlay_items', []):
-        #     self._scene.removeItem(item)
-        # # 清空列表
-        # self._frame_overlay_items = []
-        pass
+        # 遍历帧叠加层项列表
+        for item in getattr(self, '_frame_overlay_items', []):
+            self._scene.removeItem(item)
+        # 清空列表
+        self._frame_overlay_items = []
 
     def clear_video_frame(self):
         """清除视频帧叠加层"""
-        # self._clear_frame_overlay()
-        pass
+        self._clear_frame_overlay()
 
     # ── 调整大小 ────────────────────────────────────────────────────────
 
@@ -1179,13 +1151,12 @@ class ImageViewer(QGraphicsView):
         参数：
             event: 大小改变事件对象
         """
-        # # 调用父类的resizeEvent
-        # super().resizeEvent(event)
-        # # 如果需要适应窗口且像素图不为空
-        # if self._fit_to_window and not self._pixmap_item.pixmap().isNull():
-        #     # 适应窗口
-        #     self.fit_to_window()
-        pass
+        # 调用父类的resizeEvent
+        super().resizeEvent(event)
+        # 如果需要适应窗口且像素图不为空
+        if self._fit_to_window and not self._pixmap_item.pixmap().isNull():
+            # 适应窗口
+            self.fit_to_window()
 
 class ImageViewerPanel(QWidget):
     """带信息栏的ImageViewer面板封装"""
@@ -1462,8 +1433,7 @@ class ImageViewerPanel(QWidget):
             x: X坐标
             y: Y坐标
         """
-        # self._pos_label.setText(f"位置: ({x}, {y})")
-        pass
+        self._pos_label.setText(f"位置: ({x}, {y})")
 
     def _on_zoom_changed(self, zoom: float):
         """缩放变化回调
@@ -1471,8 +1441,7 @@ class ImageViewerPanel(QWidget):
         参数：
             zoom: 缩放比例
         """
-        # self._zoom_label.setText(f"缩放: {zoom * 100:.0f}%")
-        pass
+        self._zoom_label.setText(f"缩放: {zoom * 100:.0f}%")
 
     def _on_pixel_clicked(self, x: int, y: int, value: object):
         """像素点击回调
@@ -1482,5 +1451,4 @@ class ImageViewerPanel(QWidget):
             y: Y坐标
             value: 像素值
         """
-        # self._pos_label.setText(f"位置: ({x}, {y}) | 值: {value}")
-        pass
+        self._pos_label.setText(f"位置: ({x}, {y}) | 值: {value}")
