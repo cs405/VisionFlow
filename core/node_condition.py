@@ -170,6 +170,14 @@ class ConditionNodeData(VisionNodeData):
         # 调用 invoke_core 执行透传
         return self._invoke_action(lambda: self.invoke_core(src_data, from_node or src_data, diagram))
 
+    def invoke_core(self, src_image_node_data, from_node_data, diagram):
+        """透传上游图像。若上游 mat 为空则回退使用源图像 mat，
+        确保条件分支下游节点始终能获得有效输入。"""
+        mat = from_node_data.mat if from_node_data else None
+        if mat is None and src_image_node_data is not None:
+            mat = src_image_node_data.mat
+        return FlowableResult.ok(mat)
+
     def get_flowable_output_links(self, diagram: "WorkflowEngine") -> list["LinkData"]:
         """根据条件分支匹配结果，路由到对应的输出端口。
         """

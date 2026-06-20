@@ -6,6 +6,7 @@
 
 import cv2
 import numpy as np
+import torch
 
 from core.node_base import Property, PropertyGroupNames
 from core.node_selectable import Base64MatchingNodeData, OpenCVNodeDataBase
