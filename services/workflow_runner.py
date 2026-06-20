@@ -34,7 +34,6 @@ class WorkflowRunner:
         self._stop_event = threading.Event()          # 停止事件，用于线程间通信
         self._continuous = False                      # 是否连续运行模式标志
         self._run_finished = threading.Event()        # 单次执行完成标记（后台线程设置，主线程轮询，避免跨线程信号不可靠）
-        self._run_had_error: bool = False
 
     # -- 属性 --
     @property
@@ -155,14 +154,12 @@ class WorkflowRunner:
                 return
 
             result = self._workflow.execute()  # 启动工作流
-            self._run_had_error = result.is_error
             # 如果执行出错
             if result.is_error:
                 # 发布错误消息事件
                 event_system.publish(EventType.MESSAGE_ERROR, sender=self,
                                      message=f"流程执行出错: {result.message}")
         except Exception:
-            self._run_had_error = True
             # 发生异常时发布错误消息事件
             event_system.publish(EventType.MESSAGE_ERROR, sender=self,
                                  message=f"流程异常: {traceback.format_exc()}")
@@ -224,12 +221,10 @@ class WorkflowRunner:
                     result = self._workflow.execute()
                     # 如果执行出错
                     if result.is_error:
-                        self._run_had_error = True
                         # 发布错误消息事件
                         event_system.publish(EventType.MESSAGE_ERROR, sender=self,
                                              message=f"文件 [{i+1}/{total}] 执行出错: {result.message}")
                 except Exception:
-                    self._run_had_error = True
                     # 发生异常时发布错误消息事件
                     event_system.publish(EventType.MESSAGE_ERROR, sender=self,
                                          message=f"文件 [{i+1}/{total}] 执行异常: {traceback.format_exc()}")
@@ -265,7 +260,6 @@ class WorkflowRunner:
                 result = self._workflow.execute()
                 # 如果执行出错
                 if result.is_error:
-                    self._run_had_error = True
                     # 发布错误消息事件
                     event_system.publish(EventType.MESSAGE_ERROR, sender=self,
                                          message=f"流程出错: {result.message}")
@@ -284,7 +278,6 @@ class WorkflowRunner:
                     if self._stop_event.wait(remain_ms / 1000.0):
                         break
         except Exception:
-            self._run_had_error = True
             # 发生异常时发布错误消息事件
             event_system.publish(EventType.MESSAGE_ERROR, sender=self,
                                  message=f"流程异常: {traceback.format_exc()}")

@@ -1,7 +1,7 @@
 """应用程序上下文 — 中央依赖注入容器。
 
 用单个可注入的 AppContext 替换所有全局单例（event_system、node_registry、
-node_data_group_manager、project_service、service_collection、plugin_manager）。
+node_data_group_manager、project_service、service_collection）。
 
 用法：
     ctx = AppContext()
@@ -20,13 +20,11 @@ import core.events as _ev
 import core.node_group as _ng
 import core.registry as _reg
 import core.ioc as _ioc
-import core.plugin_manager as _pm
 import core.project as _prj
 from core.events import EventSystem
 from core.registry import NodeRegistry
 from core.node_group import NodeDataGroupBase, create_standard_groups
 from core.ioc import ServiceCollection
-from core.plugin_manager import PluginManager
 from core.project import ProjectService
 
 
@@ -42,7 +40,6 @@ class AppContext:
         self._node_registry: NodeRegistry | None = None
         self._node_groups: NodeDataGroupBase | None = None
         self._service_collection: ServiceCollection | None = None
-        self._plugin_manager: PluginManager | None = None
         self._project_service: ProjectService | None = None
         self._node_service: "INodeService | None" = None
         self._theme_service: "IThemeService | None" = None
@@ -66,8 +63,6 @@ class AppContext:
         self._node_registry.clear()
         # IoC 服务集合（依赖注入容器）
         self._service_collection = _ioc.ServiceCollection()
-        # 插件管理器（动态节点发现）
-        self._plugin_manager = _pm.PluginManager()
         # 项目服务（保存/加载/最近项目）
         self._project_service = _prj.ProjectService()
 
@@ -80,7 +75,6 @@ class AppContext:
         _ng.node_data_group_manager = self._node_groups
         _reg.node_registry = self._node_registry
         _ioc.service_collection = self._service_collection
-        _pm.plugin_manager = self._plugin_manager
         _prj.project_service = self._project_service
 
     # ── 访问器属性 ───────────────────────────────────────────────────
@@ -104,11 +98,6 @@ class AppContext:
     def service_collection(self) -> ServiceCollection | None:
         """获取 IoC 服务集合"""
         return self._service_collection
-
-    @property
-    def plugin_manager(self) -> PluginManager | None:
-        """获取插件管理器"""
-        return self._plugin_manager
 
     @property
     def project_service(self) -> ProjectService | None:
@@ -153,8 +142,6 @@ class AppContext:
             names.append('node_groups')
         if self._service_collection is not None:
             names.append('service_collection')
-        if self._plugin_manager is not None:
-            names.append('plugin_manager')
         if self._project_service is not None:
             names.append('project_service')
         if self._node_service is not None:
@@ -164,13 +151,12 @@ class AppContext:
         return sorted(names)
 
     def is_ready(self) -> bool:
-        """检查 6 个核心服务是否全部初始化。"""
+        """检查核心服务是否全部初始化。"""
         return all([
             self._event_bus is not None,
             self._node_registry is not None,
             self._node_groups is not None,
             self._service_collection is not None,
-            self._plugin_manager is not None,
             self._project_service is not None,
         ])
 
@@ -186,7 +172,6 @@ class AppContext:
         self._node_registry = None
         self._node_groups = None
         self._service_collection = None
-        self._plugin_manager = None
         self._project_service = None
         self._node_service = None
         self._theme_service = None

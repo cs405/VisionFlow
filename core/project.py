@@ -50,7 +50,6 @@ class DiagramData:
         self.width: float = 1000.0                     # 图表宽度
         self.height: float = 1500.0                    # 图表高度
         self.location: str = "0,0"                     # 画布滚动位置 "x,y"
-        self.run_mode_result: bool | None = None       # 运行模式结果
         self.workflow: "WorkflowEngine | None" = None  # 关联的工作流引擎
 
     @property
