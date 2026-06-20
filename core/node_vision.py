@@ -2,7 +2,7 @@
 VisionNodeData 层次结构 - 视觉处理节点类。
 
 从 node_base.py 提取，使用 Mixin 模式扁平化。
-NodeBase → VisionNodeData（包含 PropertyPresenterMixin、HelpPresenterMixin，以及可选的 DemoParamsMixin）
+NodeBase → VisionNodeData（包含 PropertyPresenterMixin、HelpPresenterMixin）
 """
 
 from __future__ import annotations
@@ -47,20 +47,6 @@ class HelpPresenterMixin:
             "source": inspect.getfile(cls),
         }
 
-
-class DemoParamsMixin:
-    """添加演示/示例参数（原 DemoNodeDataBase）。"""
-
-    demo_base_parameter1 = Property("", name="示例：基本参数", group=PropertyGroupNames.BASE_PARAMETERS,
-                                    description="用来演示如何增加基本参数", order=9999)
-    demo_run_parameter1 = Property("", name="示例：运行参数", group=PropertyGroupNames.RUN_PARAMETERS,
-                                   description="用来演示如何增加结果参数", order=9999)
-    demo_result1 = Property("", name="示例：结果参数", group=PropertyGroupNames.RESULT_PARAMETERS,
-                            description="用来演示如何增加结果参数", readonly=True, order=9999)
-
-    def create_result_presenter(self) -> Any:
-        """为结果面板创建结果展示器。子类可重写。"""
-        return None
 
 
 

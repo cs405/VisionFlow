@@ -5,11 +5,9 @@
 
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-import threading
 
-from core.data_packet import FlowableResult, FlowableInvokeMode
-from core.events import EventType, event_system
-from core.node_base import NodeBase, Property, PropertyGroupNames, Port, LinkData
+from core.data_packet import FlowableResult
+from core.node_base import NodeBase, Property, PropertyGroupNames, LinkData
 from core.node_vision import VisionNodeData
 from core.conditions import ConditionBranch, PropertyCondition, FilterOperate
 

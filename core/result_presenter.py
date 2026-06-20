@@ -5,7 +5,6 @@
   - RectangleResultItem: 带位置/大小的边界框
   - LineResultItem: 从 (x1,y1) 到 (x2,y2) 的线段
   - ScoreRectangleResultItem: 带置信度分数的边界框
-  - ImageResultItem: 输出图像引用
 """
 
 from __future__ import annotations
@@ -26,8 +25,6 @@ class ResultItemType(Enum):
     LINE = "line"                        # 线段
     SCORE_RECTANGLE = "score_rectangle"  # 带分数的边界框
     IMAGE = "image"                      # 图像
-    TABLE = "table"                      # 表格
-    TEXT = "text"                        # 文本
 
 
 @dataclass
@@ -108,22 +105,6 @@ class ScoreRectangleResultItem(RectangleResultItem):
         return d
 
 
-@dataclass
-class ImageResultItem(ResultItem):
-    """结果图像的引用。"""
-    image_shape: tuple = field(default_factory=tuple)  # 图像形状 (H, W, C)
-    image_path: str = ""                               # 图像文件路径
-    item_type: ResultItemType = field(default=ResultItemType.IMAGE)
-
-
-@dataclass
-class TableResultItem(ResultItem):
-    """带行列的表格结果。"""
-    columns: list[str] = field(default_factory=list)     # 列名列表
-    rows: list[list[Any]] = field(default_factory=list)  # 行数据列表
-    item_type: ResultItemType = field(default=ResultItemType.TABLE)
-
-
 # ── 结果集合 ──────────────────────────────────────────────────────
 # VisionMessage — 历史结果数据对象（纯数据，无 Qt 依赖）
 # 存储在 WorkflowEngine.messages 中，ResultPanel 从中读取；
@@ -160,15 +141,12 @@ class NodeResult:
     rectangle_items: list[RectangleResultItem] = field(default_factory=list)        # 矩形项
     line_items: list[LineResultItem] = field(default_factory=list)                  # 线段项
     score_rectangle_items: list[ScoreRectangleResultItem] = field(default_factory=list)  # 带分矩形项
-    image_items: list[ImageResultItem] = field(default_factory=list)                # 图像项
-    table_items: list[TableResultItem] = field(default_factory=list)                # 表格项
 
     @property
     def total_items(self) -> int:
         """获取结果项总数"""
         return (len(self.value_items) + len(self.rectangle_items) +
-                len(self.line_items) + len(self.score_rectangle_items) +
-                len(self.image_items) + len(self.table_items))
+                len(self.line_items) + len(self.score_rectangle_items))
 
     @property
     def all_geometry_items(self) -> list:
@@ -193,124 +171,6 @@ class NodeResult:
             "rectangle_items": [it.to_dict() for it in self.rectangle_items],
             "line_items": [it.to_dict() for it in self.line_items],
             "score_rectangle_items": [it.to_dict() for it in self.score_rectangle_items],
-            "image_items": [it.to_dict() for it in self.image_items],
-            "table_items": [it.to_dict() for it in self.table_items],
         }
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# 结果展示器
-# ═══════════════════════════════════════════════════════════════════════════
-
-class ValueResultPresenter:
-    """将单个值项呈现为键值对。
-
-    生成适合 2 列表格（属性 | 值）的行。
-    """
-
-    def __init__(self, node_result: NodeResult = None):
-        # 节点结果对象
-        self._result = node_result
-
-    def set_result(self, result: NodeResult):
-        """设置要呈现的结果"""
-        self._result = result
-
-    # UI labels (override in subclass for i18n)
-    LABEL_NODE_NAME = "节点名称"
-    LABEL_NODE_TYPE = "节点类型"
-    LABEL_STATUS = "执行状态"
-    LABEL_MESSAGE = "消息"
-    LABEL_DURATION = "耗时"
-    LABEL_SUCCESS = "成功"
-    LABEL_FAILURE = "失败"
-
-    def get_rows(self) -> list[tuple[str, str, ResultItemType]]:
-        """返回表格显示的行数据 (名称, 值字符串, 类型)"""
-        if self._result is None:
-            return []
-        rows: list[tuple[str, str, ResultItemType]] = [
-            (self.LABEL_NODE_NAME, self._result.node_name, ResultItemType.VALUE),
-            (self.LABEL_NODE_TYPE, self._result.node_type, ResultItemType.VALUE),
-            (self.LABEL_STATUS, self.LABEL_SUCCESS if self._result.success else self.LABEL_FAILURE, ResultItemType.VALUE),
-            (self.LABEL_MESSAGE, self._result.message or "-", ResultItemType.VALUE)]
-        if self._result.execution_time_ms > 0:
-            rows.append((self.LABEL_DURATION, f"{self._result.execution_time_ms:.1f} ms",
-                         ResultItemType.VALUE))
-        # 添加所有值类型的项
-        for item in self._result.value_items:
-            rows.append((item.name, str(item.value) if item.value is not None else "-",
-                         item.item_type))
-        return rows
-
-
-class DataGridResultPresenter:
-    """将带几何数据的结构化结果项呈现为网格显示。
-
-    生成包含以下列的行：名称 | 值 | X | Y | 宽度 | 高度 | 分数。
-    通过几何坐标支持图像查看器联动。
-    """
-
-    # 表格列定义
-    # UI labels (override in subclass for i18n)
-    COLUMNS = ("名称", "值", "X", "Y", "宽度", "高度", "分数")
-
-    def __init__(self, node_result: NodeResult = None):
-        # 节点结果对象
-        self._result = node_result
-        # 选中的行索引集合
-        self._selected_rows: set[int] = set()
-
-    def set_result(self, result: NodeResult):
-        """设置要呈现的结果"""
-        self._result = result
-        self._selected_rows.clear()
-
-    def get_rows(self) -> list[dict]:
-        """返回行数据列表，每行为字典格式"""
-        if self._result is None:
-            return []
-        rows: list[dict] = []
-
-        # 处理矩形项
-        for item in self._result.rectangle_items:
-            rows.append({"名称": item.name, "值": str(item.value or ""),
-                         "X": str(item.x), "Y": str(item.y),
-                         "宽度": str(item.width), "高度": str(item.height),
-                         "分数": "", "type": ResultItemType.RECTANGLE,
-                         "geometry": item.rect})
-
-        # 处理带分数的矩形项
-        for item in self._result.score_rectangle_items:
-            rows.append({"名称": item.name, "值": str(item.value or ""),
-                         "X": str(item.x), "Y": str(item.y),
-                         "宽度": str(item.width), "高度": str(item.height),
-                         "分数": f"{item.score:.3f}", "type": ResultItemType.SCORE_RECTANGLE,
-                         "geometry": item.rect})
-
-        # 处理线段项
-        for item in self._result.line_items:
-            rows.append({"名称": item.name, "值": str(item.value or ""),
-                         "X": f"{item.x1:.1f}", "Y": f"{item.y1:.1f}",
-                         "宽度": f"{item.x2:.1f}", "高度": f"{item.y2:.1f}",
-                         "分数": "", "type": ResultItemType.LINE,
-                         "geometry": item.points})
-
-        return rows
-
-    def select_row(self, index: int) -> dict | None:
-        """选中一行并返回其几何数据（用于图像查看器联动）"""
-        rows = self.get_rows()
-        if 0 <= index < len(rows):
-            self._selected_rows.add(index)
-            return rows[index]
-        return None
-
-    def deselect_all(self):
-        """取消所有选中"""
-        self._selected_rows.clear()
-
-    @property
-    def selected_indices(self) -> set[int]:
-        """获取选中的行索引集合"""
-        return set(self._selected_rows)
