@@ -645,14 +645,13 @@ class DiagramScene(QGraphicsScene):
                 self._guide_lines.append(line)
 
     def _snap_node_position(self, item):
-        """节点松手后，根据同行/同列节点间距自动吸附矫正"""
+        """节点松手后吸附矫正：同行Y对齐 + 同列X对齐 + 间距均匀分布"""
 
         all_items = [i for i in self._node_items.values() if i is not item]
-        if len(all_items) < 2:
+        if not all_items:
             return
 
         pos = item.pos()
-        align_th = 40.0     # 中心对齐吸附阈值（拉大覆盖范围）
         row_th = 50.0       # 同行判定（Y 偏差）
         col_th = 50.0       # 同列判定（X 偏差）
 
@@ -661,36 +660,27 @@ class DiagramScene(QGraphicsScene):
         item_cx = pos.x() + item_w / 2
         item_cy = pos.y() + item_h / 2
 
-        others = []  # 收集所有其他节点中心
+        others = []
         for o in all_items:
             op = o.pos()
             rc = o.boundingRect()
             others.append((op.x() + rc.width() / 2, op.y() + rc.height() / 2))
 
-        # ── 先做基础中心对齐（向最近节点靠拢）──
-        best_dx = align_th + 1
-        best_dy = align_th + 1
-        for ocx, ocy in others:
-            dx = abs(item_cx - ocx)
-            dy = abs(item_cy - ocy)
-            if dx < best_dx:
-                best_dx = dx
-                best_cx = ocx
-            if dy < best_dy:
-                best_dy = dy
-                best_cy = ocy
+        snapped_cx = item_cx
+        snapped_cy = item_cy
 
-        snapped_cx = best_cx if best_dx <= align_th else item_cx
-        snapped_cy = best_cy if best_dy <= align_th else item_cy
+        # ── 同行 Y 吸附 ──
+        row_peers = [(ocx, ocy) for ocx, ocy in others if abs(item_cy - ocy) < row_th]
+        row_ys = [ocy for _, ocy in row_peers]
+        if len(row_ys) >= 2:
+            # 同行节点 >=2：取四舍五入均值，确保同行所有节点收敛到同一 Y
+            snapped_cy = round(sum(row_ys) / len(row_ys))
+        elif len(row_ys) == 1:
+            snapped_cy = row_ys[0]
 
-        # ══════════ 水平行间距吸附 ══════════
-        row_data = [(ocx, ocy) for ocx, ocy in others if abs(item_cy - ocy) < row_th]
-        if len(row_data) >= 2:
-            row_xs = sorted([ocx for ocx, _ in row_data])
-            row_ys = [ocy for _, ocy in row_data]
-            avg_y = sum(row_ys) / len(row_ys)
-            if abs(item_cy - avg_y) < row_th:
-                snapped_cy = avg_y
+        # ── 同行 X 间距均匀分布 ──
+        if len(row_peers) >= 2:
+            row_xs = sorted([ocx for ocx, _ in row_peers])
             gaps = [row_xs[i + 1] - row_xs[i] for i in range(len(row_xs) - 1)]
             if gaps:
                 avg_gap = sum(gaps) / len(gaps)
@@ -704,14 +694,18 @@ class DiagramScene(QGraphicsScene):
                 else:
                     snapped_cx = row_xs[-1] + avg_gap
 
-        # ══════════ 垂直列间距吸附 ══════════
-        col_data = [(ocx, ocy) for ocx, ocy in others if abs(snapped_cx - ocx) < col_th]
-        if len(col_data) >= 2:
-            col_ys = sorted([ocy for _, ocy in col_data])
-            col_xs = [ocx for ocx, _ in col_data]
-            avg_x = sum(col_xs) / len(col_xs)
-            if abs(snapped_cx - avg_x) < col_th:
-                snapped_cx = avg_x
+        # ── 同列 X 吸附 ──
+        col_peers = [(ocx, ocy) for ocx, ocy in others if abs(snapped_cx - ocx) < col_th]
+        col_xs = [ocx for ocx, _ in col_peers]
+        if len(col_xs) >= 2:
+            # 同列节点 >=2：取四舍五入均值，确保同列所有节点收敛到同一 X
+            snapped_cx = round(sum(col_xs) / len(col_xs))
+        elif len(col_xs) == 1:
+            snapped_cx = col_xs[0]
+
+        # ── 同列 Y 间距均匀分布 ──
+        if len(col_peers) >= 2:
+            col_ys = sorted([ocy for _, ocy in col_peers])
             gaps = [col_ys[i + 1] - col_ys[i] for i in range(len(col_ys) - 1)]
             if gaps:
                 avg_gap = sum(gaps) / len(gaps)
@@ -725,8 +719,33 @@ class DiagramScene(QGraphicsScene):
                 else:
                     snapped_cy = col_ys[-1] + avg_gap
 
+        # ── 兜底：无同行/同列时做最近节点中心对齐 ──
+        if not row_peers and not col_peers:
+            align_th = 40.0
+            best_dx = align_th + 1
+            best_dy = align_th + 1
+            for ocx, ocy in others:
+                dx = abs(item_cx - ocx)
+                dy = abs(item_cy - ocy)
+                if dx < best_dx:
+                    best_dx = dx
+                    best_cx = ocx
+                if dy < best_dy:
+                    best_dy = dy
+                    best_cy = ocy
+            if best_dx <= align_th:
+                snapped_cx = best_cx
+            if best_dy <= align_th:
+                snapped_cy = best_cy
+
         snapped_x = snapped_cx - item_w / 2
         snapped_y = snapped_cy - item_h / 2
+
+        # 若吸附修正距离超过 60px，说明用户意图远离集群，不强制拉回
+        if abs(snapped_x - pos.x()) > 60.0:
+            snapped_x = pos.x()
+        if abs(snapped_y - pos.y()) > 60.0:
+            snapped_y = pos.y()
 
         if abs(snapped_x - pos.x()) > 0.5 or abs(snapped_y - pos.y()) > 0.5:
             item.setPos(snapped_x, snapped_y)
