@@ -70,6 +70,11 @@ class OpenCVNodeDataBase(SelectableResultImageNodeData):
         """检查输入图像是否有效：非空且包含数据"""
         return mat is not None and mat.size > 0
 
+    def _require_input_mat(self, from_node):
+        """Get validated input mat from upstream node, or None if unavailable."""
+        mat = self.get_input_mat(from_node.mat if from_node else None)
+        return mat if (mat is not None and mat.size > 0) else None
+
     def _update_result_image_source(self):
         """将numpy数组转换为可显示的格式（由GUI层处理）。
 
@@ -316,6 +321,11 @@ class Base64MatchingNodeData(ROINodeData):
         super().__init__()
         # Base64编码的模板图像字符串
         self._base64_string: str = ""
+
+    def _reset_match_state(self):
+        """Reset match result properties before each invoke."""
+        self.matched = False
+        self.match_x = self.match_y = self.match_w = self.match_h = 0
 
     def _on_post_invoke(self, result: FlowableResult):
         """

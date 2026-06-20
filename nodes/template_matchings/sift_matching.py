@@ -35,9 +35,8 @@ class SiftFeatureMatchingNode(OpenCVTemplateMatchingNodeBase):
         self.name = "SIFT特征匹配"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = self.get_input_mat(from_node.mat if from_node else None)
-        self.matched = False
-        self.match_x = self.match_y = self.match_w = self.match_h = 0
+        mat = self._require_input_mat(from_node)
+        self._reset_match_state()
         if mat is None:
             return self.error(None, "无输入图像")
         template = self._require_template(mat)
@@ -61,8 +60,7 @@ class SiftFeatureMatchingNode(OpenCVTemplateMatchingNodeBase):
             self.matched = True
             self.match_x, self.match_y, self.match_w, self.match_h = match_rect
         else:
-            self.matched = False
-            self.match_x = self.match_y = self.match_w = self.match_h = 0
+            self._reset_match_state()
         msg = f"SIFT匹配 {len(good)}/{len(kp1)} 个特征点"
         if not match_rect and len(good) >= 4:
             msg += " (面积过滤未通过)"

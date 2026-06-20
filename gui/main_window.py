@@ -411,8 +411,6 @@ class MainWindow(QMainWindow):
     def _show_editor(self):
         """显示编辑器页面"""
         self.editor_layout.addWidget(self._editor_surface)
-        # 项目已加载标志
-        self._project_loaded = True
 
     def _refresh_diagram_tabs(self, project):
         """
@@ -1515,34 +1513,22 @@ class MainWindow(QMainWindow):
         self.setPalette(tm.to_palette())
         self.setStyleSheet(qss)
 
-        # 3. 重新应用工具栏按钮（每个按钮在创建时都有自己的QSS）
+        # 3. 重新应用工具栏按钮样式 + 场景 + 控件重绘 + 图像查看器（合并为单次树遍历）
         self._reapply_widget_styles()
         cmd = self._cmd_btn  # 当前主题的QSS
-        # 遍历所有按钮，重新应用样式
-        for btn in self.findChildren(QPushButton):
-            s = btn.styleSheet()
-            if s and 'transparent' in s and 'border-radius' in s:
-                btn.setStyleSheet(cmd)
-
-        # 4. 图表场景 — 先于 widget repolish 处理，避免 viewport 状态被破坏
-
         seen_scenes: set[int] = set()
-        for view in self.findChildren(QGraphicsView):
-            scene = view.scene()
-            if scene is None:
-                continue
-            sid = id(scene)
-            if sid in seen_scenes:
-                continue
-            seen_scenes.add(sid)
-            scene.setBackgroundBrush(_make_checker_brush())
-            scene.update()
-            view.viewport().update()
-
-        # 5. 强制重绘所有QWidget子控件（跳过QGraphicsView，避免破坏其viewport）
         for child in self.findChildren(QWidget):
             if isinstance(child, QGraphicsView):
-                continue
+                scene = child.scene()
+                if scene is not None:
+                    sid = id(scene)
+                    if sid not in seen_scenes:
+                        seen_scenes.add(sid)
+                        scene.setBackgroundBrush(_make_checker_brush())
+                        scene.update()
+                        child.viewport().update()
+                continue  # 不 unpolish QGraphicsView，避免破坏 viewport
+
             try:
                 child.style().unpolish(child)
                 child.style().polish(child)
@@ -1550,10 +1536,13 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
-        # 6. 图像查看器 — 重新应用信息条背景
-        for iv in self.findChildren(ImageViewerPanel):
-            if hasattr(iv, '_setup_ui') and hasattr(iv, 'viewer'):
-                iv.viewer.viewport().update()
+            if isinstance(child, QPushButton):
+                s = child.styleSheet()
+                if s and 'transparent' in s and 'border-radius' in s:
+                    child.setStyleSheet(cmd)
+            elif isinstance(child, ImageViewerPanel):
+                if hasattr(child, '_setup_ui') and hasattr(child, 'viewer'):
+                    child.viewer.viewport().update()
 
         # 7. 图表标签页头部（标签页栏中的自定义控件）
         for header in self._diagram_headers.values():

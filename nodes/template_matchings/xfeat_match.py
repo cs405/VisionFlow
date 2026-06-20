@@ -142,9 +142,8 @@ class XFeatMatchingNode(Base64MatchingNodeData, OpenCVNodeDataBase,
         self._model_b64 = ""
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = self.get_input_mat(from_node.mat if from_node else None)
-        self.matched = False
-        self.match_x = self.match_y = self.match_w = self.match_h = 0
+        mat = self._require_input_mat(from_node)
+        self._reset_match_state()
         if mat is None:
             return self.error(None, "无输入图像")
         template = self.get_template_image()

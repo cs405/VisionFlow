@@ -35,5 +35,4 @@ from core.conditions import (
     PropertyCondition,
     ConditionBranch,
     ConditionsPresenter,
-    ConditionsPrensenter,  # 向后兼容别名（已弃用）
 )

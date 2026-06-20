@@ -62,7 +62,6 @@ class WorkflowEngine:
         self.state: WorkflowState = WorkflowState.IDLE                      # 当前执行状态：默认空闲
         self._nodes: dict[str, NodeBase] = {}                               # 节点字典：键为节点ID，值为节点对象
         self._links: list[LinkData] = []                                    # 连线列表
-        self._execution_order: list[str] = []                               # 执行顺序（节点ID列表）
         self._max_workers: int = 4                                          # 最大并行工作线程数
         self._executor: ThreadPoolExecutor | None = None                    # 可复用的线程池（惰性创建，实例级别共享，dispose() 时关闭）
         self._invoke_count: int = 0                                         # 调用计数
@@ -436,7 +435,6 @@ class WorkflowEngine:
         结果缓存在 _topo_cache 中，拓扑变更时自动失效。
         """
         if self._topo_cache is not None:
-            self._execution_order = list(self._topo_cache)
             return self._topo_cache
 
         # 初始化入度和邻接表
@@ -467,7 +465,6 @@ class WorkflowEngine:
                     queue.append(neighbor)
 
         self._topo_cache = result
-        self._execution_order = result
         return result
 
     # -- 执行 --
@@ -579,7 +576,6 @@ class WorkflowEngine:
         """
         self.state = WorkflowState.IDLE
         self._invoke_count = 0
-        self._execution_order.clear()
 
     def execute_step(self, node_id: str) -> FlowableResult:
         """执行单个节点（用于单步调试）"""
@@ -631,15 +627,17 @@ class WorkflowEngine:
 
     def _disable_downstream(self, node_id: str, disabled: set[str]):
         """禁用节点及其所有下游节点（迭代，避免深图递归栈溢出）。"""
+        adj: dict[str, list[str]] = {}
+        for link in self._links:
+            adj.setdefault(link.from_node_id, []).append(link.to_node_id)
         stack = [node_id]
         while stack:
             nid = stack.pop()
             if nid in disabled:
                 continue
             disabled.add(nid)
-            for link in self._links:
-                if link.from_node_id == nid:
-                    stack.append(link.to_node_id)
+            for to_id in adj.get(nid, ()):
+                stack.append(to_id)
 
     def _on_level_error(self, result: FlowableResult):
         """当前层级执行出错时标记状态并发布事件"""
@@ -832,7 +830,6 @@ class WorkflowEngine:
         """移除所有节点和连线"""
         self._nodes.clear()
         self._links.clear()
-        self._execution_order.clear()
         self.state = WorkflowState.IDLE
         event_system.publish(EventType.DIAGRAM_CHANGED, sender=self)
         self._invalidate_levels_cache()

@@ -39,7 +39,7 @@ class ROIMapBackNode(OpenCVNodeDataBase):
         self.name = "ROI映射回原图"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        processed_input = self.get_input_mat(from_node.mat if from_node else None)
+        processed_input = self._require_input_mat(from_node)
         if processed_input is None:
             return self.error(None, "无输入图像")
 

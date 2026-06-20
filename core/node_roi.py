@@ -20,7 +20,6 @@ if TYPE_CHECKING:
 
 
 IMAGE_SOURCE_ORIGINAL = "原图"
-IMAGE_SOURCE_PROCESSED = "处理后图片"
 
 # =============================================================================
 # ROINodeData - ROI支持（NoROI / DrawROI / FromROI / InputROI）
@@ -201,57 +200,52 @@ class ROINodeData(VisionNodeData):
         return x, y, w, h
 
     def invoke(self, previors: LinkData | None, diagram: "WorkflowEngine") -> FlowableResult:
-        """执行节点处理，支持ROI裁剪"""
-        from_data = self._find_from_node(diagram, previors)  # 查找上游节点
+        """Execute node processing with ROI cropping support."""
+        from_data = self._find_from_node(diagram, previors)
 
-        # 为 FromROI 模式连接上游ROI（仅在用户未手动指定源节点时自动连接）
         if isinstance(from_data, ROINodeData) and from_data is not self:
             if self.from_roi.source_node is self:
                 self.from_roi.source_node = from_data
 
-        # 传递上游的原始图像
         if isinstance(from_data, VisionNodeData):
             self._propagate_upstream_state(from_data)
 
-        # 传播上游累积裁剪偏移量
         upstream_offset = getattr(from_data, '_crop_chain_offset', (0, 0, 0, 0))
-
-        # 根据图像源模式确定有效地输入图像
-        # "原图"模式优先：即使上游mat为None，也能用完整原图
-        if hasattr(self, 'image_source_mode') and self.image_source_mode == IMAGE_SOURCE_ORIGINAL and self._original_mat is not None:
-            input_mat = self._original_mat
-        elif from_data is not None and from_data.mat is not None:
-            input_mat = from_data.mat
-        else:
-            input_mat = None
-
-        # 获取当前节点的ROI矩形并验证裁剪到图像边界内
+        input_mat = self._resolve_input_mat(from_data)
         roi_rect = self.get_active_roi_rect() if not isinstance(self._roi, NoROI) else None
         roi_rect = self._validate_roi_rect(roi_rect, input_mat)
 
-        # 有ROI时的处理
+        result = self._invoke_with_roi(previors, diagram, input_mat, roi_rect, upstream_offset, from_data)
+        self.draw_roi.image_source = self._result_image_source
+        return result
+
+    def _resolve_input_mat(self, from_data):
+        """Determine the effective input mat based on image source mode."""
+        if hasattr(self, 'image_source_mode') and self.image_source_mode == IMAGE_SOURCE_ORIGINAL and self._original_mat is not None:
+            return self._original_mat
+        if from_data is not None and from_data.mat is not None:
+            return from_data.mat
+        return None
+
+    def _invoke_with_roi(self, previors, diagram, input_mat, roi_rect, upstream_offset, from_data):
+        """Apply ROI cropping then invoke, or passthrough if no ROI."""
         if roi_rect is not None:
             x, y, w, h = roi_rect
             self._crop_chain_offset = (upstream_offset[0] + x, upstream_offset[1] + y, w, h)
             self._prepared_input = input_mat[y:y+h, x:x+w]
             try:
-                result = super().invoke(previors, diagram)
+                return super().invoke(previors, diagram)
             finally:
                 self._prepared_input = None
-        else:
-            self._crop_chain_offset = upstream_offset
-            if from_data is not None and input_mat is not from_data.mat:
-                self._prepared_input = input_mat
-                try:
-                    result = super().invoke(previors, diagram)
-                finally:
-                    self._prepared_input = None
-            else:
-                result = super().invoke(previors, diagram)
 
-        # 同步 ROI 图像源（从 getter 中移出，避免 getter 副作用）
-        self.draw_roi.image_source = self._result_image_source
-        return result
+        self._crop_chain_offset = upstream_offset
+        if from_data is not None and input_mat is not from_data.mat:
+            self._prepared_input = input_mat
+            try:
+                return super().invoke(previors, diagram)
+            finally:
+                self._prepared_input = None
+        return super().invoke(previors, diagram)
 
     def invoke_core(self, src_image_node_data: "VisionNodeData | None",
                     from_node_data: "VisionNodeData | None",

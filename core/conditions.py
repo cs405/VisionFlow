@@ -481,5 +481,3 @@ class ConditionsPresenter:
             self.branches.append(branch)
 
 
-# 向后兼容别名（已弃用，请使用 ConditionsPresenter）
-ConditionsPrensenter = ConditionsPresenter  # noqa: 保留旧拼写兼容

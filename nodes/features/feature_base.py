@@ -22,7 +22,7 @@ class FeatureBase(OpenCVNodeDataBase):
     feature_count = Property(0, name="特征点数量", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)
 
     def _get_gray(self, from_node):
-        mat = self.get_input_mat(from_node.mat if from_node else None)
+        mat = self._require_input_mat(from_node)
         if mat is None:
             return None, None
         gray = cv2.cvtColor(mat, cv2.COLOR_BGR2GRAY) if len(mat.shape) == 3 else mat

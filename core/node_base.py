@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import base64
 import uuid
 import functools
 import importlib
@@ -471,45 +472,37 @@ class NodeBase(ABC):
     def _serialize_property_value(self, value: Any) -> Any:
         """将属性值序列化为JSON可序列化的格式"""
 
-        if isinstance(value, (np.integer,)):  # numpy整数转为Python int
-            return int(value)
-
-        if isinstance(value, (np.floating,)):  # numpy浮点数转为Python float
-            return float(value)
-
-        if isinstance(value, np.ndarray):  # numpy数组 → base64 编码（保证数据完整、体积可控）
-            import base64
-            return {
-                "__ndarray__": base64.b64encode(value.tobytes()).decode("ascii"),
-                "__ndarray_shape__": value.shape,
-                "__ndarray_dtype__": str(value.dtype),
-            }
-
-        if isinstance(value, Enum):  # 枚举类型
-            return {
-                "__enum__": f"{value.__class__.__module__}.{value.__class__.__name__}",
-                "name": value.name,
-            }
-
-        if isinstance(value, tuple):  # 元组转为特殊字典
-            return {"__tuple__": [self._serialize_property_value(v) for v in value]}
-
-        if isinstance(value, list):  # 列表递归处理
-            return [self._serialize_property_value(v) for v in value]
-
-        if isinstance(value, dict):  # 字典递归处理
-            return {k: self._serialize_property_value(v) for k, v in value.items()}
-
-        if value is None or isinstance(value, (str, int, float, bool)):  # 基本类型直接返回
-            return value
-
-        if hasattr(value, "to_dict") and callable(value.to_dict):  # 有to_dict方法的对象
-            return {
-                "__type__": value.__class__.__name__,
-                "data": value.to_dict(),
-            }
-
-        return str(value)
+        match value:
+            case _ if isinstance(value, (np.integer,)):
+                return int(value)
+            case _ if isinstance(value, (np.floating,)):
+                return float(value)
+            case np.ndarray():
+                return {
+                    "__ndarray__": base64.b64encode(value.tobytes()).decode("ascii"),
+                    "__ndarray_shape__": value.shape,
+                    "__ndarray_dtype__": str(value.dtype),
+                }
+            case Enum():
+                return {
+                    "__enum__": f"{value.__class__.__module__}.{value.__class__.__name__}",
+                    "name": value.name,
+                }
+            case tuple():
+                return {"__tuple__": [self._serialize_property_value(v) for v in value]}
+            case list():
+                return [self._serialize_property_value(v) for v in value]
+            case dict():
+                return {k: self._serialize_property_value(v) for k, v in value.items()}
+            case None | str() | int() | float() | bool():
+                return value
+            case _ if hasattr(value, "to_dict") and callable(value.to_dict):
+                return {
+                    "__type__": value.__class__.__name__,
+                    "data": value.to_dict(),
+                }
+            case _:
+                return str(value)
 
     def _deserialize_property_value(self, value: Any) -> Any:
         """从序列化格式恢复属性值"""

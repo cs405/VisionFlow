@@ -39,7 +39,7 @@ class HoughLinesP(OpenCVNodeDataBase, IDetectorGroupableNode):
         self.name = "线段识别"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = self.get_input_mat(from_node.mat if from_node else None)
+        mat = self._require_input_mat(from_node)
         if mat is None:
             return self.error(None, "无输入图像")
         gray = cv2.cvtColor(mat, cv2.COLOR_BGR2GRAY) if len(mat.shape) == 3 else mat

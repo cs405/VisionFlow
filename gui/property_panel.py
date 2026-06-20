@@ -1660,19 +1660,14 @@ class PropertyPanel(QWidget):
 
     def _connect_debounced(self, widget, prop_name: str):
         """连接文本变化信号到防抖的属性写入（300ms 延迟）。"""
-        def on_text_changed(value):
-            timer = self._debounce_timers.get(prop_name)
-            if timer is not None and timer.isActive():
-                timer.stop()
-            new_timer = QTimer(self)
-            new_timer.setSingleShot(True)
-            new_timer.setInterval(300)
-            new_timer.timeout.connect(
-                lambda v=value, n=prop_name: self._set_property_value(n, v)
-            )
-            self._debounce_timers[prop_name] = new_timer
-            new_timer.start()
-        widget.textChanged.connect(on_text_changed)
+        timer = QTimer(self)
+        timer.setSingleShot(True)
+        timer.setInterval(300)
+        timer.timeout.connect(
+            lambda n=prop_name: self._set_property_value(n, widget.text())
+        )
+        self._debounce_timers[prop_name] = timer
+        widget.textChanged.connect(lambda: timer.start())
 
     def _set_property_value(self, prop_name: str, new_value: Any, *, force: bool = False):
         """设置属性值

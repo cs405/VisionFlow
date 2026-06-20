@@ -99,7 +99,7 @@ class BlobDetector(OpenCVNodeDataBase, IDetectorGroupableNode):
         return params
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = self.get_input_mat(from_node.mat if from_node else None)
+        mat = self._require_input_mat(from_node)
         if mat is None:
             return self.error(None, "无输入图像")
         params = self._build_params()

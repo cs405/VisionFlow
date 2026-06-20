@@ -44,7 +44,7 @@ class ShowMessageNode(OutputBase):
         self.name = self._NAMES.get(self.message_type, "消息输出")
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = self.get_input_mat(from_node.mat if from_node else None)
+        mat = self._require_input_mat(from_node)
         mt = self.message_type or "Info"
         defaults = self._DEFAULTS.get(mt, self._DEFAULTS["Info"])
         title = self.title or defaults["title"]

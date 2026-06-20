@@ -13,9 +13,6 @@ from typing import Any
 import threading
 
 
-SceneType = Any
-
-
 class Command(ABC):
     """
     命令模式基类（抽象类）

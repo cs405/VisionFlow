@@ -107,7 +107,7 @@ class HSVBlobMatchingNode(OpenCVNodeDataBase, ITemplateMatchingGroupableNode):
     # ── 核心处理 ──
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = self.get_input_mat(from_node.mat if from_node else None)
+        mat = self._require_input_mat(from_node)
         self.matched = False
         self.match_x = self.match_y = self.match_w = self.match_h = 0
         if mat is None:

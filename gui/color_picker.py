@@ -41,7 +41,7 @@ class ImagePickLabel(QLabel):
         h, w = bgr_image.shape[:2]
 
         # 使用已有的稳定转换（避免 QImage 直接引用 numpy 内存导致悬空指针闪退）
-        from gui.image_viewer import numpy_to_pixmap
+        from gui.widget_utils import numpy_to_pixmap
         self._full_pixmap = numpy_to_pixmap(bgr_image)
 
         # 缩放到适合屏幕

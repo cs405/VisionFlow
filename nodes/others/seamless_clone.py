@@ -25,7 +25,7 @@ class SeamlessClone(OpenCVNodeDataBase):
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
         # 背景 = 上游节点图像
-        bg = self.get_input_mat(from_node.mat if from_node else None)
+        bg = self._require_input_mat(from_node)
         if bg is None:
             return self.error(None, "无输入图像（上游=背景）")
         # 前景 = 源节点图像

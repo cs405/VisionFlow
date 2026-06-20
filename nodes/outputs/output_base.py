@@ -16,7 +16,7 @@ class OutputBase(OpenCVNodeDataBase):
                               description="开启时返回 OK 状态，关闭时返回 ERROR 状态")
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        mat = self.get_input_mat(from_node.mat if from_node else None)
+        mat = self._require_input_mat(from_node)
         if self.result_success:
             return self.ok(mat, self._get_message())
         else:

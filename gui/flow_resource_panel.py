@@ -806,8 +806,6 @@ class FlowResourcePanel(QWidget):
 
     # 图像文件过滤器
     IMAGE_FILTER = "图像文件 (*.png *.jpg *.jpeg *.bmp *.tiff *.tif *.webp);;所有文件 (*.*)"
-    # 支持的图像扩展名
-    IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".webp")
 
     def _add_files(self):
         """添加文件

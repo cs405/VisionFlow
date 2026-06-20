@@ -40,7 +40,7 @@ class MOG(OpenCVNodeDataBase):
             处理结果
         """
         # 获取输入图像（优先使用_prepared_input，否则使用上游节点的mat）
-        mat = self.get_input_mat(from_node.mat if from_node else None)
+        mat = self._require_input_mat(from_node)
         # 如果输入图像为空，返回错误结果
         if mat is None:
             return self.error(None, "无输入图像")
@@ -95,7 +95,7 @@ class VideoWriter(OpenCVNodeDataBase):
             处理结果
         """
         # 获取输入图像（优先使用_prepared_input，否则使用上游节点的mat）
-        mat = self.get_input_mat(from_node.mat if from_node else None)
+        mat = self._require_input_mat(from_node)
         # 如果输入图像为空，返回错误结果
         if mat is None:
             return self.error(None, "无输入图像")

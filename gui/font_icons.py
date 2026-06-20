@@ -31,9 +31,7 @@ class FontIcons:
 
     # ── 动作图标 ──
     Replay = ""               # 重放/运行/启动
-    Play = ""                 # 播放（同Replay）
     Stop = ""                 # 停止
-    Pause = ""                # 暂停
     Sync = ""                 # 同步
     Refresh = ""              # 刷新/重置
     Undo = ""                 # 撤销
@@ -113,47 +111,11 @@ class FontIcons:
     Mouse = ""               # 鼠标/向导
     Smartcard = ""           # Reminder / 新手向导
 
-    # ── 电源/系统图标 ──
-    PowerButton = ""         # 电源按钮
-
-    # ── 通信图标 ──
-    Mail = ""                # 邮件
-    Chat = ""                # 聊天
-    Phone = ""               # 电话
-    WiFi = ""                # WiFi
-
-    # ── 地图图标 ──
-    MapPin = ""              # 地图图钉
-    POI = ""                 # 兴趣点
-
-    # ── 联系人/人员图标 ──
-    Contact = ""             # 联系人
-    People = ""              # 人员
-    Emoji = ""               # 表情符号
-
-    # ── 交通图标 ──
-    Bus = ""                 # 公交
-    Car = ""                 # 汽车
-
     # ── 后备/额外图标 ──
     FavoriteStar = ICON_FAVORITE_STAR        # 实心星形（收藏）
-    FavoriteStarOutline = ""               # 空心星形（收藏轮廓）
-    Pin = ""                               # 图钉（固定）
-    Unpin = ""                             # 取消固定
-    Like = ""                              # 点赞
-    Dislike = ""                           # 点踩
     Flag = ""                              # 标记
 
     # ── 从 HeBianGu 框架扩展的图标 ──
-    Home = ""                # 主页
-    Download = ""            # 下载
-    Upload = ""              # 上传
-    Print = ""               # 打印
-    Shop = ""                # 商店
-    World = ""               # 世界
-    Feedback = ""            # 反馈/缺陷
-    Heart = ""               # 心形
-    Share = ""               # 分享
     Link = ""                # 链接
 
 
