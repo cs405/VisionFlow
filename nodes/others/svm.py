@@ -52,6 +52,3 @@ class SVM(OpenCVNodeDataBase):
         mask = (result.reshape(h, w) > 0).astype(np.uint8) * 255
         out = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
         return self.ok(out, f"SVM 像素分类完成 ({self.kernel_type})")
-
-    def _update_result_image_source(self):
-        self._result_image_source = self._mat

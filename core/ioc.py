@@ -147,6 +147,22 @@ class ServiceProvider:
         params = self._resolve_constructor_params(impl_type)
         return impl_type(**params)
 
+    # 定义解析单个构造函数参数的方法
+    def _resolve_param(self, name: str, param: inspect.Parameter, impl_type: type) -> Any | None:
+        """解析单个构造参数，返回解析值或 None（表示无默认值且无法解析）。"""
+        try:
+            return self.resolve(param.annotation)
+        except KeyError:
+            if param.default != inspect.Parameter.empty:
+                if not _is_builtin_type(param.annotation):
+                    logger.warning(
+                        "无法解析类型 %s 用于 %s.%s 的参数 '%s'，使用默认值",
+                        getattr(param.annotation, '__name__', param.annotation),
+                        impl_type.__name__, name, name,
+                    )
+                return param.default
+        return None
+
     # 定义解析构造函数参数的方法
     def _resolve_constructor_params(self, impl_type: type) -> dict:
         """从已注册的服务中解析构造函数参数"""
@@ -164,26 +180,15 @@ class ServiceProvider:
             # 跳过 self 参数
             if name == "self":
                 continue
-            # 如果参数有类型注解
-            if param.annotation != inspect.Parameter.empty:
-                try:
-                    # 从容器中解析该类型
-                    resolved[name] = self.resolve(param.annotation)
-                except KeyError:
-                    # 解析失败则使用默认值（如果存在）
-                    if param.default != inspect.Parameter.empty:
-                        # 仅对非内置类型发出警告（str、int 等不需要注册）
-                        if not _is_builtin_type(param.annotation):
-                            logger.warning(
-                                "无法解析类型 %s 用于 %s.%s 的参数 '%s'，使用默认值",
-                                getattr(param.annotation, '__name__', param.annotation),
-                                impl_type.__name__, name, name,
-                            )
-                        resolved[name] = param.default
-            # 如果参数有默认值（无类型注解或类型注解解析失败）
-            elif param.default != inspect.Parameter.empty:
-                # 使用默认值
-                resolved[name] = param.default
+            # 无类型注解时使用默认值
+            if param.annotation == inspect.Parameter.empty:
+                if param.default != inspect.Parameter.empty:
+                    resolved[name] = param.default
+                continue
+            # 有类型注解则尝试从容器解析
+            result = self._resolve_param(name, param, impl_type)
+            if result is not None:
+                resolved[name] = result
         # 返回解析后的参数字典
         return resolved
 

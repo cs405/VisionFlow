@@ -48,8 +48,3 @@ class GaussianBlur(OpenCVNodeDataBase):
         result = cv2.GaussianBlur(mat, (k, k), self.sigma_x, self.sigma_y)
         # 返回成功结果
         return self.ok(result)
-
-    def _update_result_image_source(self):
-        """更新结果图像源"""
-        # 将当前处理后的图像设置为结果图像源
-        self._result_image_source = self._mat

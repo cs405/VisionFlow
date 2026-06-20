@@ -53,11 +53,6 @@ class PencilSketch(OpenCVNodeDataBase):
         # 返回成功结果，输出灰度素描图像
         return self.ok(gray)
 
-    def _update_result_image_source(self):
-        """更新结果图像源"""
-        # 将当前处理后的图像设置为结果图像源
-        self._result_image_source = self._mat
-
 
 class Stylization(OpenCVNodeDataBase):
     """风格化节点"""
@@ -93,8 +88,3 @@ class Stylization(OpenCVNodeDataBase):
             return self.error(None, "无输入图像")
         # 调用OpenCV的stylization进行风格化处理
         return self.ok(cv2.stylization(mat, sigma_s=self.sigma_s, sigma_r=self.sigma_r))
-
-    def _update_result_image_source(self):
-        """更新结果图像源"""
-        # 将当前处理后的图像设置为结果图像源
-        self._result_image_source = self._mat

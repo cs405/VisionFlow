@@ -28,6 +28,3 @@ class MorphBase(OpenCVNodeDataBase):
             (self.kernel_size, self.kernel_size))
         result = cv2.morphologyEx(mat, self._morph_op, kernel, iterations=self.iterations)
         return self.ok(result)
-
-    def _update_result_image_source(self):
-        self._result_image_source = self._mat

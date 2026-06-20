@@ -40,8 +40,3 @@ class Blur(OpenCVNodeDataBase):
         k = max(1, self.ksize if self.ksize % 2 == 1 else self.ksize + 1)
         # 调用OpenCV的blur进行均值模糊处理
         return self.ok(cv2.blur(mat, (k, k)))
-
-    def _update_result_image_source(self):
-        """更新结果图像源"""
-        # 将当前处理后的图像设置为结果图像源
-        self._result_image_source = self._mat

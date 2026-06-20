@@ -48,6 +48,3 @@ class SeamlessClone(OpenCVNodeDataBase):
             return self.ok(result, f"无缝融合 ({self.clone_type})")
         except cv2.error as e:
             return self.ok(bg, f"融合失败(已回退): {e}")
-
-    def _update_result_image_source(self):
-        self._result_image_source = self._mat

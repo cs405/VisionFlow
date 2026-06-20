@@ -44,6 +44,3 @@ class Canny(OpenCVNodeDataBase, IDetectorGroupableNode):
         result = cv2.Canny(gray, self.threshold1, self.threshold2,
                            apertureSize=ksize, L2gradient=self.l2_gradient)
         return self.ok(result)
-
-    def _update_result_image_source(self):
-        self._result_image_source = self._mat

@@ -99,10 +99,6 @@ class CameraCaptureNodeData(SrcFilesVisionNodeData, OpenCVNodeDataBase):
                 frame = frame[y:y+h, x:x+w]
         return self.ok(frame, "摄像头捕获")
 
-    def _update_result_image_source(self):
-        """更新结果图像源"""
-        self._result_image_source = self._mat
-
     def dispose(self):
         """释放摄像头长连接并取消事件订阅"""
         # 取消工作流停止事件的订阅

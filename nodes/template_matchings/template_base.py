@@ -44,6 +44,13 @@ class MatcherType(Enum):
     FLANN_BASED = "flann"
 
 
+class NormType(Enum):
+    """范数类型"""
+    L2 = "L2"
+    L1 = "L1"
+    HAMMING = "HAMMING"
+
+
 # =============================================================================
 # OpenCVTemplateMatchingNodeBase — 合并基类
 # =============================================================================
@@ -68,9 +75,6 @@ class OpenCVTemplateMatchingNodeBase(Base64MatchingNodeData, OpenCVNodeDataBase,
         Base64MatchingNodeData.__init__(self)
         OpenCVNodeDataBase.__init__(self)
 
-    def _update_result_image_source(self):
-        self._result_image_source = self._mat
-
     def is_valid(self, mat: np.ndarray) -> bool:
         return mat is not None and mat.size > 0
 
@@ -86,6 +90,72 @@ class OpenCVTemplateMatchingNodeBase(Base64MatchingNodeData, OpenCVNodeDataBase,
         if template is None:
             return None
         return template
+
+    # ── 特征匹配通用方法 (SIFT / SURF 共用) ─────────────────────────
+
+    def _match(self, des1, des2) -> list:
+        mt = MatcherType(self.matcher_type)
+        norm = {"L2": cv2.NORM_L2, "L1": cv2.NORM_L1, "HAMMING": cv2.NORM_HAMMING}.get(self.norm_type, cv2.NORM_L2)
+        if mt == MatcherType.BFMATCHER:
+            bf = cv2.BFMatcher(norm, crossCheck=self.cross_check)
+            if self.cross_check:
+                return sorted(bf.match(des1, des2), key=lambda x: x.distance)
+            knn = bf.knnMatch(des1, des2, k=2)
+            return [m for m, n in knn if m.distance < 0.75 * n.distance]
+        else:
+            flann = cv2.FlannBasedMatcher(dict(algorithm=0, trees=5), dict(checks=50))
+            knn = flann.knnMatch(des1, des2, k=2)
+            return [m for m, n in knn if m.distance < 0.75 * n.distance]
+
+    def _get_homography_rect(self, out, template, kp1, kp2, good) -> tuple | None:
+        if len(good) < 4:
+            return None
+        src_pts = np.float32([kp1[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
+        dst_pts = np.float32([kp2[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
+        H, _ = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+        if H is None:
+            return None
+        h, w = template.shape[:2]
+        corners = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
+        transformed = cv2.perspectiveTransform(corners, H)
+        x, y, rw, rh = cv2.boundingRect(np.int32(transformed))
+        if self.min_area <= rw * rh <= self.max_area:
+            cv2.rectangle(out, (x, y), (x + rw, y + rh), (0, 255, 0), 2)
+            return (x, y, rw, rh)
+        return None
+
+    # ── DLL 模板匹配通用流程 (SAD / NCC 共用) ────────────────────────
+
+    def _invoke_dll_match(self, mat: np.ndarray, template: np.ndarray,
+                          dll_func, threshold_name: str, threshold_value: float,
+                          msg_prefix: str) -> FlowableResult:
+        """DLL 模板匹配通用流程：图像预处理 → DLL 调用 → 结果绘制 → 状态更新。"""
+        tpl_gray = prepare_gray_image(template)
+        img_gray = prepare_gray_image(mat)
+        if tpl_gray.shape[0] > img_gray.shape[0] or tpl_gray.shape[1] > img_gray.shape[1]:
+            return self.error(mat, "模板尺寸大于目标图像，无法匹配")
+        kwargs = {
+            'tpl_canny_low': float(self.tpl_canny_low),
+            'tpl_canny_high': float(self.tpl_canny_high),
+            threshold_name: threshold_value,
+            'max_results': int(self.max_results),
+        }
+        try:
+            results, ms = dll_func(img_gray, tpl_gray, **kwargs)
+        except Exception as e:
+            return self.error(mat, f"{msg_prefix}匹配异常: {e}")
+        out = mat.copy()
+        draw_matches(out, template, results)
+        self.matching_count_result = len(results)
+        self.confidence = float(max((r['score'] for r in results), default=0.0))
+        self.matched = len(results) > 0
+        if self.matched:
+            r = max(results, key=lambda x: x['score'])
+            h, w = template.shape[:2]
+            self.match_x, self.match_y = int(r['x'] - w / 2), int(r['y'] - h / 2)
+            self.match_w, self.match_h = w, h
+            return self.ok(out, f"{msg_prefix}匹配 {len(results)} 处 ({ms:.0f}ms)")
+        return self.error(mat, f"{msg_prefix}匹配: 未匹配到目标 ({ms:.0f}ms)")
 
 
 # ── 经典匹配结果绘制辅助 ────────────────────────────────────────────

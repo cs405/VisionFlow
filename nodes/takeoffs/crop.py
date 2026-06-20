@@ -24,6 +24,3 @@ class CropNode(OpenCVNodeDataBase):
             return self.error(None, "无输入图像")
         h, w = mat.shape[:2]
         return self.ok(mat, f"裁剪区域: {w}x{h}")
-
-    def _update_result_image_source(self):
-        self._result_image_source = self._mat

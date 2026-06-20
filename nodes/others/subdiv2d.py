@@ -49,6 +49,3 @@ class Subdiv2D(OpenCVNodeDataBase):
                 p2 = (int(e[2]), int(e[3]))
                 cv2.line(out, p1, p2, (64, 255, 128), 1)
         return self.ok(out, f"细分: {self.out_type} ({len(points)} 点)")
-
-    def _update_result_image_source(self):
-        self._result_image_source = self._mat

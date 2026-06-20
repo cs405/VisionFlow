@@ -85,6 +85,3 @@ class FindContours(OpenCVNodeDataBase, IDetectorGroupableNode):
 
         self.contour_count = len(contours)
         return self.ok(out, f"发现 {len(contours)} 个轮廓")
-
-    def _update_result_image_source(self):
-        self._result_image_source = self._mat

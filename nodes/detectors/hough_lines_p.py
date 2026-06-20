@@ -67,6 +67,3 @@ class HoughLinesP(OpenCVNodeDataBase, IDetectorGroupableNode):
                 count += 1
         self.line_count = count
         return self.ok(out, f"检测到 {count} 条线段")
-
-    def _update_result_image_source(self):
-        self._result_image_source = self._mat

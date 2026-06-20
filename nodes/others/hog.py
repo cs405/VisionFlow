@@ -42,6 +42,3 @@ class Hog(OpenCVNodeDataBase):
             cv2.rectangle(out, (x + rw, y + rh), (x + w - rw, y + h - rh), (0, 255, 0), 2)
         self.detect_count = len(found)
         return self.ok(out, f"检测到 {len(found)} 个行人")
-
-    def _update_result_image_source(self):
-        self._result_image_source = self._mat

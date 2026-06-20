@@ -301,6 +301,7 @@ class WaitAllParallelNodeData(VisionNodeData, LogicModuleNode):
         super().__init__()
         # 节点显示名称
         self.name = "并行等待"
+        self._result_count: int = 0
 
     def invoke(self, previors: LinkData | None, diagram: "WorkflowEngine") -> FlowableResult:
         """聚合所有并行上游节点的结果。"""

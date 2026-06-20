@@ -24,6 +24,3 @@ class WarpAffineTransform(OpenCVNodeDataBase):
         M[0, 2] += self.dx
         M[1, 2] += self.dy
         return self.ok(cv2.warpAffine(mat, M, (w, h)))
-
-    def _update_result_image_source(self):
-        self._result_image_source = self._mat

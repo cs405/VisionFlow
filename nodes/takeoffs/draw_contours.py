@@ -182,6 +182,3 @@ class DrawContoursNode(OpenCVNodeDataBase):
             if img is not None and len(img.shape) == 3:
                 return img
         return fallback
-
-    def _update_result_image_source(self):
-        self._result_image_source = self._mat

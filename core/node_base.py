@@ -594,17 +594,21 @@ class NodeBase(ABC):
             # 恢复属性值
             serialized_properties = data.get("properties", {})
             property_map = dict(self.get_property_descriptors())
-            for name, raw_value in serialized_properties.items():
-                if name not in property_map:
-                    continue
-                try:
-                    setattr(self, name, self._deserialize_property_value(raw_value))
-                except Exception as e:
-                    import logging
-                    logging.getLogger(__name__).warning(
-                        "恢复属性 '%s.%s' 失败: %s", type(self).__name__, name, e)
+            self._restore_properties(serialized_properties, property_map)
 
         return self
+
+    def _restore_properties(self, serialized_properties: dict, property_map: dict):
+        """将序列化属性值恢复到当前节点上。"""
+        import logging
+        for name, raw_value in serialized_properties.items():
+            if name not in property_map:
+                continue
+            try:
+                setattr(self, name, self._deserialize_property_value(raw_value))
+            except Exception as e:
+                logging.getLogger(__name__).warning(
+                    "恢复属性 '%s.%s' 失败: %s", type(self).__name__, name, e)
 
     def to_dict(self) -> dict:
         """序列化节点为字典，用于JSON项目保存"""

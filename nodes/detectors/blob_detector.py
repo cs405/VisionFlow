@@ -116,6 +116,3 @@ class BlobDetector(OpenCVNodeDataBase, IDetectorGroupableNode):
             msg = f"检测到 {len(keypoints)} 个Blob"
         self.blob_count = len(keypoints)
         return self.ok(out, msg)
-
-    def _update_result_image_source(self):
-        self._result_image_source = self._mat

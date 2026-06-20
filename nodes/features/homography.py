@@ -60,6 +60,3 @@ class HomographyTransform(OpenCVNodeDataBase):
             result = cv2.warpPerspective(mat, H, (w, h))
             return self.ok(result, f"单应性变换: {len(good)} 匹配点")
         return self.ok(mat, f"匹配点不足 ({len(good)} < 4)，输出原图")
-
-    def _update_result_image_source(self):
-        self._result_image_source = self._mat

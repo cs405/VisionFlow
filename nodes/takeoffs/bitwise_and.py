@@ -24,6 +24,3 @@ class BitwiseAnd(OpenCVNodeDataBase):
         if mask is None:
             return self.ok(mat, "无掩膜输入，保持原图")
         return self.ok(cv2.bitwise_and(mat, mat, mask=mask))
-
-    def _update_result_image_source(self):
-        self._result_image_source = self._mat

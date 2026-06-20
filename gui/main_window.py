@@ -17,6 +17,7 @@ from gui.theme import (theme_manager, cmd_btn_qss, tab_qss,
                        vsep, connect_theme, ThemePickerDialog)
 from gui.font_icons import FontIcons, FontIconButton, FontIconToggleButton
 from gui.help_panel import HelpPanel
+from gui.caption_bar import CaptionBar
 from gui.result_panel import ResultPanel
 from gui.constants import load_app_config
 from gui.toolbox_panel import ToolboxPanel
@@ -92,223 +93,21 @@ class MainWindow(QMainWindow):
         ctypes.windll.dwmapi.DwmExtendFrameIntoClientArea(hwnd, margins)
 
     def _setup_caption_bar(self):
-        """
-        外部停靠面板（数据上下文=项目）：
-        分隔符（高度=20，右侧）| 操作停靠面板（右侧）| 统一网格（行数=2）
-        第0行：停靠面板：菜单（左侧）|“项目名称：XXX”（中心）
-        第1行：边框（顶部）| 停靠面板（最后子元素填充=False）：4个按钮组
-        """
-        bar = QWidget()
-        bar.setFixedHeight(85)
+        bar = CaptionBar(self)
         self._caption_bar = bar
-        outer = QHBoxLayout(bar)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(0)
-
-        # 第一行图标+标题
-        col0 = QWidget()
-        col0_layout = QHBoxLayout(col0)
-        col0_layout.setContentsMargins(10, 20, 0, 20)
-        col0_layout.setSpacing(0)
-        logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "icons", "logo.png")
-        if os.path.exists(logo_path):
-            logo = QLabel()
-            logo.setPixmap(QPixmap(logo_path).scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-            logo.setStyleSheet("padding: 0 5px 0 0;")
-            col0_layout.addWidget(logo)
-
-        # 创建标题标签
-        self._app_title_lbl = QLabel("VisionFlow")
-        self._app_title_lbl.setStyleSheet("font-size: 30px; font-weight: bold; padding: 0 0 0 5px;")
-        col0_layout.addWidget(self._app_title_lbl)
-
-        outer.addWidget(col0)
-
-        # 创建网格容器
-        grid = QWidget()
-        grid_layout = QVBoxLayout(grid)
-        grid_layout.setContentsMargins(0, 2, 0, 2)
-        grid_layout.setSpacing(0)
-
-        # ---- 第0行：包含菜单和项目名称 ----
-        row0 = QWidget()
-        r0 = QHBoxLayout(row0)
-        r0.setContentsMargins(8, 0, 0, 0)
-        r0.setSpacing(0)
-
-        # 菜单栏
-        self._menu_bar = QMenuBar()
-        self._build_menus(self._menu_bar)
-        r0.addWidget(self._menu_bar)
-
-        r0.addStretch(1)
-        r0.addWidget(self._lbl("项目名称：", "#c8c8c8", 12, pad="0 4px"))
-        self._cap_proj_lbl = self._lbl("无项目", "#0078d4", 12, bold=True, pad="0 12px")
-        r0.addWidget(self._cap_proj_lbl)
-        r0.addStretch(1)
-
-        grid_layout.addWidget(row0)
-
-        # ---- 第1行：顶部边框 + 工具栏 ----
-        self._toolbar_row = QWidget()
-        r1 = QHBoxLayout(self._toolbar_row)
-        r1.setContentsMargins(0, 1, 0, 0)
-        r1.setSpacing(0)
-
-        toolbar = QWidget()
-        tb = QHBoxLayout(toolbar)
-        tb.setContentsMargins(6, 3, 6, 3)
-        tb.setSpacing(2)
-
-        for icon, tip, slot in [
-            (FontIcons.Page,                "新建项目", self._on_new_project),          # 新建项目按钮
-            (FontIcons.OpenFolderHorizontal, "打开项目", self._on_open_project),        # 打开项目按钮
-            (FontIcons.Edit,                 "编辑项目", self._on_edit_project),        # 编辑项目按钮
-            (FontIcons.Save,                 "保存项目", self._on_save_project),        # 保存项目按钮
-        ]:
-            btn = FontIconButton(icon, tooltip=tip, font_size=16)
-            btn.setStyleSheet(self._cmd_btn)
-            btn.clicked.connect(slot)
-            tb.addWidget(btn)
-        tb.addWidget(vsep())
-
-        # 按钮组2 — 项目级命令
-        self._tool_project_cmds = QWidget()
-        self._tool_project_cmds.setLayout(QHBoxLayout())
-        self._tool_project_cmds.layout().setContentsMargins(0, 0, 0, 0)
-        self._tool_project_cmds.layout().setSpacing(2)
-        for icon, tip, slot in [
-            (FontIcons.Add,           "新建流程图",           self._on_add_diagram),        # 新建流程图按钮
-            (FontIcons.Ethernet,      "运行模式",             self._on_cycle_run_mode),     # 运行模式按钮
-            (FontIcons.Copy,          "重复流程图",           self._on_duplicate_diagram),  # 重复流程图按钮
-            (FontIcons.DictionaryAdd, "从模板添加流程图",     self._on_add_from_template),  # 从模板添加流程图按钮
-            (FontIcons.Manage,        "模板管理",             self._on_manage_templates),   # 模板管理按钮
-            (FontIcons.SaveAs,        "流程图另存为模板",     self._on_save_as_template),   # 流程图另存为模板按钮
-            (FontIcons.Cancel,        "删除流程图",           self._on_delete_diagram),     # 删除流程图按钮
-        ]:
-            btn = FontIconButton(icon, tooltip=tip, font_size=16)
-            btn.setStyleSheet(self._cmd_btn)
-            if slot:
-                btn.clicked.connect(slot)
-            if tip == "删除流程图":
-                self._delete_diagram_btn = btn
-            self._tool_project_cmds.layout().addWidget(btn)
-        tb.addWidget(self._tool_project_cmds)
-        tb.addWidget(vsep())
-
-        # 按钮组3 — 图表命令
-        self._tool_diagram_cmds = QWidget()
-        self._tool_diagram_cmds.setLayout(QHBoxLayout())
-        self._tool_diagram_cmds.layout().setContentsMargins(0, 0, 0, 0)
-        self._tool_diagram_cmds.layout().setSpacing(2)
-
-        # 遍历按钮配置
-        for icon, tip, slot in [
-            (FontIcons.Replay, "单次执行", self._on_run_workflow),  # 单次执行按钮
-            (FontIcons.Sync, "连续执行", self._on_continuous_run),  # 连续执行按钮
-            (FontIcons.Location, "停止", self._on_stop_workflow),  # 停止按钮
-            (FontIcons.Refresh, "重置", self._on_reset_workflow_view),  # 重置按钮
-        ]:
-            btn = FontIconButton(icon, tooltip=tip, font_size=16)
-            btn.setStyleSheet(self._cmd_btn)
-            if slot:
-                btn.clicked.connect(slot)
-
-            self._tool_diagram_cmds.layout().addWidget(btn)
-        # 保存按钮引用（用于状态管理）
-        self._run_btn = self._tool_diagram_cmds.layout().itemAt(0).widget()  # 单次执行按钮
-        self._continuous_btn = self._tool_diagram_cmds.layout().itemAt(1).widget()  # 连续执行按钮
-        self._stop_btn = self._tool_diagram_cmds.layout().itemAt(2).widget()  # 停止按钮
-        self._reset_btn = self._tool_diagram_cmds.layout().itemAt(3).widget()  # 重置按钮
-
-        self._stop_btn.setEnabled(False)
-        self._reset_btn.setEnabled(False)
-
-        tb.addWidget(self._tool_diagram_cmds)
-        tb.addWidget(vsep())
-
-        tb.addStretch(1)
-        r1.addWidget(toolbar)
-        grid_layout.addWidget(self._toolbar_row)
-        #
-        outer.addWidget(grid, 1)
-
-        # ══════════ 右侧停靠的动作按钮 ══════════
-        for icon, tip, slot in [
-            (FontIcons.Color, "颜色主题", self._on_show_theme_dialog),  # 颜色主题按钮
-            (FontIcons.Setting, "设置", self._on_open_settings),  # 设置按钮
-        ]:
-            # 创建字体图标按钮
-            btn = FontIconButton(icon, tooltip=tip, font_size=16)
-            btn.setStyleSheet(self._cmd_btn)
-            if slot:
-                btn.clicked.connect(slot)
-            outer.addWidget(btn)
-
-        # 创建主题切换按钮（亮色/暗色）
-        self._theme_toggle = FontIconToggleButton(FontIcons.Brightness, FontIcons.QuietHours, font_size=16)
-        self._theme_toggle.setToolTip("切换明/暗主题")
-        self._theme_toggle.setStyleSheet(self._cmd_btn + """
-                    FontIconToggleButton:checked { color: #dcdcdc; }
-                    FontIconToggleButton:checked:hover { background: #3e3e42; }
-                """)
-        self._theme_toggle.setChecked(theme_manager.is_dark)
-        self._theme_toggle.toggled.connect(lambda _: self._on_toggle_theme())
-        outer.addWidget(self._theme_toggle)
-
-        # 遍历按钮配置：关于、新手向导
-        for icon, tip, slot in [
-            (FontIcons.Info,  "关于",     self._on_about),           # 关于按钮
-            (FontIcons.Smartcard, "新手向导", self._on_open_guide),  # 新手向导按钮
-        ]:
-            btn = FontIconButton(icon, tooltip=tip, font_size=16)
-            btn.setStyleSheet(self._cmd_btn)
-            if slot:
-                btn.clicked.connect(slot)
-            outer.addWidget(btn)
-
-        # 创建分隔符控件
-        sep20 = QFrame()
-        sep20.setFrameShape(QFrame.VLine)
-        sep20.setStyleSheet("color: #505050;")
-        sep20.setFixedSize(1, 20)
-        outer.addWidget(sep20)
-
-        # ══════════ 窗口标题栏按钮 ══════════
-        _WIN = (
-            "QPushButton { background:transparent; border:none; color:#999;"
-            " font-family:'Segoe Fluent Icons','Segoe MDL2 Assets','Segoe UI Symbol';"
-            " font-size:14px; min-width:46px; min-height:32px; }"
-            "QPushButton:hover { background:#3e3e42; color:#dcdcdc; }"
-            "QPushButton#close_btn:hover { background:#e81123; color:white; }"
-        )
-        # 遍历窗口按钮配置
-        for icon, tip, slot, btn_attr in [
-            (FontIcons.ChromeMinimize, "最小化", self.showMinimized, None),         # 最小化按钮
-            (FontIcons.ChromeMaximize, "最大化", self._toggle_max, "_max_btn"),    # 最大化按钮
-            (FontIcons.ChromeRestore,  "还原",   self._toggle_max, "_restore_btn"), # 还原按钮
-            (FontIcons.ChromeClose,    "关闭",   self._on_close_window, None),      # 关闭按钮
-        ]:
-            btn = QPushButton(icon)
-            btn.setToolTip(tip)
-            # 设置样式
-            btn.setStyleSheet(_WIN)
-            if icon == FontIcons.ChromeClose:
-                btn.setObjectName("close_btn")
-            btn.clicked.connect(slot)
-            if btn_attr:
-                setattr(self, btn_attr, btn)
-            outer.addWidget(btn)
-        # 初始状态下隐藏还原按钮（窗口未最大化）
-        self._restore_btn.hide()
-
-        # ── 拖动支持 ──
-        self._caption_bar = bar
-        bar.installEventFilter(self)
-        for child in bar.findChildren(QWidget):
-            child.installEventFilter(self)
-
-        # ── 主题初始化 ──
+        # Expose caption bar attributes that other MainWindow methods reference
+        self._app_title_lbl = bar._app_title_lbl
+        self._cap_proj_lbl = bar._cap_proj_lbl
+        self._menu_bar = bar._menu_bar
+        self._toolbar_row = bar._toolbar_row
+        self._tool_project_cmds = bar._tool_project_cmds
+        self._tool_diagram_cmds = bar._tool_diagram_cmds
+        self._run_btn = bar._run_btn
+        self._continuous_btn = bar._continuous_btn
+        self._stop_btn = bar._stop_btn
+        self._reset_btn = bar._reset_btn
+        self._delete_diagram_btn = bar._delete_diagram_btn
+        self._theme_toggle = bar._theme_toggle
         self._apply_caption_bar_qss()
         connect_theme(lambda: self._apply_caption_bar_qss())
 
@@ -556,51 +355,9 @@ class MainWindow(QMainWindow):
         return panel
 
     def _apply_caption_bar_qss(self):
-        """将主题颜色应用到标题栏（菜单栏 + 工具栏行）"""
-        tm = theme_manager
-        text = tm.color("text_primary").name()
-        text_title = tm.color("text_title").name()
-        bg_hover = tm.color("bg_surface_hover").name()
-        bg_raised = tm.color("bg_surface_raised").name()
-        bg_title = tm.color("bg_title_bar").name()
-        accent = tm.color("accent").name()
-        border = tm.color("border").name()
-
-        # 标题栏整体背景
-        if hasattr(self, '_caption_bar'):
-            self._caption_bar.setStyleSheet(f"background: {bg_title};")
-
-        # 应用标题
-        if hasattr(self, '_app_title_lbl'):
-            self._app_title_lbl.setStyleSheet(
-                f"color: {text_title}; font-size: 30px; font-weight: bold; padding: 0 0 0 5px;"
-            )
-
-        # 菜单栏
-        if hasattr(self, '_menu_bar'):
-            self._menu_bar.setStyleSheet(
-                f"QMenuBar {{ background: transparent; color: {text}; padding: 0; margin: 1px 0; }}"
-                f"QMenuBar::item {{ padding: 6px 12px; background: transparent; }}"
-                f"QMenuBar::item:selected {{ background: {bg_hover}; }}"
-                f"QMenu {{ background: {bg_raised}; color: {text}; border: 1px solid {border}; }}"
-                f"QMenu::item {{ padding: 6px 30px 6px 16px; }}"
-                f"QMenu::item:selected {{ background: {accent}; }}"
-                f"QMenu::separator {{ height: 1px; background: {border}; margin: 4px 10px; }}"
-            )
-
-        # 工具栏行
-        if hasattr(self, '_toolbar_row'):
-            self._toolbar_row.setStyleSheet(
-                f"background: {bg_raised}; border-top: 1px solid {border};"
-            )
-
-    def _lbl(self, text, color, size, bold=False, pad=""):
-        """创建标签控件"""
-        label = QLabel(text)
-        label.setStyleSheet(
-            f"color: {color}; font-size: {size}px; {'font-weight: bold;' if bold else ''} padding: {pad};"
-        )
-        return label
+        """将主题颜色应用到标题栏 — 委托给 CaptionBar"""
+        if hasattr(self, '_caption_bar') and self._caption_bar:
+            self._caption_bar.refresh_qss()
 
     def _current_diagram_page(self):
         """
@@ -822,12 +579,7 @@ class MainWindow(QMainWindow):
 
     def _refresh_diagram_tab_headers(self):
         """刷新图表标签页头部激活状态"""
-        # 获取当前图表的ID
-        current_id = getattr(self._current_diagram_page(), "diagram_id", None)
-        # 遍历所有头部
-        for diagram_id, header in self._diagram_headers.items():
-            # 设置激活状态（当前图表为激活）
-            header.set_active(diagram_id == current_id)
+        pass
 
     def _create_diagram_page(self, diagram: DiagramData) -> QWidget:
         """
@@ -1276,11 +1028,10 @@ class MainWindow(QMainWindow):
 
             hint = ""  # 构建提示信息
             if paths:
-                try:
-                    # 提示：图像源 索引/总数
-                    hint = f"图像源 {paths.index(path) + 1}/{len(paths)}"
-                except ValueError:
-                    hint = f"图像源 1/{len(paths)}"
+                hint = next(
+                    (f"图像源 {i+1}/{len(paths)}" for i, p in enumerate(paths) if p == path),
+                    f"图像源 1/{len(paths)}",
+                )
             return path, hint
         return None, ""
 

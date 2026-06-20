@@ -148,9 +148,6 @@ class HSVBlobMatchingNode(OpenCVNodeDataBase, ITemplateMatchingGroupableNode):
                 return (int(x), int(y), int(w), int(h))
         return super().get_active_roi_rect()
 
-    def _update_result_image_source(self):
-        self._result_image_source = self._mat
-
     def is_valid(self, mat: np.ndarray) -> bool:
         return mat is not None and mat.size > 0
 

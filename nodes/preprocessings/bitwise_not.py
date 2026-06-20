@@ -21,16 +21,6 @@ class BitwiseNot(OpenCVNodeDataBase):
         self.name = "按位取反"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
-        """核心处理逻辑
-
-        参数：
-            src: 源节点数据
-            from_node: 上游节点
-            diagram: 工作流引擎
-
-        返回：
-            处理结果
-        """
         # 获取输入图像（优先使用_prepared_input，否则使用上游节点的mat）
         mat = self.get_input_mat(from_node.mat if from_node else None)
         # 如果输入图像为空，返回错误结果
@@ -38,7 +28,3 @@ class BitwiseNot(OpenCVNodeDataBase):
             return self.error(None, "无输入图像")
         # 执行按位取反操作
         return self.ok(cv2.bitwise_not(mat))
-
-    def _update_result_image_source(self):
-        """更新结果图像源"""
-        self._result_image_source = self._mat

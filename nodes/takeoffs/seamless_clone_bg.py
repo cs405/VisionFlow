@@ -40,6 +40,3 @@ class SeamlessCloneBackground(OpenCVNodeDataBase):
         except cv2.error as e:
             return self.ok(mat, message=f"无缝融合失败(已回退原图): {e}")
         return self.ok(result)
-
-    def _update_result_image_source(self):
-        self._result_image_source = self._mat

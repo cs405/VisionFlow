@@ -71,5 +71,4 @@ class DiagramTabHeader(QWidget):
         if self._name_edit.text() != name:
             self._name_edit.setText(name)
 
-    def set_active(self, active: bool):
-        pass
+

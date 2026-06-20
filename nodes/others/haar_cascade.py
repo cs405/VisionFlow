@@ -49,6 +49,3 @@ class HaarCascade(OpenCVNodeDataBase):
             cv2.rectangle(out, (x, y), (x + w, y + h), (0, 255, 0), 2)
         self.detect_count = len(objects)
         return self.ok(out, f"检测到 {len(objects)} 个目标 ({self.haar_type})")
-
-    def _update_result_image_source(self):
-        self._result_image_source = self._mat

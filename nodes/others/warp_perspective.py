@@ -30,6 +30,3 @@ class WarpPerspectiveTransform(OpenCVNodeDataBase):
                               [self.bl_x, self.bl_y], [self.br_x, self.br_y]])
         M = cv2.getPerspectiveTransform(src_pts, dst_pts)
         return self.ok(cv2.warpPerspective(mat, M, (w, h)))
-
-    def _update_result_image_source(self):
-        self._result_image_source = self._mat

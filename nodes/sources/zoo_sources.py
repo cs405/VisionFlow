@@ -73,10 +73,6 @@ class _ZooSrcImageBase(SrcFilesVisionNodeData, OpenCVNodeDataBase):
         # 返回成功结果
         return self.ok(mat, f"已加载: {os.path.basename(path)}")
 
-    def _update_result_image_source(self):
-        """更新结果图像源"""
-        self._result_image_source = self._mat
-
 
 class OpenCVSrcImageFilesNodeData(_ZooSrcImageBase):
     """OpenCV测试图节点"""

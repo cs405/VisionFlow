@@ -75,10 +75,6 @@ class SrcVideoFilesNodeData(SrcFilesVisionNodeData, OpenCVNodeDataBase):
         # 返回成功结果
         return self.ok(frame, f"帧: {self.frame_index}")
 
-    def _update_result_image_source(self):
-        """更新结果图像源"""
-        self._result_image_source = self._mat
-
     def dispose(self):
         """释放资源"""
         # 如果视频捕获对象存在，释放资源

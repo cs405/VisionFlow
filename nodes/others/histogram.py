@@ -30,6 +30,3 @@ class Hist(OpenCVNodeDataBase):
             bar_h = int(hist[i])
             cv2.rectangle(hist_img, (x, h_img - bar_h), (x + bin_w - 1, h_img), (100, 100, 100), -1)
         return self.ok(hist_img, "直方图计算完成")
-
-    def _update_result_image_source(self):
-        self._result_image_source = self._mat

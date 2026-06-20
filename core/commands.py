@@ -111,6 +111,14 @@ class BatchCommand(Command):
         """
         self._commands.append(cmd)
 
+    def _rollback(self, executed: list[Command], scene: Any):
+        """逆序撤销已执行的命令（每个 undo 包裹 try/except）"""
+        for c in reversed(executed):
+            try:
+                c.undo(scene)
+            except Exception:
+                pass
+
     def execute(self, scene: Any) -> Any:
         """
         批量执行所有子命令
@@ -124,9 +132,11 @@ class BatchCommand(Command):
               然后清空 _executed 列表（后续 CommandStack 的 undo 调用成为安全空操作）
         """
         self._executed.clear()
+        executed: list[Command] = []
         for cmd in self._commands:
             try:
                 cmd.execute(scene)
+                executed.append(cmd)
             except Exception:
                 # 撤销失败命令可能已产生的副作用
                 try:
@@ -134,14 +144,10 @@ class BatchCommand(Command):
                 except Exception:
                     pass
                 # 逆序撤销之前已执行的命令
-                for c in reversed(self._executed):
-                    try:
-                        c.undo(scene)
-                    except Exception:
-                        pass
+                self._rollback(executed, scene)
                 self._executed.clear()
                 raise
-            self._executed.append(cmd)
+        self._executed = executed
 
     def undo(self, scene: Any) -> Any:
         """

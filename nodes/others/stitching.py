@@ -60,6 +60,3 @@ class Stitching(OpenCVNodeDataBase):
                 img = cv2.resize(img, (int(w * scale), int(h * scale)))
             res.append(img)
         return res[0], res[1]
-
-    def _update_result_image_source(self):
-        self._result_image_source = self._mat

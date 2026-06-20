@@ -1,4 +1,4 @@
-from nodes.template_matchings.template_base import ITemplateMatchingGroupableNode, MatcherType, OpenCVTemplateMatchingNodeBase
+from nodes.template_matchings.template_base import ITemplateMatchingGroupableNode, MatcherType, NormType, OpenCVTemplateMatchingNodeBase
 from nodes.template_matchings.template_matching import TemplateMatchingNode, TemplateBase64MatchingNode, BestMatchBase64TemplateMatchingNode
 from nodes.template_matchings.sift_matching import SiftFeatureMatchingNode, SiftBase64FeatureMatchingNode
 from nodes.template_matchings.surf_matching import SurfFeatureMatchingNode, SurfBase64FeatureMatchingNode

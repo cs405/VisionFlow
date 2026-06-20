@@ -195,8 +195,5 @@ class XFeatMatchingNode(Base64MatchingNodeData, OpenCVNodeDataBase,
         else:
             return self.error(None, f"错误: 未匹配到目标")
 
-    def _update_result_image_source(self):
-        self._result_image_source = self._mat
-
     def is_valid(self, mat):
         return mat is not None and mat.size > 0

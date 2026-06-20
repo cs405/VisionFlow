@@ -5,6 +5,15 @@ from core.node_base import Property, PropertyGroupNames
 from core.node_selectable import OpenCVNodeDataBase
 from core.data_packet import FlowableResult
 
+# -- KAZE/AKAZE 扩散系数常量 --
+DIFFUSIVITY_CHOICES = ["DIFF_PM_G1", "DIFF_PM_G2", "DIFF_WEICKERT", "DIFF_CHARBONNIER"]
+DIFFUSIVITY_MAP = {
+    "DIFF_PM_G1": cv2.KAZE_DIFF_PM_G1,
+    "DIFF_PM_G2": cv2.KAZE_DIFF_PM_G2,
+    "DIFF_WEICKERT": cv2.KAZE_DIFF_WEICKERT,
+    "DIFF_CHARBONNIER": cv2.KAZE_DIFF_CHARBONNIER,
+}
+
 
 class FeatureBase(OpenCVNodeDataBase):
     """特征检测器基类。提供 _draw_keypoints 标准绘制，子类实现 invoke_core。"""
@@ -24,6 +33,3 @@ class FeatureBase(OpenCVNodeDataBase):
         out = mat.copy() if len(mat.shape) == 3 else cv2.cvtColor(mat, cv2.COLOR_GRAY2BGR)
         cv2.drawKeypoints(out, keypoints, out, color, cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
         return out
-
-    def _update_result_image_source(self):
-        self._result_image_source = self._mat

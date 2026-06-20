@@ -28,9 +28,6 @@ def bootstrap_app_context():
 def discover_nodes(ctx):
     """显式发现并注册所有节点类型。
 
-    取代了旧的 plugin_manager.discover_nodes_package()，
-    该函数依赖于导入时的副作用。
-
     参数：
         ctx: 应用上下文对象
     """

@@ -67,24 +67,7 @@ class OnnxBboxNode(OnnxNodeDataBase):
         class_names = read_labels(self.label_path)
         all_boxes: list[DefectBox] = []
         for forward in forwards:
-            rs = forward.shape[self.output_row_index]
-            cs = forward.shape[self.output_column_index]
-            output_data = forward.reshape(rs, cs)
-            for i in range(output_data.shape[0]):
-                conf_idx = self.output_confidence_index
-                conf = float(output_data[i, conf_idx]) if 0 <= conf_idx < output_data.shape[1] else float(output_data[i, -1])
-                if conf < self.conf_threshold:
-                    continue
-                class_id = 0
-                if output_data.shape[1] > 5:
-                    class_scores = output_data[i, 5:]
-                    if class_scores.size > 0:
-                        class_id = int(np.argmax(class_scores))
-                        if float(np.max(class_scores)) < self.conf_threshold:
-                            continue
-                x, y, bw, bh = [float(output_data[i, j]) for j in range(4)]
-                rect = self._convert_box(x, y, bw, bh, coord_mode, geom_type, factor)
-                all_boxes.append(DefectBox(class_id=class_id, box=rect, score=conf))
+            all_boxes.extend(self._decode_predictions(forward, coord_mode, geom_type, factor))
         nms_boxes = apply_nms(all_boxes, self.conf_threshold, self.nms_threshold)
         result = mat.copy()
         draw_detect_boxes(result, nms_boxes)
@@ -98,6 +81,32 @@ class OnnxBboxNode(OnnxNodeDataBase):
             self.matching_max_class = ""
             self.max_confidence_result = 0.0
         return self.ok(result, f"检测到 {len(tuples)} 个目标")
+
+    def _decode_predictions(self, forward, coord_mode, geom_type, factor) -> list[DefectBox]:
+        """从单个 forward 输出张量解码出 DefectBox 列表"""
+        rs = forward.shape[self.output_row_index]
+        cs = forward.shape[self.output_column_index]
+        output_data = forward.reshape(rs, cs)
+        boxes: list[DefectBox] = []
+        for i in range(output_data.shape[0]):
+            conf_idx = self.output_confidence_index
+            if 0 <= conf_idx < output_data.shape[1]:
+                conf = float(output_data[i, conf_idx])
+            else:
+                conf = float(output_data[i, -1])
+            if conf < self.conf_threshold:
+                continue
+            class_id = 0
+            if output_data.shape[1] > 5:
+                class_scores = output_data[i, 5:]
+                if class_scores.size > 0:
+                    class_id = int(np.argmax(class_scores))
+                    if float(np.max(class_scores)) < self.conf_threshold:
+                        continue
+            x, y, bw, bh = [float(output_data[i, j]) for j in range(4)]
+            rect = self._convert_box(x, y, bw, bh, coord_mode, geom_type, factor)
+            boxes.append(DefectBox(class_id=class_id, box=rect, score=conf))
+        return boxes
 
     def _convert_box(self, x, y, bw, bh, coord_mode, geom_type, factor):
         v1, v2, v3, v4 = x * factor, y * factor, bw * factor, bh * factor

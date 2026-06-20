@@ -194,6 +194,35 @@ def _create_choices_editor(parent, prop_name, prop_desc, current_value):
     return combo, combo
 
 
+def _find_picker_image(node):
+    """查找吸管取色源图
+
+    优先级: 节点 _picker_mat → 上游节点 mat → diagram 中任意 mat
+
+    参数：
+        node: 节点数据对象
+
+    返回：
+        图像数组或 None
+    """
+    if node is None:
+        return None
+    img = getattr(node, '_picker_mat', None)
+    if img is not None:
+        return img
+    for n in getattr(node, 'from_node_datas', []):
+        m = getattr(n, 'mat', None)
+        if m is not None:
+            return m
+    d = getattr(node, 'diagram_data', None)
+    if d and hasattr(d, 'get_all_nodes'):
+        for n in d.get_all_nodes():
+            m = getattr(n, 'mat', None)
+            if m is not None:
+                return m
+    return None
+
+
 @register_editor("color")
 def _create_color_editor(parent, prop_name, prop_desc, current_value):
     """带预览的颜色选择器按钮
@@ -256,21 +285,7 @@ def _create_color_editor(parent, prop_name, prop_desc, current_value):
                 r, g, b = 255, 255, 255
             # 获取吸管取色源图: 节点 _picker_mat → 上游节点 mat → diagram 中任意 mat
             node = getattr(parent, '_current_node', None)
-            picker_img = getattr(node, '_picker_mat', None) if node is not None else None
-            if picker_img is None and node is not None:
-                for n in getattr(node, 'from_node_datas', []):
-                    m = getattr(n, 'mat', None)
-                    if m is not None:
-                        picker_img = m
-                        break
-            if picker_img is None and node is not None:
-                d = getattr(node, 'diagram_data', None)
-                if d and hasattr(d, 'get_all_nodes'):
-                    for n in d.get_all_nodes():
-                        m = getattr(n, 'mat', None)
-                        if m is not None:
-                            picker_img = m
-                            break
+            picker_img = _find_picker_image(node)
             # 打开颜色选择器
             result = ColorPickerDialog.get_color(rgb=(r, g, b), picker_image=picker_img, parent=parent)
             if result:
@@ -1181,29 +1196,35 @@ class PropertyPanel(QWidget):
 
         # 验证反馈
         if prop_desc.validator and isinstance(control, (QLineEdit, QSpinBox, QDoubleSpinBox)):
-            def _validate(val=None, ctrl=control, vfn=prop_desc.validator):
-                # 获取要验证的值
-                if val is not None:
-                    pass
-                elif hasattr(ctrl, 'value'):
-                    val = ctrl.value()
-                else:
-                    val = ctrl.text()
-                # 执行验证
-                ok, msg = vfn(val)
-                # 根据验证结果设置样式
-                style = "border: 1px solid #3f3f46;" if ok else "border: 1px solid #f44336;"
-                if isinstance(ctrl, QLineEdit):
-                    ctrl.setStyleSheet(f"background: #333337; color: #dcdcdc; {style} padding: 4px 8px;")
-                if not ok:
-                    # 设置工具提示显示错误信息
-                    ctrl.setToolTip(msg)
             # 如果是行编辑框，连接文本变化信号
             if isinstance(control, QLineEdit):
-                control.textChanged.connect(_validate)
+                control.textChanged.connect(
+                    lambda v, c=control, vfn=prop_desc.validator: self._validate_property(v, c, vfn))
             # 如果是数值框，连接值变化信号
             elif isinstance(control, (QSpinBox, QDoubleSpinBox)):
-                control.valueChanged.connect(_validate)
+                control.valueChanged.connect(
+                    lambda v, c=control, vfn=prop_desc.validator: self._validate_property(v, c, vfn))
+
+    def _validate_property(self, val, ctrl, vfn):
+        """验证属性值并更新控件样式
+
+        参数：
+            val: 要验证的值
+            ctrl: 控件对象
+            vfn: 验证器函数，返回 (ok, msg) 元组
+        """
+        if val is not None:
+            pass
+        elif hasattr(ctrl, 'value'):
+            val = ctrl.value()
+        else:
+            val = ctrl.text()
+        ok, msg = vfn(val)
+        style = "border: 1px solid #3f3f46;" if ok else "border: 1px solid #f44336;"
+        if isinstance(ctrl, QLineEdit):
+            ctrl.setStyleSheet(f"background: #333337; color: #dcdcdc; {style} padding: 4px 8px;")
+        if not ok:
+            ctrl.setToolTip(msg)
 
     # ── HSV三通道编辑器 ───────────────────────────────────────────────────
 
@@ -1527,37 +1548,57 @@ class PropertyPanel(QWidget):
         layout.addWidget(summary)
 
         def refresh_state():
-            presenter = node.conditions_presenter
-            n_branches = len(presenter.branches)
-            count_label.setText(f"已配置 {n_branches} 个条件分支")
-            if presenter.branches:
-                lines = []
-                for b in presenter.branches[:3]:
-                    conds_summary = ", ".join(
-                        c.display_text() for c in b.conditions
-                    ) if b.conditions else "(无条件)"
-                    out_id = b.selected_output_node_id or "默认"
-                    lines.append(f"• [{b.condition_operate.name}] {conds_summary} → {out_id}")
-                summary.setText("\n".join(lines))
-            else:
-                summary.setText("尚未配置条件分支")
+            self._refresh_condition_state(node, count_label, summary)
 
         def edit_conditions():
-            # 保存旧值（兼容旧接口）
-            presenter = node.conditions_presenter
-            old_presenter_data = presenter.to_dict()
-            result = ConditionEditorDialog.edit_conditions(node, parent=self)
-            if result is None:
-                # 用户取消，恢复旧状态
-                node._conditions_presenter = type(presenter).from_dict(old_presenter_data)
-                return
-            self.property_changed.emit("conditions_presenter", old_presenter_data, presenter.to_dict())
-            refresh_state()
+            if self._edit_conditions_for_node(node):
+                refresh_state()
 
         edit_btn.clicked.connect(edit_conditions)
         refresh_state()
         self._property_widgets["conditions"] = container
         return container
+
+    def _refresh_condition_state(self, node, count_label, summary):
+        """刷新条件分支摘要显示
+
+        参数：
+            node: 条件节点数据
+            count_label: 分支计数标签
+            summary: 分支摘要标签
+        """
+        presenter = node.conditions_presenter
+        n_branches = len(presenter.branches)
+        count_label.setText(f"已配置 {n_branches} 个条件分支")
+        if presenter.branches:
+            lines = []
+            for b in presenter.branches[:3]:
+                conds_summary = ", ".join(
+                    c.display_text() for c in b.conditions
+                ) if b.conditions else "(无条件)"
+                out_id = b.selected_output_node_id or "默认"
+                lines.append(f"• [{b.condition_operate.name}] {conds_summary} → {out_id}")
+            summary.setText("\n".join(lines))
+        else:
+            summary.setText("尚未配置条件分支")
+
+    def _edit_conditions_for_node(self, node):
+        """打开条件编辑器对话框编辑节点的条件规则
+
+        参数：
+            node: 条件节点数据
+
+        返回：
+            True 表示条件已修改，False 表示用户取消了编辑
+        """
+        presenter = node.conditions_presenter
+        old_presenter_data = presenter.to_dict()
+        result = ConditionEditorDialog.edit_conditions(node, parent=self)
+        if result is None:
+            node._conditions_presenter = type(presenter).from_dict(old_presenter_data)
+            return False
+        self.property_changed.emit("conditions_presenter", old_presenter_data, presenter.to_dict())
+        return True
 
     # ── 辅助方法 ───────────────────────────────────────────────────────
 

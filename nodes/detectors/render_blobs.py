@@ -56,6 +56,3 @@ class RenderBlobs(OpenCVNodeDataBase, IDetectorGroupableNode):
 
         self.blob_count = count
         return self.ok(out, f"发现 {count} 个连通区域")
-
-    def _update_result_image_source(self):
-        self._result_image_source = self._mat

@@ -70,6 +70,3 @@ class DnnSuperres(OpenCVNodeDataBase):
             return self.ok(result, f"双三次插值 {self.scale}x (DNN模型未找到)")
         except Exception as e:
             return self.error(mat, str(e))
-
-    def _update_result_image_source(self):
-        self._result_image_source = self._mat

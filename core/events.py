@@ -93,20 +93,23 @@ class EventSystem:
         """
         with self._lock:  # 获取锁，确保线程安全
             handlers = list(self._handlers.get(event_type, []))  # 将待处理事件转为列表，避免在迭代过程中修改字典
-        error_count = 0  # 错误统计
-        for handler in handlers:  # 对于每一个在待办事项列表中的事项
+        error_count = 0
+        for handler in handlers:
             try:
-                handler(sender, **kwargs)  # 调用处理函数，传入发送者和关键字参数
+                handler(sender, **kwargs)
             except Exception as e:
-                # 如果处理函数抛出异常，且事件类型不是 MESSAGE_ERROR，则发布 MESSAGE_ERROR 事件通知 UI
-                if event_type != EventType.MESSAGE_ERROR and error_count < 5:
-                    error_count += 1  # 错误事件累加
-                    try:
-                        self.publish(EventType.MESSAGE_ERROR, sender=None,
-                                    message=f"事件处理函数错误: {e}")
-                    except Exception as e2:
-                        logging.getLogger(__name__).error(
-                            "无法发布 MESSAGE_ERROR: %s", e2, exc_info=True)
+                self._report_handler_error(error_count, event_type, e)
+                error_count += 1
+
+    def _report_handler_error(self, error_count: int, event_type: EventType, e: Exception):
+        """当 handler 抛出异常时，发布 MESSAGE_ERROR 通知 UI（最多报告前 5 个错误，避免洪水）。"""
+        if event_type != EventType.MESSAGE_ERROR and error_count < 5:
+            try:
+                self.publish(EventType.MESSAGE_ERROR, sender=None,
+                            message=f"事件处理函数错误: {e}")
+            except Exception as e2:
+                logging.getLogger(__name__).error(
+                    "无法发布 MESSAGE_ERROR: %s", e2, exc_info=True)
 
     # 定义清空方法
     def clear(self):

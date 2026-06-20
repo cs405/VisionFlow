@@ -3,7 +3,7 @@
 import cv2
 from core.node_base import Property, PropertyGroupNames
 from core.data_packet import FlowableResult
-from nodes.features.feature_base import FeatureBase
+from nodes.features.feature_base import FeatureBase, DIFFUSIVITY_CHOICES, DIFFUSIVITY_MAP
 
 
 class AKazeFeatureDetector(FeatureBase):
@@ -14,7 +14,7 @@ class AKazeFeatureDetector(FeatureBase):
     n_octaves = Property(4, name="组数(Octaves)", group=PropertyGroupNames.RUN_PARAMETERS)
     n_octave_layers = Property(4, name="组内层数", group=PropertyGroupNames.RUN_PARAMETERS)
     diffusivity = Property("DIFF_PM_G2", name="扩散系数", group=PropertyGroupNames.RUN_PARAMETERS, editor="choices",
-                           choices=["DIFF_PM_G1", "DIFF_PM_G2", "DIFF_WEICKERT", "DIFF_CHARBONNIER"])
+                           choices=DIFFUSIVITY_CHOICES)
 
     def __init__(self):
         super().__init__()
@@ -25,8 +25,7 @@ class AKazeFeatureDetector(FeatureBase):
         if mat is None:
             return self.error(None, "无输入图像")
         dt = {"MLDB": cv2.AKAZE_DESCRIPTOR_MLDB, "KAZE": cv2.AKAZE_DESCRIPTOR_KAZE}.get(self.descriptor_type, cv2.AKAZE_DESCRIPTOR_MLDB)
-        df = {"DIFF_PM_G1": cv2.KAZE_DIFF_PM_G1, "DIFF_PM_G2": cv2.KAZE_DIFF_PM_G2,
-              "DIFF_WEICKERT": cv2.KAZE_DIFF_WEICKERT, "DIFF_CHARBONNIER": cv2.KAZE_DIFF_CHARBONNIER}.get(self.diffusivity, cv2.KAZE_DIFF_PM_G2)
+        df = DIFFUSIVITY_MAP.get(self.diffusivity, cv2.KAZE_DIFF_PM_G2)
         akaze = cv2.AKAZE_create(descriptor_type=dt, descriptor_size=self.descriptor_size,
                                   descriptor_channels=self.descriptor_channels, threshold=self.threshold,
                                   nOctaves=self.n_octaves, nOctaveLayers=self.n_octave_layers, diffusivity=df)

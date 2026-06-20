@@ -70,6 +70,3 @@ class QRCode(OpenCVNodeDataBase, IDetectorGroupableNode):
                 cv2.line(out, p1, p2, (0, 255, 0), 2)
             return self.ok(out, self._cached_msg)
         return self.ok(out, self._cached_msg or "未检测到二维码")
-
-    def _update_result_image_source(self):
-        self._result_image_source = self._mat

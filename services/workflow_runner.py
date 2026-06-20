@@ -195,42 +195,13 @@ class WorkflowRunner:
                                      message="无法运行全部：起始节点不是图像源节点")
                 return
 
-            # 总文件数
             total = len(file_paths)
-            # 遍历所有文件
             for i, file_path in enumerate(file_paths):
-                # 如果收到停止信号，退出循环
                 if self._stop_event.is_set():
                     break
-                # 如果源节点不再使用全部图像，退出循环
-                if not start_node.use_all_image:
-                    break
-
-                # 总是更新源节点的当前文件 — 节点的 invoke_core() 读取 src_file_path 来加载图像
-                # auto_switch 仅控制 UI 缩略图面板是否跟随（见 FILE_ITERATION_NEXT 处理器）
-                start_node.src_file_path = file_path
-
-                # 通知 UI 我们正在开始一个文件迭代
-                # 传递 auto_switch 以便 UI 决定是否刷新缩略图面板
-                event_system.publish(EventType.FILE_ITERATION_NEXT, sender=self,
-                                     file_path=file_path, index=i, total=total,
-                                     auto_switch=auto_switch)
-
-                # 为此文件运行工作流
-                try:
-                    result = self._workflow.execute()
-                    # 如果执行出错
-                    if result.is_error:
-                        # 发布错误消息事件
-                        event_system.publish(EventType.MESSAGE_ERROR, sender=self,
-                                             message=f"文件 [{i+1}/{total}] 执行出错: {result.message}")
-                except Exception:
-                    # 发生异常时发布错误消息事件
-                    event_system.publish(EventType.MESSAGE_ERROR, sender=self,
-                                         message=f"文件 [{i+1}/{total}] 执行异常: {traceback.format_exc()}")
-
-                # 等待间隔时间（Task.Delay(1000) — 迭代之间1秒）
-                if self._stop_event.wait(interval):
+                should_continue = self._run_single_file(file_path, i, total,
+                                                         start_node, auto_switch, interval)
+                if not should_continue:
                     break
 
             # 发布文件迭代完成事件
@@ -239,6 +210,37 @@ class WorkflowRunner:
         finally:
             # 通知主线程执行已完成
             self._run_finished.set()
+
+    def _run_single_file(self, file_path: str, i: int, total: int,
+                         start_node, auto_switch: bool, interval: float) -> bool:
+        """执行单个文件的工作流。返回 True 继续迭代，False 退出循环。"""
+        # 如果源节点不再使用全部图像，退出循环
+        if not start_node.use_all_image:
+            return False
+
+        # 总是更新源节点的当前文件 — 节点的 invoke_core() 读取 src_file_path 来加载图像
+        start_node.src_file_path = file_path
+
+        # 通知 UI 我们正在开始一个文件迭代
+        event_system.publish(EventType.FILE_ITERATION_NEXT, sender=self,
+                             file_path=file_path, index=i, total=total,
+                             auto_switch=auto_switch)
+
+        # 为此文件运行工作流
+        try:
+            result = self._workflow.execute()
+            if result.is_error:
+                event_system.publish(EventType.MESSAGE_ERROR, sender=self,
+                                     message=f"文件 [{i+1}/{total}] 执行出错: {result.message}")
+        except Exception:
+            event_system.publish(EventType.MESSAGE_ERROR, sender=self,
+                                 message=f"文件 [{i+1}/{total}] 执行异常: {traceback.format_exc()}")
+
+        # 等待间隔时间，如果停止信号触发则退出
+        if self._stop_event.wait(interval):
+            return False
+
+        return True
 
     def _run_continuous(self):
         """连续执行循环 — 帧率由起始节点的 invoke_milliseconds_delay 统一控制。

@@ -43,4 +43,3 @@ class FreakFeatureDetector(OpenCVNodeDataBase):
         self.feature_count = len(kp)
         return self.ok(out, f"{len(kp)} 个FREAK特征点")
 
-    def _update_result_image_source(self): self._result_image_source = self._mat

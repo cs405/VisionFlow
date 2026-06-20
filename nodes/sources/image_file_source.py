@@ -55,10 +55,6 @@ class SrcImageFilesNodeData(SrcFilesVisionNodeData, OpenCVNodeDataBase):
         self._original_mat = mat.copy()  # 全图原图，供下游"原图"模式使用
         return self.ok(mat, f"已加载: {os.path.basename(path)}")
 
-    def _update_result_image_source(self):
-        """更新结果图像源"""
-        self._result_image_source = self._mat
-
     def is_valid(self, mat: np.ndarray) -> bool:
         """检查图像是否有效
 

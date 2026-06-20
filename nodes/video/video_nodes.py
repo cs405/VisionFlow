@@ -53,10 +53,6 @@ class MOG(OpenCVNodeDataBase):
         # 返回成功结果
         return self.ok(mask, "前景检测完成")
 
-    def _update_result_image_source(self):
-        """更新结果图像源"""
-        self._result_image_source = self._mat
-
 
 class VideoWriter(OpenCVNodeDataBase):
     """视频写入节点，将帧写入视频文件"""
@@ -130,9 +126,6 @@ class VideoWriter(OpenCVNodeDataBase):
         # 返回成功结果
         return self.ok(mat, f"写入第 {self.frame_count} 帧")
 
-    def _update_result_image_source(self):
-        """更新结果图像源"""
-        self._result_image_source = self._mat
 
     def dispose(self):
         """释放资源"""

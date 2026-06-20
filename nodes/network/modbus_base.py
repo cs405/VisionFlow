@@ -82,6 +82,3 @@ class ModbusBase(OpenCVNodeDataBase):
 
     def _mark_error(self, msg: str = ""):
         self.modbus_state = ModbusState.ERROR.value
-
-    def _update_result_image_source(self):
-        self._result_image_source = self._mat

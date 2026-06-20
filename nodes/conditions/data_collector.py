@@ -73,6 +73,3 @@ class DataCollectorNode(OpenCVNodeDataBase, LogicModuleNode):
             return self.ok(mat, msg)
         else:
             return self.error(mat, msg)
-
-    def _update_result_image_source(self):
-        self._result_image_source = self._mat

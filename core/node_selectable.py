@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import cv2
 import base64
-import ctypes
 import numpy as np
 from core.data_packet import FlowableResult, VisionResultImage
 from core.node_base import Property, PropertyGroupNames
@@ -12,24 +11,12 @@ from core.node_roi import ROINodeData
 
 
 def _is_hidden_or_system(path: str) -> bool:
-    """检查文件/目录是否为隐藏或系统文件。
-
-    Windows: 通过 GetFileAttributesW 检查 FILE_ATTRIBUTE_HIDDEN (2)
-             和 FILE_ATTRIBUTE_SYSTEM (4)。
-    其他平台: 检查名称是否以 '.' 开头。
-    """
-    if os.name == 'nt':
-        try:
-            attrs = ctypes.windll.kernel32.GetFileAttributesW(path)
-            if attrs != -1 and attrs & (2 | 4):
-                return True
-        except FileNotFoundError:
-            pass
-        except OSError:
-            import logging
-            logging.getLogger(__name__).debug("无法获取文件属性: %s", path)
+    try:
+        import stat
+        attrs = os.stat(path).st_file_attributes
+        return bool(attrs & (stat.FILE_ATTRIBUTE_HIDDEN | stat.FILE_ATTRIBUTE_SYSTEM))
+    except (FileNotFoundError, OSError):
         return False
-    return os.path.basename(path).startswith('.')
 
 
 # =============================================================================

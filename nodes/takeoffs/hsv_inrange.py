@@ -48,6 +48,3 @@ class HSVInRange(OpenCVNodeDataBase):
         hsv = cv2.cvtColor(mat, cv2.COLOR_BGR2HSV)
         mask = cv2.inRange(hsv, lower, upper)
         return self.ok(mask, "HSV色彩范围提取完成")
-
-    def _update_result_image_source(self):
-        self._result_image_source = self._mat

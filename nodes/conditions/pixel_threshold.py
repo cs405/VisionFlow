@@ -74,6 +74,3 @@ class PixelThresholdConditionNode(OpenCVNodeDataBase, LogicModuleNode):
         else:
             self._active_output_port_name = "不满足条件"
             return self.ok(mat, f"不满足条件: {count} < {self.min_pixels}")
-
-    def _update_result_image_source(self):
-        self._result_image_source = self._mat

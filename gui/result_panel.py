@@ -10,6 +10,8 @@
   - 帮助标签页：带可点击链接的节点文档
 """
 
+from enum import Enum
+
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem,
                               QTabWidget, QLabel, QTextEdit,
                               QStyledItemDelegate, QStyle)
@@ -25,6 +27,14 @@ from core.result_presenter import (ResultItem, RectangleResultItem, LineResultIt
 from gui.font_icons import FontIcons
 
 
+class MessageState(str, Enum):
+    SUCCESS = "Success"
+    ERROR = "Error"
+    WARNING = "Warning"
+    INFO = "Info"
+    RUNNING = "Running"
+
+
 # ── 项类型的颜色映射 ───────────────────────────────────────────
 
 GEOM_COLORS = {
@@ -38,19 +48,19 @@ GEOM_COLORS = {
 
 # 状态 → 字体图标映射
 STATE_ICONS = {
-    "Success": FontIcons.Completed,   # 成功：完成图标
-    "Error": FontIcons.Error,         # 错误：错误图标
-    "Warning": FontIcons.Warning,     # 警告：警告图标
-    "Info": FontIcons.Info,           # 信息：信息图标
-    "Running": FontIcons.Sync,        # 运行中：同步图标
+    MessageState.SUCCESS: FontIcons.Completed,   # 成功：完成图标
+    MessageState.ERROR: FontIcons.Error,          # 错误：错误图标
+    MessageState.WARNING: FontIcons.Warning,      # 警告：警告图标
+    MessageState.INFO: FontIcons.Info,            # 信息：信息图标
+    MessageState.RUNNING: FontIcons.Sync,         # 运行中：同步图标
 }
 # 状态 → 颜色映射
 STATE_COLORS = {
-    "Success": "#4caf50",   # 成功：绿色
-    "Error": "#f44336",     # 错误：红色
-    "Warning": "#ff9800",   # 警告：橙色
-    "Info": "#dcdcdc",      # 信息：白色
-    "Running": "#2196f3",   # 运行中：蓝色
+    MessageState.SUCCESS: "#4caf50",   # 成功：绿色
+    MessageState.ERROR: "#f44336",      # 错误：红色
+    MessageState.WARNING: "#ff9800",    # 警告：橙色
+    MessageState.INFO: "#dcdcdc",       # 信息：白色
+    MessageState.RUNNING: "#2196f3",    # 运行中：蓝色
 }
 
 
@@ -576,7 +586,7 @@ class ResultPanel(QWidget):
 
         # 结果数据 — 图标 + 文本
         # 消息文本
-        msg_text = msg.message or ("完成" if msg.state == "Success" else "失败")
+        msg_text = msg.message or ("完成" if msg.state == MessageState.SUCCESS else "失败")
         msg_item = QTableWidgetItem(msg_text)
         msg_item.setData(Qt.UserRole, node_id)
         # 获取图标
@@ -601,7 +611,7 @@ class ResultPanel(QWidget):
             time_item.setText(msg.time_span)
         # 更新消息文本列
         msg_item = self._history_table.item(row, 3)
-        msg_text = msg.message or ("完成" if msg.state == "Success" else "失败")
+        msg_text = msg.message or ("完成" if msg.state == MessageState.SUCCESS else "失败")
         if msg_item:
             msg_item.setText(msg_text)
         # 更新图标
