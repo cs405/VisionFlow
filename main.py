@@ -106,6 +106,8 @@ def run_gui(ctx):
 
 
 def main():
+    from core.crash_handler import install as install_crash_handlers
+    install_crash_handlers()
     ctx = bootstrap_app_context()
     run_gui(ctx)
 
