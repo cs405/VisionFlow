@@ -13,3 +13,4 @@ from nodes.onnx.yolov5_face import Yolov5FaceOnnxNode
 from nodes.onnx.age_infer import AgeInferOnnxNode
 from nodes.onnx.gender_cls import GenderClsOnnxNode
 from nodes.onnx.human_semseg import HumanSemSegOnnxNode
+from nodes.onnx.yolov8_detect import Yolov8OnnxNode

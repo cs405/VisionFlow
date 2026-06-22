@@ -1,0 +1,37 @@
+{
+  "name": "形态学模块示例",
+  "version": "2.0.0",
+  "description": "演示膨胀、腐蚀、开运算、闭运算、梯度等形态学操作",
+  "author": "VisionFlow",
+  "created_at": "2026-06-04T00:00:00",
+  "modified_at": "2026-06-04T00:00:00",
+  "selected_diagram_index": 0,
+  "diagrams": [
+    {
+      "id": "morph-001",
+      "name": "形态学处理",
+      "description": "源 → 灰度 → 二值化 → 腐蚀 → 膨胀 → 开运算",
+      "width": 1200.0,
+      "height": 800.0,
+      "location": "0,0",
+      "workflow": {
+        "nodes": [
+          {"id": "s1", "type": "SrcImageFilesNodeData", "name": "输入图像", "x": 100.0, "y": 200.0, "properties": {}},
+          {"id": "cv1", "type": "CvtColor", "name": "转灰度", "x": 320.0, "y": 200.0, "properties": {"color_code": "BGR2GRAY"}},
+          {"id": "th1", "type": "Threshold", "name": "二值化", "x": 520.0, "y": 200.0, "properties": {"thresh": 127.0, "threshold_type": "Binary"}},
+          {"id": "er1", "type": "Erode", "name": "腐蚀", "x": 720.0, "y": 80.0, "properties": {"kernel_size": 3, "iterations": 1}},
+          {"id": "di1", "type": "Dilate", "name": "膨胀", "x": 720.0, "y": 200.0, "properties": {"kernel_size": 3, "iterations": 1}},
+          {"id": "op1", "type": "Open", "name": "开运算", "x": 720.0, "y": 320.0, "properties": {"kernel_size": 5, "iterations": 1}}
+        ],
+        "links": [
+          {"id": "l1", "from_node": "s1", "from_port": 0, "to_node": "cv1", "to_port": 0},
+          {"id": "l2", "from_node": "cv1", "from_port": 0, "to_node": "th1", "to_port": 0},
+          {"id": "l3", "from_node": "th1", "from_port": 0, "to_node": "er1", "to_port": 0},
+          {"id": "l4", "from_node": "th1", "from_port": 0, "to_node": "di1", "to_port": 0},
+          {"id": "l5", "from_node": "di1", "from_port": 0, "to_node": "op1", "to_port": 0}
+        ]
+      }
+    }
+  ],
+  "templates": []
+}

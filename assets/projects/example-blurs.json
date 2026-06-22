@@ -1,0 +1,413 @@
+{
+  "name": "滤波模糊模块示例",
+  "version": "2.0.0",
+  "description": "演示高斯模糊、均值模糊、细节增强、边缘保留滤波、铅笔素描等滤波操作",
+  "author": "VisionFlow",
+  "created_at": "2026-06-04T00:00:00",
+  "modified_at": "2026-06-16T13:15:06.859410",
+  "selected_diagram_index": 0,
+  "diagrams": [
+    {
+      "id": "blur-001",
+      "name": "滤波处理",
+      "description": "图像源 → 高斯模糊 / 细节增强 / 铅笔素描",
+      "width": 1000.0,
+      "height": 800.0,
+      "location": "0,0",
+      "workflow": {
+        "name": "新建流程",
+        "nodes": [
+          {
+            "id": "s1",
+            "type": "SrcImageFilesNodeData",
+            "name": "输入图像",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "fba5d94e",
+                "node_id": "s1",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "a0c1819c",
+                "node_id": "s1",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "22bdba8b",
+                "node_id": "s1",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "f3b8f4b0",
+                "node_id": "s1",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "pixel_width": 256,
+              "pixel_height": 256,
+              "image_color_type": "uint8",
+              "use_all_image": false,
+              "use_auto_switch": true,
+              "src_file_path": "E:/VisionFlow/assets/images\\Mandrill.bmp",
+              "invoke_milliseconds_delay": 33,
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true,
+              "demo_base_parameter1": "",
+              "demo_run_parameter1": "",
+              "demo_result1": ""
+            },
+            "pos_x": -169.0,
+            "pos_y": -290.0,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            },
+            "src_file_paths": [
+              "E:/VisionFlow/assets/images\\12.jpg",
+              "E:/VisionFlow/assets/images\\16bit.png",
+              "E:/VisionFlow/assets/images\\Balloon.png",
+              "E:/VisionFlow/assets/images\\Girl.bmp",
+              "E:/VisionFlow/assets/images\\Mandrill.bmp",
+              "E:/VisionFlow/assets/images\\Squares\\pic1.png",
+              "E:/VisionFlow/assets/images\\Squares\\pic2.png",
+              "E:/VisionFlow/assets/images\\Squares\\pic3.png",
+              "E:/VisionFlow/assets/images\\Squares\\pic4.png",
+              "E:/VisionFlow/assets/images\\Squares\\pic5.png",
+              "E:/VisionFlow/assets/images\\Squares\\pic6.png",
+              "E:/VisionFlow/assets/images\\aruco_markers_photo.jpg",
+              "E:/VisionFlow/assets/images\\aruco_markers_source.jpg",
+              "E:/VisionFlow/assets/images\\asahiyama.jpg",
+              "E:/VisionFlow/assets/images\\binarization_sample.bmp",
+              "E:/VisionFlow/assets/images\\box.png",
+              "E:/VisionFlow/assets/images\\box_in_scene.png",
+              "E:/VisionFlow/assets/images\\cake.bmp",
+              "E:/VisionFlow/assets/images\\cat.jpg",
+              "E:/VisionFlow/assets/images\\circle.png",
+              "E:/VisionFlow/assets/images\\cvmorph.png",
+              "E:/VisionFlow/assets/images\\fruits.jpg",
+              "E:/VisionFlow/assets/images\\goryokaku.jpg",
+              "E:/VisionFlow/assets/images\\hand_p.jpg",
+              "E:/VisionFlow/assets/images\\lenna.png",
+              "E:/VisionFlow/assets/images\\lenna511.png",
+              "E:/VisionFlow/assets/images\\maltese.jpg",
+              "E:/VisionFlow/assets/images\\match1.png",
+              "E:/VisionFlow/assets/images\\match2.png",
+              "E:/VisionFlow/assets/images\\penguin1.png",
+              "E:/VisionFlow/assets/images\\penguin1b.png",
+              "E:/VisionFlow/assets/images\\penguin2.png",
+              "E:/VisionFlow/assets/images\\pentagon.png",
+              "E:/VisionFlow/assets/images\\shapes.png",
+              "E:/VisionFlow/assets/images\\space_shuttle.jpg",
+              "E:/VisionFlow/assets/images\\template.jpg",
+              "E:/VisionFlow/assets/images\\test\\001.jpg",
+              "E:/VisionFlow/assets/images\\test\\002.jpg",
+              "E:/VisionFlow/assets/images\\test\\003.jpg",
+              "E:/VisionFlow/assets/images\\test\\004.jpg",
+              "E:/VisionFlow/assets/images\\test\\005.jpg",
+              "E:/VisionFlow/assets/images\\test\\006.jpg",
+              "E:/VisionFlow/assets/images\\test\\007.jpg",
+              "E:/VisionFlow/assets/images\\test\\008.jpg",
+              "E:/VisionFlow/assets/images\\test\\009.jpg",
+              "E:/VisionFlow/assets/images\\test\\010.jpg",
+              "E:/VisionFlow/assets/images\\test\\011.jpg",
+              "E:/VisionFlow/assets/images\\test\\012.jpg",
+              "E:/VisionFlow/assets/images\\test\\013.jpg",
+              "E:/VisionFlow/assets/images\\test\\014.jpg",
+              "E:/VisionFlow/assets/images\\test\\015.jpg",
+              "E:/VisionFlow/assets/images\\test\\016.jpg",
+              "E:/VisionFlow/assets/images\\test\\017.jpg",
+              "E:/VisionFlow/assets/images\\test\\018.jpg",
+              "E:/VisionFlow/assets/images\\test\\019.jpg",
+              "E:/VisionFlow/assets/images\\tsukuba_left.png",
+              "E:/VisionFlow/assets/images\\tsukuba_right.png",
+              "E:/VisionFlow/assets/images\\very_old_newspaper.png",
+              "E:/VisionFlow/assets/images\\walkman.jpg",
+              "E:/VisionFlow/assets/images\\yalta.jpg"
+            ],
+            "src_file_path": "E:/VisionFlow/assets/images\\Mandrill.bmp",
+            "use_all_image": false,
+            "use_auto_switch": true,
+            "invoke_milliseconds_delay": 33
+          },
+          {
+            "id": "gb1",
+            "type": "GaussianBlur",
+            "name": "高斯模糊",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "a048c933",
+                "node_id": "gb1",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "c6a39aa4",
+                "node_id": "gb1",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "b967abab",
+                "node_id": "gb1",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "acdc7497",
+                "node_id": "gb1",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "ksize": 7,
+              "sigma_x": 1.5,
+              "sigma_y": 0.0,
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true,
+              "demo_base_parameter1": "",
+              "demo_run_parameter1": "",
+              "demo_result1": ""
+            },
+            "pos_x": -170.0,
+            "pos_y": -200.0,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          },
+          {
+            "id": "de1",
+            "type": "DetailEnhance",
+            "name": "细节增强",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "3ec1ffcd",
+                "node_id": "de1",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "5b68239b",
+                "node_id": "de1",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "a1db4956",
+                "node_id": "de1",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "bf41c6f4",
+                "node_id": "de1",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "sigma_s": 10.0,
+              "sigma_r": 0.15,
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true,
+              "demo_base_parameter1": "",
+              "demo_run_parameter1": "",
+              "demo_result1": ""
+            },
+            "pos_x": -170.0,
+            "pos_y": -94.0,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          },
+          {
+            "id": "ps1",
+            "type": "PencilSketch",
+            "name": "铅笔素描",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "231beae6",
+                "node_id": "ps1",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "b07b2307",
+                "node_id": "ps1",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "d94bdd07",
+                "node_id": "ps1",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "328e7b11",
+                "node_id": "ps1",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "sigma_s": 60.0,
+              "sigma_r": 0.07,
+              "shade_factor": 0.02,
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true,
+              "demo_base_parameter1": "",
+              "demo_run_parameter1": "",
+              "demo_result1": ""
+            },
+            "pos_x": -170.0,
+            "pos_y": 17.0,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          },
+          {
+            "id": "ep1",
+            "type": "EdgePreservingFilter",
+            "name": "边缘保留滤波",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "3745e2ba",
+                "node_id": "ep1",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "d32e52d7",
+                "node_id": "ep1",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "a54e6afd",
+                "node_id": "ep1",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "528de960",
+                "node_id": "ep1",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "filter_type": "RECURSIVE",
+              "sigma_s": 60.0,
+              "sigma_r": 0.4,
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true,
+              "demo_base_parameter1": "",
+              "demo_run_parameter1": "",
+              "demo_result1": ""
+            },
+            "pos_x": -168.0,
+            "pos_y": 134.0,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          }
+        ],
+        "links": [
+          {
+            "link_id": "46adc07f",
+            "from_node_id": "s1",
+            "from_port_id": "a0c1819c",
+            "to_node_id": "gb1",
+            "to_port_id": "a048c933",
+            "text": ""
+          },
+          {
+            "link_id": "86e95840",
+            "from_node_id": "gb1",
+            "from_port_id": "c6a39aa4",
+            "to_node_id": "de1",
+            "to_port_id": "3ec1ffcd",
+            "text": ""
+          },
+          {
+            "link_id": "2fb1b005",
+            "from_node_id": "de1",
+            "from_port_id": "5b68239b",
+            "to_node_id": "ps1",
+            "to_port_id": "231beae6",
+            "text": ""
+          },
+          {
+            "link_id": "0d5d9d8f",
+            "from_node_id": "ps1",
+            "from_port_id": "b07b2307",
+            "to_node_id": "ep1",
+            "to_port_id": "3745e2ba",
+            "text": ""
+          }
+        ]
+      }
+    }
+  ],
+  "templates": []
+}

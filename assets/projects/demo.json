@@ -1,0 +1,2338 @@
+{
+  "name": "demo",
+  "version": "2.0.0",
+  "description": "",
+  "author": "",
+  "created_at": "2026-06-22T11:35:27.274634",
+  "modified_at": "2026-06-22T14:48:58.300099",
+  "selected_diagram_index": 0,
+  "diagrams": [
+    {
+      "id": "125779d3-def1-4f39-bf2e-6411aa802643",
+      "name": "新建项目",
+      "description": "",
+      "width": 1000.0,
+      "height": 1500.0,
+      "location": "0,0",
+      "workflow": {
+        "name": "新建项目",
+        "nodes": [
+          {
+            "id": "fcbbcc52",
+            "type": "SrcImageFilesNodeData",
+            "name": "图像文件",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "f7d2add4",
+                "node_id": "fcbbcc52",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "9275520e",
+                "node_id": "fcbbcc52",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "0bb18661",
+                "node_id": "fcbbcc52",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "c970a141",
+                "node_id": "fcbbcc52",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "pixel_width": 2812,
+              "pixel_height": 1280,
+              "image_color_type": "uint8",
+              "use_all_image": false,
+              "use_auto_switch": true,
+              "src_file_path": "D:\\projects\\VisionFlow\\assets\\images\\test\\011.jpg",
+              "invoke_milliseconds_delay": 33,
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true
+            },
+            "pos_x": -179.0,
+            "pos_y": -415.0,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            },
+            "src_file_paths": [
+              "D:\\projects\\VisionFlow\\assets\\images\\12.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\16bit.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\Balloon.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\Girl.bmp",
+              "D:\\projects\\VisionFlow\\assets\\images\\Mandrill.bmp",
+              "D:\\projects\\VisionFlow\\assets\\images\\Squares\\pic1.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\Squares\\pic2.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\Squares\\pic3.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\Squares\\pic4.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\Squares\\pic5.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\Squares\\pic6.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\aruco_markers_photo.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\aruco_markers_source.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\asahiyama.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\binarization_sample.bmp",
+              "D:\\projects\\VisionFlow\\assets\\images\\box.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\box_in_scene.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\cake.bmp",
+              "D:\\projects\\VisionFlow\\assets\\images\\cat.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\circle.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\cvmorph.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\fruits.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\goryokaku.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\hand_p.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\lenna.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\lenna511.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\maltese.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\match1.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\match2.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\penguin1.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\penguin1b.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\penguin2.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\pentagon.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\shapes.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\space_shuttle.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\template.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\test\\001.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\test\\002.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\test\\003.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\test\\004.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\test\\005.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\test\\006.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\test\\007.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\test\\008.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\test\\009.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\test\\010.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\test\\011.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\test\\012.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\test\\013.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\test\\014.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\test\\015.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\test\\016.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\test\\017.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\test\\018.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\test\\019.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\tsukuba_left.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\tsukuba_right.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\very_old_newspaper.png",
+              "D:\\projects\\VisionFlow\\assets\\images\\walkman.jpg",
+              "D:\\projects\\VisionFlow\\assets\\images\\yalta.jpg"
+            ],
+            "src_file_path": "D:\\projects\\VisionFlow\\assets\\images\\test\\011.jpg",
+            "use_all_image": false,
+            "use_auto_switch": true,
+            "invoke_milliseconds_delay": 33
+          },
+          {
+            "id": "54d517bf",
+            "type": "CropNode",
+            "name": "裁剪",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "421a5c1e",
+                "node_id": "54d517bf",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "932ab2ca",
+                "node_id": "54d517bf",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "c0a39887",
+                "node_id": "54d517bf",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "5bd519a6",
+                "node_id": "54d517bf",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true
+            },
+            "pos_x": -494.0,
+            "pos_y": -313.0,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "DrawROI",
+              "name": "绘制ROI",
+              "rect": [
+                406,
+                393,
+                528,
+                568
+              ],
+              "roi_type": "矩形",
+              "angle": 0.0
+            }
+          },
+          {
+            "id": "824dca9e",
+            "type": "CropNode",
+            "name": "裁剪",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "26e8486d",
+                "node_id": "824dca9e",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "ec2d2836",
+                "node_id": "824dca9e",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "306df678",
+                "node_id": "824dca9e",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "d820c6f0",
+                "node_id": "824dca9e",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true
+            },
+            "pos_x": -288.0,
+            "pos_y": -313.0,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "DrawROI",
+              "name": "绘制ROI",
+              "rect": [
+                1035,
+                406,
+                567,
+                550
+              ],
+              "roi_type": "矩形",
+              "angle": 0.0
+            }
+          },
+          {
+            "id": "575f3529",
+            "type": "CropNode",
+            "name": "裁剪",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "e8d80278",
+                "node_id": "575f3529",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "e848dadf",
+                "node_id": "575f3529",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "6fe595c7",
+                "node_id": "575f3529",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "592c6711",
+                "node_id": "575f3529",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true
+            },
+            "pos_x": -82.0,
+            "pos_y": -313.5,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "DrawROI",
+              "name": "绘制ROI",
+              "rect": [
+                1668,
+                362,
+                563,
+                581
+              ],
+              "roi_type": "矩形",
+              "angle": 0.0
+            }
+          },
+          {
+            "id": "61be2693",
+            "type": "CropNode",
+            "name": "裁剪",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "7b252190",
+                "node_id": "61be2693",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "199a85e7",
+                "node_id": "61be2693",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "ce843798",
+                "node_id": "61be2693",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "aee8fca6",
+                "node_id": "61be2693",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true
+            },
+            "pos_x": 124.0,
+            "pos_y": -313.5,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "DrawROI",
+              "name": "绘制ROI",
+              "rect": [
+                2161,
+                327,
+                524,
+                599
+              ],
+              "roi_type": "矩形",
+              "angle": 0.0
+            }
+          },
+          {
+            "id": "965003a9",
+            "type": "Yolov8OnnxNode",
+            "name": "YOLOv8检测",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "b6910db4",
+                "node_id": "965003a9",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "d716e55f",
+                "node_id": "965003a9",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "03eb3f6e",
+                "node_id": "965003a9",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "bbaade7c",
+                "node_id": "965003a9",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "label_path": "",
+              "conf_threshold": 0.9,
+              "nms_threshold": 0.7,
+              "min_area": 0,
+              "max_area": 10000000,
+              "min_aspect_ratio": 0.0,
+              "max_aspect_ratio": 100.0,
+              "matching_count_result": 1,
+              "matching_max_class": "0",
+              "max_confidence_result": 0.9653611183166504,
+              "confidence": 0.9653611183166504,
+              "matched": true,
+              "match_x": 182,
+              "match_y": 271,
+              "match_w": 240,
+              "match_h": 295,
+              "model_path": "D:/projects/VisionFlow/assets/models/velcro.onnx",
+              "input_width": 640,
+              "input_height": 640,
+              "blob_scale_factor": 255.0,
+              "blob_mean": "0,0,0",
+              "blob_std": "",
+              "output_row_index": 1,
+              "output_column_index": 2,
+              "output_confidence_index": -1,
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true
+            },
+            "pos_x": -494.0,
+            "pos_y": -239.5,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          },
+          {
+            "id": "dac2ded2",
+            "type": "Yolov8OnnxNode",
+            "name": "YOLOv8检测",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "9e2a9ad9",
+                "node_id": "dac2ded2",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "da4baadf",
+                "node_id": "dac2ded2",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "b53c0e53",
+                "node_id": "dac2ded2",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "41b10a69",
+                "node_id": "dac2ded2",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "label_path": "",
+              "conf_threshold": 0.8,
+              "nms_threshold": 0.7,
+              "min_area": 0,
+              "max_area": 10000000,
+              "min_aspect_ratio": 0.0,
+              "max_aspect_ratio": 100.0,
+              "matching_count_result": 1,
+              "matching_max_class": "0",
+              "max_confidence_result": 0.8431850075721741,
+              "confidence": 0.8431850075721741,
+              "matched": true,
+              "match_x": 130,
+              "match_y": 388,
+              "match_w": 165,
+              "match_h": 160,
+              "model_path": "D:/projects/VisionFlow/assets/models/velcro.onnx",
+              "input_width": 640,
+              "input_height": 640,
+              "blob_scale_factor": 255.0,
+              "blob_mean": "0,0,0",
+              "blob_std": "",
+              "output_row_index": 1,
+              "output_column_index": 2,
+              "output_confidence_index": -1,
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true
+            },
+            "pos_x": -288.0,
+            "pos_y": -239.5,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          },
+          {
+            "id": "010a8fbf",
+            "type": "Yolov8OnnxNode",
+            "name": "YOLOv8检测",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "3d7aff24",
+                "node_id": "010a8fbf",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "c3ecd7c7",
+                "node_id": "010a8fbf",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "90456e79",
+                "node_id": "010a8fbf",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "347dbde7",
+                "node_id": "010a8fbf",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "label_path": "",
+              "conf_threshold": 0.8,
+              "nms_threshold": 0.7,
+              "min_area": 0,
+              "max_area": 10000000,
+              "min_aspect_ratio": 0.0,
+              "max_aspect_ratio": 100.0,
+              "matching_count_result": 0,
+              "matching_max_class": "",
+              "max_confidence_result": 0.0,
+              "confidence": 0.0,
+              "matched": false,
+              "match_x": 0,
+              "match_y": 0,
+              "match_w": 0,
+              "match_h": 0,
+              "model_path": "D:/projects/VisionFlow/assets/models/velcro.onnx",
+              "input_width": 640,
+              "input_height": 640,
+              "blob_scale_factor": 255.0,
+              "blob_mean": "0,0,0",
+              "blob_std": "",
+              "output_row_index": 1,
+              "output_column_index": 2,
+              "output_confidence_index": -1,
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true
+            },
+            "pos_x": -82.0,
+            "pos_y": -239.5,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          },
+          {
+            "id": "5b7ab467",
+            "type": "Yolov8OnnxNode",
+            "name": "YOLOv8检测",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "544d3517",
+                "node_id": "5b7ab467",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "ab3ec334",
+                "node_id": "5b7ab467",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "6e61abd8",
+                "node_id": "5b7ab467",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "a8e5fe67",
+                "node_id": "5b7ab467",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "label_path": "",
+              "conf_threshold": 0.8,
+              "nms_threshold": 0.7,
+              "min_area": 0,
+              "max_area": 10000000,
+              "min_aspect_ratio": 0.0,
+              "max_aspect_ratio": 100.0,
+              "matching_count_result": 0,
+              "matching_max_class": "",
+              "max_confidence_result": 0.0,
+              "confidence": 0.0,
+              "matched": false,
+              "match_x": 0,
+              "match_y": 0,
+              "match_w": 0,
+              "match_h": 0,
+              "model_path": "D:/projects/VisionFlow/assets/models/velcro.onnx",
+              "input_width": 640,
+              "input_height": 640,
+              "blob_scale_factor": 255.0,
+              "blob_mean": "0,0,0",
+              "blob_std": "",
+              "output_row_index": 1,
+              "output_column_index": 2,
+              "output_confidence_index": -1,
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true
+            },
+            "pos_x": 124.0,
+            "pos_y": -239.5,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          },
+          {
+            "id": "ac165f60",
+            "type": "CvtColor",
+            "name": "色彩空间转换",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "8b9e231c",
+                "node_id": "ac165f60",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "add86363",
+                "node_id": "ac165f60",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "5cb82250",
+                "node_id": "ac165f60",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "3f40a065",
+                "node_id": "ac165f60",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "color_code": "BGR2GRAY",
+              "dst_cn": 0,
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true
+            },
+            "pos_x": -494.0,
+            "pos_y": -166.0,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          },
+          {
+            "id": "1b55747b",
+            "type": "CvtColor",
+            "name": "色彩空间转换",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "ddcd4284",
+                "node_id": "1b55747b",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "427adf8a",
+                "node_id": "1b55747b",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "3b0d4180",
+                "node_id": "1b55747b",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "423fec42",
+                "node_id": "1b55747b",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "color_code": "BGR2GRAY",
+              "dst_cn": 0,
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true
+            },
+            "pos_x": -288.0,
+            "pos_y": -166.0,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          },
+          {
+            "id": "65ce8646",
+            "type": "CvtColor",
+            "name": "色彩空间转换",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "6f0c4262",
+                "node_id": "65ce8646",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "c14fd961",
+                "node_id": "65ce8646",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "ccf2fee9",
+                "node_id": "65ce8646",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "7ee69c15",
+                "node_id": "65ce8646",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "color_code": "BGR2GRAY",
+              "dst_cn": 0,
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true
+            },
+            "pos_x": -82.0,
+            "pos_y": -165.5,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          },
+          {
+            "id": "a760712a",
+            "type": "CvtColor",
+            "name": "色彩空间转换",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "8c8ad999",
+                "node_id": "a760712a",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "335736ae",
+                "node_id": "a760712a",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "6e6b1489",
+                "node_id": "a760712a",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "bc0615a8",
+                "node_id": "a760712a",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "color_code": "BGR2GRAY",
+              "dst_cn": 0,
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true
+            },
+            "pos_x": 124.0,
+            "pos_y": -165.5,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          },
+          {
+            "id": "fe970166",
+            "type": "DataCollectorNode",
+            "name": "数据收集",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "505a1fc9",
+                "node_id": "fe970166",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "48e00d22",
+                "node_id": "fe970166",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "dfb321d6",
+                "node_id": "fe970166",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "fc4625f2",
+                "node_id": "fe970166",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "matched": false,
+              "true_count": 2,
+              "total_count": 4,
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true
+            },
+            "pos_x": 321.0,
+            "pos_y": -161.0,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          },
+          {
+            "id": "98ca8f9c",
+            "type": "GaussianBlur",
+            "name": "高斯模糊",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "f1ded132",
+                "node_id": "98ca8f9c",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "1cb93b23",
+                "node_id": "98ca8f9c",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "2e603111",
+                "node_id": "98ca8f9c",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "cfbfe0d0",
+                "node_id": "98ca8f9c",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "ksize": 31,
+              "sigma_x": 0.0,
+              "sigma_y": 0.0,
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true
+            },
+            "pos_x": -494.0,
+            "pos_y": -92.5,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          },
+          {
+            "id": "edcd1856",
+            "type": "GaussianBlur",
+            "name": "高斯模糊",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "831830ad",
+                "node_id": "edcd1856",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "e9c3c51a",
+                "node_id": "edcd1856",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "52c5421f",
+                "node_id": "edcd1856",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "0801c975",
+                "node_id": "edcd1856",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "ksize": 31,
+              "sigma_x": 0.0,
+              "sigma_y": 0.0,
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true
+            },
+            "pos_x": -288.0,
+            "pos_y": -92.5,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          },
+          {
+            "id": "e30da7c7",
+            "type": "GaussianBlur",
+            "name": "高斯模糊",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "1b1e7db2",
+                "node_id": "e30da7c7",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "622d4930",
+                "node_id": "e30da7c7",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "85961cf9",
+                "node_id": "e30da7c7",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "1681784a",
+                "node_id": "e30da7c7",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "ksize": 31,
+              "sigma_x": 0.0,
+              "sigma_y": 0.0,
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true
+            },
+            "pos_x": -82.0,
+            "pos_y": -91.5,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          },
+          {
+            "id": "77f67679",
+            "type": "GaussianBlur",
+            "name": "高斯模糊",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "2eda613d",
+                "node_id": "77f67679",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "9717623a",
+                "node_id": "77f67679",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "1c0aca79",
+                "node_id": "77f67679",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "a88d25dd",
+                "node_id": "77f67679",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "ksize": 31,
+              "sigma_x": 0.0,
+              "sigma_y": 0.0,
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true
+            },
+            "pos_x": 124.0,
+            "pos_y": -91.5,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          },
+          {
+            "id": "9c41b8c7",
+            "type": "Threshold",
+            "name": "阈值化",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "0891d9f9",
+                "node_id": "9c41b8c7",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "2194ec51",
+                "node_id": "9c41b8c7",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "2e413941",
+                "node_id": "9c41b8c7",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "0dfa25e2",
+                "node_id": "9c41b8c7",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "thresh": 125.0,
+              "maxval": 255.0,
+              "threshold_type": "Binary",
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true
+            },
+            "pos_x": -494.0,
+            "pos_y": -19.0,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          },
+          {
+            "id": "16489d3a",
+            "type": "Threshold",
+            "name": "阈值化",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "12451ff8",
+                "node_id": "16489d3a",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "1820a991",
+                "node_id": "16489d3a",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "db5590d7",
+                "node_id": "16489d3a",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "b06dd4cb",
+                "node_id": "16489d3a",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "thresh": 125.0,
+              "maxval": 255.0,
+              "threshold_type": "Binary",
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true
+            },
+            "pos_x": -288.0,
+            "pos_y": -19.0,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          },
+          {
+            "id": "88ee9c7f",
+            "type": "Threshold",
+            "name": "阈值化",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "9f52f68b",
+                "node_id": "88ee9c7f",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "e452cecd",
+                "node_id": "88ee9c7f",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "053c0971",
+                "node_id": "88ee9c7f",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "d607aeeb",
+                "node_id": "88ee9c7f",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "thresh": 125.0,
+              "maxval": 255.0,
+              "threshold_type": "Binary",
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true
+            },
+            "pos_x": -82.0,
+            "pos_y": -17.5,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          },
+          {
+            "id": "82961da2",
+            "type": "Threshold",
+            "name": "阈值化",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "431c4aa7",
+                "node_id": "82961da2",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "9085f1fe",
+                "node_id": "82961da2",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "bf8b23aa",
+                "node_id": "82961da2",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "26f67bac",
+                "node_id": "82961da2",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "thresh": 125.0,
+              "maxval": 255.0,
+              "threshold_type": "Binary",
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true
+            },
+            "pos_x": 124.0,
+            "pos_y": -17.5,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          },
+          {
+            "id": "3d53022d",
+            "type": "DrawContoursNode",
+            "name": "轮廓绘制",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "e11a44f0",
+                "node_id": "3d53022d",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "ac2ff376",
+                "node_id": "3d53022d",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "7f6980fe",
+                "node_id": "3d53022d",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "87a9fbf9",
+                "node_id": "3d53022d",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "draw_source_id": "",
+              "min_area": 100,
+              "max_area": 999999,
+              "margin_left": 0,
+              "margin_right": 0,
+              "margin_top": 0,
+              "margin_bottom": 0,
+              "target_count": 4,
+              "matched": false,
+              "drawn_count": 3,
+              "match_x": 157,
+              "match_y": 38,
+              "match_w": 48,
+              "match_h": 7,
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true
+            },
+            "pos_x": -494.0,
+            "pos_y": 54.5,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          },
+          {
+            "id": "c24e076f",
+            "type": "DrawContoursNode",
+            "name": "轮廓绘制",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "99ed3c7b",
+                "node_id": "c24e076f",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "95976a34",
+                "node_id": "c24e076f",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "cb15e23b",
+                "node_id": "c24e076f",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "a7249838",
+                "node_id": "c24e076f",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "draw_source_id": "",
+              "min_area": 100,
+              "max_area": 999999,
+              "margin_left": 0,
+              "margin_right": 0,
+              "margin_top": 0,
+              "margin_bottom": 0,
+              "target_count": 4,
+              "matched": false,
+              "drawn_count": 2,
+              "match_x": 57,
+              "match_y": 53,
+              "match_w": 50,
+              "match_h": 13,
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true
+            },
+            "pos_x": -288.0,
+            "pos_y": 54.5,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          },
+          {
+            "id": "c19beb4e",
+            "type": "DrawContoursNode",
+            "name": "轮廓绘制",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "4e10f7f3",
+                "node_id": "c19beb4e",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "d9be9340",
+                "node_id": "c19beb4e",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "b6e615f9",
+                "node_id": "c19beb4e",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "d5763c97",
+                "node_id": "c19beb4e",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "draw_source_id": "",
+              "min_area": 100,
+              "max_area": 999999,
+              "margin_left": 0,
+              "margin_right": 0,
+              "margin_top": 0,
+              "margin_bottom": 0,
+              "target_count": 4,
+              "matched": true,
+              "drawn_count": 4,
+              "match_x": 198,
+              "match_y": 0,
+              "match_w": 365,
+              "match_h": 189,
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true
+            },
+            "pos_x": -82.0,
+            "pos_y": 56.5,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          },
+          {
+            "id": "6fc1b4d8",
+            "type": "DrawContoursNode",
+            "name": "轮廓绘制",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "db3ebba0",
+                "node_id": "6fc1b4d8",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "3f93f785",
+                "node_id": "6fc1b4d8",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "14fe9e86",
+                "node_id": "6fc1b4d8",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "e0b40f13",
+                "node_id": "6fc1b4d8",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "draw_source_id": "",
+              "min_area": 100,
+              "max_area": 999999,
+              "margin_left": 0,
+              "margin_right": 0,
+              "margin_top": 0,
+              "margin_bottom": 0,
+              "target_count": 4,
+              "matched": false,
+              "drawn_count": 2,
+              "match_x": 191,
+              "match_y": 0,
+              "match_w": 333,
+              "match_h": 599,
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true
+            },
+            "pos_x": 124.0,
+            "pos_y": 56.5,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          },
+          {
+            "id": "65a8088c",
+            "type": "DataCollectorNode",
+            "name": "数据收集",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "bc0eb0fa",
+                "node_id": "65a8088c",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "ac169a63",
+                "node_id": "65a8088c",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "95ca9ca0",
+                "node_id": "65a8088c",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "b08c960c",
+                "node_id": "65a8088c",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "matched": false,
+              "true_count": 1,
+              "total_count": 4,
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true
+            },
+            "pos_x": -179.0,
+            "pos_y": 157.0,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          },
+          {
+            "id": "9e17f612",
+            "type": "DataCollectorNode",
+            "name": "数据收集",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "0010940a",
+                "node_id": "9e17f612",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "df5538ce",
+                "node_id": "9e17f612",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "a0322dbe",
+                "node_id": "9e17f612",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "e228df2b",
+                "node_id": "9e17f612",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "matched": false,
+              "true_count": 0,
+              "total_count": 2,
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true
+            },
+            "pos_x": 321.0,
+            "pos_y": 157.0,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          },
+          {
+            "id": "2b8d9611",
+            "type": "OpenCVConditionNode",
+            "name": "条件分支",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "dfc8aa9f",
+                "node_id": "2b8d9611",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "12a0651e",
+                "node_id": "2b8d9611",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "f6a67882",
+                "node_id": "2b8d9611",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "64693689",
+                "node_id": "2b8d9611",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": false
+            },
+            "pos_x": 321.0,
+            "pos_y": 233.5,
+            "use_invoked_part": false,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            },
+            "conditions_presenter": {
+              "selected_index": -1,
+              "branches": [
+                {
+                  "branch_id": "6f4f32db",
+                  "selected_input_node_id": "9e17f612",
+                  "selected_output_node_id": "beae130d",
+                  "condition_operate": "ALL",
+                  "conditions": [
+                    {
+                      "property_name": "数据收集.matched",
+                      "filter_operate": "EQUALS",
+                      "value": true
+                    }
+                  ]
+                },
+                {
+                  "branch_id": "15d7bff1",
+                  "selected_input_node_id": "2b8d9611",
+                  "selected_output_node_id": "b0fad5fc",
+                  "condition_operate": "ALL",
+                  "conditions": [
+                    {
+                      "property_name": "数据收集.matched",
+                      "filter_operate": "EQUALS",
+                      "value": false
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "id": "43b83a6f",
+            "type": "OKOutputNode",
+            "name": "OK输出",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "ca643121",
+                "node_id": "43b83a6f",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "5500248c",
+                "node_id": "43b83a6f",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "f8c7761d",
+                "node_id": "43b83a6f",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "8008543b",
+                "node_id": "43b83a6f",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "result_message": "OK",
+              "result_success": true,
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true
+            },
+            "pos_x": 321.0,
+            "pos_y": 387.0,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          },
+          {
+            "id": "b0fad5fc",
+            "type": "NGOutputNode",
+            "name": "NG输出",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "364cca9f",
+                "node_id": "b0fad5fc",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "e1d2e148",
+                "node_id": "b0fad5fc",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "020d4dc3",
+                "node_id": "b0fad5fc",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "1aeb9c86",
+                "node_id": "b0fad5fc",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "result_message": "NG",
+              "result_success": true,
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true
+            },
+            "pos_x": 540.0,
+            "pos_y": 387.0,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          },
+          {
+            "id": "beae130d",
+            "type": "ROIMapBackNode",
+            "name": "ROI映射回原图",
+            "title": "",
+            "text": "",
+            "width": 120.0,
+            "height": 35.0,
+            "ports": [
+              {
+                "port_id": "8941dccb",
+                "node_id": "beae130d",
+                "port_type": "INPUT",
+                "dock": "TOP",
+                "name": ""
+              },
+              {
+                "port_id": "028b0f33",
+                "node_id": "beae130d",
+                "port_type": "OUTPUT",
+                "dock": "BOTTOM",
+                "name": ""
+              },
+              {
+                "port_id": "3f4e3170",
+                "node_id": "beae130d",
+                "port_type": "INPUT",
+                "dock": "LEFT",
+                "name": ""
+              },
+              {
+                "port_id": "cd05e9c9",
+                "node_id": "beae130d",
+                "port_type": "OUTPUT",
+                "dock": "RIGHT",
+                "name": ""
+              }
+            ],
+            "invoke_mode": "SEQUENTIAL",
+            "properties": {
+              "image_source_mode": "处理后图片",
+              "use_invoked_part": true
+            },
+            "pos_x": 321.0,
+            "pos_y": 317.0,
+            "use_invoked_part": true,
+            "roi": {
+              "type": "NoROI",
+              "name": "无"
+            }
+          }
+        ],
+        "links": [
+          {
+            "link_id": "10fd5c4f",
+            "from_node_id": "fcbbcc52",
+            "from_port_id": "9275520e",
+            "to_node_id": "54d517bf",
+            "to_port_id": "421a5c1e",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "5170aa07",
+            "from_node_id": "fcbbcc52",
+            "from_port_id": "9275520e",
+            "to_node_id": "824dca9e",
+            "to_port_id": "26e8486d",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "6d28c0f0",
+            "from_node_id": "fcbbcc52",
+            "from_port_id": "9275520e",
+            "to_node_id": "575f3529",
+            "to_port_id": "e8d80278",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "a5019f86",
+            "from_node_id": "fcbbcc52",
+            "from_port_id": "9275520e",
+            "to_node_id": "61be2693",
+            "to_port_id": "7b252190",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "788436a3",
+            "from_node_id": "54d517bf",
+            "from_port_id": "932ab2ca",
+            "to_node_id": "965003a9",
+            "to_port_id": "b6910db4",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "96e6c357",
+            "from_node_id": "824dca9e",
+            "from_port_id": "ec2d2836",
+            "to_node_id": "dac2ded2",
+            "to_port_id": "9e2a9ad9",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "9aaf07dc",
+            "from_node_id": "575f3529",
+            "from_port_id": "e848dadf",
+            "to_node_id": "010a8fbf",
+            "to_port_id": "3d7aff24",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "c8d11046",
+            "from_node_id": "61be2693",
+            "from_port_id": "199a85e7",
+            "to_node_id": "5b7ab467",
+            "to_port_id": "544d3517",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "2aee6a0b",
+            "from_node_id": "5b7ab467",
+            "from_port_id": "ab3ec334",
+            "to_node_id": "fe970166",
+            "to_port_id": "505a1fc9",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "ce091388",
+            "from_node_id": "010a8fbf",
+            "from_port_id": "c3ecd7c7",
+            "to_node_id": "fe970166",
+            "to_port_id": "505a1fc9",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "23da710c",
+            "from_node_id": "dac2ded2",
+            "from_port_id": "da4baadf",
+            "to_node_id": "fe970166",
+            "to_port_id": "505a1fc9",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "04ee65ca",
+            "from_node_id": "965003a9",
+            "from_port_id": "d716e55f",
+            "to_node_id": "fe970166",
+            "to_port_id": "505a1fc9",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "99633ebe",
+            "from_node_id": "5b7ab467",
+            "from_port_id": "ab3ec334",
+            "to_node_id": "a760712a",
+            "to_port_id": "8c8ad999",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "cd2a10b3",
+            "from_node_id": "010a8fbf",
+            "from_port_id": "c3ecd7c7",
+            "to_node_id": "65ce8646",
+            "to_port_id": "6f0c4262",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "7575cde5",
+            "from_node_id": "dac2ded2",
+            "from_port_id": "da4baadf",
+            "to_node_id": "1b55747b",
+            "to_port_id": "ddcd4284",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "ce31094f",
+            "from_node_id": "965003a9",
+            "from_port_id": "d716e55f",
+            "to_node_id": "ac165f60",
+            "to_port_id": "8b9e231c",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "68af1ad8",
+            "from_node_id": "ac165f60",
+            "from_port_id": "add86363",
+            "to_node_id": "98ca8f9c",
+            "to_port_id": "f1ded132",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "b1aafd8a",
+            "from_node_id": "1b55747b",
+            "from_port_id": "427adf8a",
+            "to_node_id": "edcd1856",
+            "to_port_id": "831830ad",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "19f5516f",
+            "from_node_id": "a760712a",
+            "from_port_id": "335736ae",
+            "to_node_id": "77f67679",
+            "to_port_id": "2eda613d",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "da556a6f",
+            "from_node_id": "65ce8646",
+            "from_port_id": "c14fd961",
+            "to_node_id": "e30da7c7",
+            "to_port_id": "1b1e7db2",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "d19fd9a3",
+            "from_node_id": "98ca8f9c",
+            "from_port_id": "1cb93b23",
+            "to_node_id": "9c41b8c7",
+            "to_port_id": "0891d9f9",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "759baf94",
+            "from_node_id": "edcd1856",
+            "from_port_id": "e9c3c51a",
+            "to_node_id": "16489d3a",
+            "to_port_id": "12451ff8",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "e2eb1d7c",
+            "from_node_id": "e30da7c7",
+            "from_port_id": "622d4930",
+            "to_node_id": "88ee9c7f",
+            "to_port_id": "9f52f68b",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "92db14eb",
+            "from_node_id": "77f67679",
+            "from_port_id": "9717623a",
+            "to_node_id": "82961da2",
+            "to_port_id": "431c4aa7",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "29247e33",
+            "from_node_id": "9c41b8c7",
+            "from_port_id": "2194ec51",
+            "to_node_id": "3d53022d",
+            "to_port_id": "e11a44f0",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "30b255a8",
+            "from_node_id": "16489d3a",
+            "from_port_id": "1820a991",
+            "to_node_id": "c24e076f",
+            "to_port_id": "99ed3c7b",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "a0628dce",
+            "from_node_id": "88ee9c7f",
+            "from_port_id": "e452cecd",
+            "to_node_id": "c19beb4e",
+            "to_port_id": "4e10f7f3",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "0a141c47",
+            "from_node_id": "82961da2",
+            "from_port_id": "9085f1fe",
+            "to_node_id": "6fc1b4d8",
+            "to_port_id": "db3ebba0",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "648d60da",
+            "from_node_id": "6fc1b4d8",
+            "from_port_id": "3f93f785",
+            "to_node_id": "65a8088c",
+            "to_port_id": "bc0eb0fa",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "f89bc681",
+            "from_node_id": "3d53022d",
+            "from_port_id": "ac2ff376",
+            "to_node_id": "65a8088c",
+            "to_port_id": "bc0eb0fa",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "86b35b1d",
+            "from_node_id": "c24e076f",
+            "from_port_id": "95976a34",
+            "to_node_id": "65a8088c",
+            "to_port_id": "bc0eb0fa",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "fada0445",
+            "from_node_id": "c19beb4e",
+            "from_port_id": "d9be9340",
+            "to_node_id": "65a8088c",
+            "to_port_id": "bc0eb0fa",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "632852e6",
+            "from_node_id": "65a8088c",
+            "from_port_id": "b08c960c",
+            "to_node_id": "9e17f612",
+            "to_port_id": "a0322dbe",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "595df565",
+            "from_node_id": "fe970166",
+            "from_port_id": "48e00d22",
+            "to_node_id": "9e17f612",
+            "to_port_id": "0010940a",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "b5cd9b30",
+            "from_node_id": "9e17f612",
+            "from_port_id": "df5538ce",
+            "to_node_id": "2b8d9611",
+            "to_port_id": "dfc8aa9f",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "c5753976",
+            "from_node_id": "2b8d9611",
+            "from_port_id": "64693689",
+            "to_node_id": "b0fad5fc",
+            "to_port_id": "020d4dc3",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "1ba0a54e",
+            "from_node_id": "2b8d9611",
+            "from_port_id": "12a0651e",
+            "to_node_id": "beae130d",
+            "to_port_id": "8941dccb",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          },
+          {
+            "link_id": "cfbc28e6",
+            "from_node_id": "beae130d",
+            "from_port_id": "028b0f33",
+            "to_node_id": "43b83a6f",
+            "to_port_id": "ca643121",
+            "text": "",
+            "stroke_color": "#FF8C00"
+          }
+        ]
+      }
+    }
+  ],
+  "templates": []
+}

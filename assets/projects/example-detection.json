@@ -1,0 +1,40 @@
+{
+  "name": "对象识别模块示例",
+  "version": "2.0.0",
+  "description": "演示Canny边缘检测、查找轮廓、霍夫线检测、Blob检测等功能",
+  "author": "VisionFlow",
+  "created_at": "2026-06-04T00:00:00",
+  "modified_at": "2026-06-04T00:00:00",
+  "selected_diagram_index": 0,
+  "diagrams": [
+    {
+      "id": "detect-001",
+      "name": "边缘检测与轮廓提取",
+      "description": "图像源 → Canny边缘 → 查找轮廓 → Blob渲染",
+      "width": 1200.0,
+      "height": 800.0,
+      "location": "0,0",
+      "workflow": {
+        "nodes": [
+          {"id": "s1", "type": "SrcImageFilesNodeData", "name": "输入图像", "x": 100.0, "y": 200.0,
+           "properties": {"use_all_image": false}},
+          {"id": "c1", "type": "Canny", "name": "Canny边缘", "x": 350.0, "y": 200.0,
+           "properties": {"threshold1": 80.0, "threshold2": 200.0, "aperture_size": 3}},
+          {"id": "cnt1", "type": "FindContours", "name": "查找轮廓", "x": 600.0, "y": 120.0,
+           "properties": {}},
+          {"id": "bl1", "type": "RenderBlobs", "name": "Blob渲染", "x": 600.0, "y": 280.0,
+           "properties": {}},
+          {"id": "hl1", "type": "HoughLinesP", "name": "线段检测", "x": 850.0, "y": 200.0,
+           "properties": {"rho": 1.0, "threshold": 50, "min_line_length": 50, "max_line_gap": 10}}
+        ],
+        "links": [
+          {"id": "l1", "from_node": "s1", "from_port": 0, "to_node": "c1", "to_port": 0},
+          {"id": "l2", "from_node": "c1", "from_port": 0, "to_node": "cnt1", "to_port": 0},
+          {"id": "l3", "from_node": "c1", "from_port": 0, "to_node": "bl1", "to_port": 0},
+          {"id": "l4", "from_node": "cnt1", "from_port": 0, "to_node": "hl1", "to_port": 0}
+        ]
+      }
+    }
+  ],
+  "templates": []
+}

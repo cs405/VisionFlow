@@ -1,0 +1,74 @@
+{
+  "name": "图像预处理模块示例",
+  "version": "2.0.0",
+  "description": "演示色彩转换、缩放、旋转、翻转、阈值化等预处理操作",
+  "author": "VisionFlow",
+  "created_at": "2026-06-04T00:00:00",
+  "modified_at": "2026-06-04T00:00:00",
+  "selected_diagram_index": 0,
+  "diagrams": [
+    {
+      "id": "preprocess-001",
+      "name": "预处理流水线",
+      "description": "源文件 → 色彩转换 → 缩放 → 阈值化",
+      "width": 1200.0,
+      "height": 800.0,
+      "location": "0,0",
+      "workflow": {
+        "nodes": [
+          {
+            "id": "src1",
+            "type": "SrcImageFilesNodeData",
+            "name": "输入图像",
+            "x": 100.0, "y": 150.0,
+            "properties": {"use_all_image": false, "use_auto_switch": true}
+          },
+          {
+            "id": "cvt1",
+            "type": "CvtColor",
+            "name": "灰度转换",
+            "x": 350.0, "y": 80.0,
+            "properties": {"color_code": "BGR2GRAY"}
+          },
+          {
+            "id": "resize1",
+            "type": "Resize",
+            "name": "缩放到640x480",
+            "x": 350.0, "y": 220.0,
+            "properties": {"resize_mode": "FixedSize", "width": 640, "height": 480}
+          },
+          {
+            "id": "rot1",
+            "type": "Rotate",
+            "name": "旋转45°",
+            "x": 600.0, "y": 80.0,
+            "properties": {"angle": 45.0, "scale": 1.0}
+          },
+          {
+            "id": "flip1",
+            "type": "Flip",
+            "name": "水平翻转",
+            "x": 600.0, "y": 220.0,
+            "properties": {"flip_code": 1}
+          },
+          {
+            "id": "thresh1",
+            "type": "Threshold",
+            "name": "二值化",
+            "x": 850.0, "y": 150.0,
+            "properties": {"thresh": 127.0, "maxval": 255.0, "threshold_type": "Binary"}
+          }
+        ],
+        "links": [
+          {"id": "l01", "from_node": "src1", "from_port": 0, "to_node": "cvt1", "to_port": 0},
+          {"id": "l02", "from_node": "src1", "from_port": 0, "to_node": "resize1", "to_port": 0},
+          {"id": "l03", "from_node": "cvt1", "from_port": 0, "to_node": "rot1", "to_port": 0},
+          {"id": "l04", "from_node": "resize1", "from_port": 0, "to_node": "flip1", "to_port": 0},
+          {"id": "l05", "from_node": "rot1", "from_port": 0, "to_node": "thresh1", "to_port": 0},
+          {"id": "l06", "from_node": "flip1", "from_port": 0, "to_node": "thresh1", "to_port": 1}
+        ]
+      }
+    }
+  ],
+  "templates": []
+}
