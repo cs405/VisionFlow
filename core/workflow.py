@@ -560,7 +560,6 @@ class WorkflowEngine:
     def _finish_execution(self, last_result: FlowableResult) -> FlowableResult:
         """根据执行后的状态发布对应完成事件"""
         if self.state == WorkflowState.STOPPED:
-            event_system.publish(EventType.WORKFLOW_STOPPED, sender=self)
             return FlowableResult.ok(message="流程已停止")
         if self.state == WorkflowState.ERROR:
             event_system.publish(EventType.WORKFLOW_ERROR, sender=self, result=last_result)

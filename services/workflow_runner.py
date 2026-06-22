@@ -260,7 +260,8 @@ class WorkflowRunner:
                 t_start = time.time()
                 # 执行整条工作流（摄像头拍照→所有处理节点）
                 result = self._workflow.execute()
-                # 如果执行出错
+                if self._stop_event.is_set():
+                    break
                 if result.is_error:
                     # 发布错误消息事件
                     event_system.publish(EventType.MESSAGE_ERROR, sender=self,

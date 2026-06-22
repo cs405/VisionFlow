@@ -542,17 +542,16 @@ class MainWindow(QMainWindow):
         参数：
             project: 项目对象
         """
-        # 获取当前工作流
         workflow = self._workflow
-        # 设置运行按钮状态
         if hasattr(self, '_run_btn'):
             self._run_btn.setEnabled(workflow.can_start() if workflow else False)
-        # 设置连续运行按钮状态
         if hasattr(self, '_continuous_btn'):
             self._continuous_btn.setEnabled(workflow.can_start() if workflow else False)
-        # 设置停止按钮状态
         if hasattr(self, '_stop_btn'):
-            self._stop_btn.setEnabled((workflow.can_stop() if workflow else False) or self._continuous_mode)
+            self._stop_btn.setEnabled(
+                (workflow.can_stop() if workflow else False)
+                or (self._wf_runner.is_running if hasattr(self, '_wf_runner') else False)
+            )
         # 设置重置按钮状态
         if hasattr(self, '_reset_btn'):
             self._reset_btn.setEnabled(workflow.can_reset() if workflow else False)
@@ -703,7 +702,6 @@ class MainWindow(QMainWindow):
         self._state_lbl.setStyleSheet("color: #2196f3; font-weight: bold;")
         self._msg_lbl.setText("流程运行中...")
         self._diagram_status_strip.set_status("流程图运行中...", "#2196f3")
-        self._refresh_command_states(project_service.current_project)
 
     def _on_wf_done(self, sender, **kwargs):
         if not self._continuous_mode:
@@ -719,8 +717,6 @@ class MainWindow(QMainWindow):
             result_img = sender.current_message.result_image_source if sender and sender.current_message else None
             if result_img is not None:
                 self._image_for_display.emit(result_img)
-        if self._continuous_mode:
-            self._refresh_command_states(project_service.current_project)
 
     def _on_wf_err(self, sender, **kwargs):
         self._continuous_mode = False
@@ -1395,20 +1391,8 @@ class MainWindow(QMainWindow):
         self._refresh_command_states(project_service.current_project)
         self._prepare_editor_for_run()
         if continuous:
-            # 检测"运行全部"：连续模式下，源节点开启了 use_all_image
-            start_node = self._workflow.get_start_node_data()
-            if (isinstance(start_node, SrcFilesVisionNodeData)
-                    and start_node.use_all_image
-                    and start_node.src_file_paths):
-                auto_switch = getattr(start_node, 'use_auto_switch', True)
-                self._live_preview_timer.stop()  # 运行全部由 FILE_ITERATION_NEXT 直接显示图片
-                self._wf_runner.start_run_all(
-                    file_paths=list(start_node.src_file_paths),
-                    auto_switch=auto_switch,
-                    interval=1.0,
-                )
-            else:
-                self._wf_runner.start_continuous()
+            self._wf_runner.start_continuous()
+            self._stop_btn.setEnabled(True)
         else:
             self._wf_runner.start_once()
 
