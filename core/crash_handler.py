@@ -4,6 +4,7 @@ import threading
 import traceback
 import ctypes
 from datetime import datetime
+from PyQt5.QtCore import qInstallMessageHandler, QtMsgType
 
 CRASH_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "crash_logs")
 
@@ -29,8 +30,6 @@ def install():
         threading.excepthook = _thread_hook
 
     try:
-        from PyQt5.QtCore import qInstallMessageHandler, QtMsgType
-
         def _qt_hook(msg_type, context, msg):
             if msg_type == QtMsgType.QtFatalMsg:
                 _write_crash("QtFatal", f"message={msg}\nfile={context.file}:{context.line}\nfunction={context.function}")
