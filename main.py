@@ -14,6 +14,7 @@ from PyQt5.QtWidgets import QApplication
 
 from core.commands import set_point_converter
 from core.node_base import NodeBase
+from core.crash_handler import install as install_crash_handlers
 from gui.main_window import MainWindow
 from gui.theme import theme_manager
 
@@ -106,7 +107,6 @@ def run_gui(ctx):
 
 
 def main():
-    from core.crash_handler import install as install_crash_handlers
     install_crash_handlers()
     ctx = bootstrap_app_context()
     run_gui(ctx)
