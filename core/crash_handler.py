@@ -36,17 +36,11 @@ def _stderr_safe(msg):
 
 
 # ===========================================================================
-# 1. faulthandler —— Python 内建的 C 层崩溃日志
-#    C 代码实现，不依赖 ctypes 回调，比任何 Python 层方案都可靠。
-#    Windows 下捕获 access violation / divide by zero / stack overflow 等。
+# 1. faulthandler —— C 层崩溃日志写到 stderr（不创建文件）
 # ===========================================================================
 def _install_faulthandler():
-    crash_file = os.path.join(CRASH_DIR, f"fault_{datetime.now():%Y%m%d_%H%M%S_%f}.log")
     try:
-        f = open(crash_file, "w", encoding="utf-8")
-        faulthandler.enable(file=f, all_threads=True)
-        _stderr_safe(f"[crash_handler] faulthandler -> {crash_file}\n")
-        _CALLBACK_REFS.append(f)
+        faulthandler.enable(all_threads=True)
     except Exception as e:
         _stderr_safe(f"[crash_handler] faulthandler 启用失败: {e}\n")
 
@@ -88,8 +82,7 @@ def _install_thread_hook():
 
 
 # ===========================================================================
-# 4. QThread.start() 修补 —— 捕获 QThread 工作线程的 Python 异常
-#    (C 层崩溃由 faulthandler 覆盖)
+# 4. QThread.start() 修补
 # ===========================================================================
 def _install_qthread_hook():
     try:
@@ -112,7 +105,6 @@ def _install_qthread_hook():
                 _stderr_safe(f"[crash_handler] QThread崩溃日志 -> {path}\n")
                 raise
 
-        # 交换 run 方法，然后调用原始 start
         self.run = _wrapped_run
         _orig_start(self, *args, **kwargs)
 
@@ -156,9 +148,9 @@ def _install_unraisable_hook():
 
 
 # ===========================================================================
-# 7. Windows 辅助：抑制 WER 弹窗 + SEH 兜底
+# 7. Windows：VEH 只在崩溃时创建日志文件 + 抑制 WER 弹窗
 # ===========================================================================
-def _install_windows_helpers():
+def _install_windows_handlers():
     if sys.platform != "win32":
         return
 
@@ -171,7 +163,84 @@ def _install_windows_helpers():
     except Exception:
         pass
 
-    # CRT 无效参数 / purecall handler
+    EXCEPTION_NAMES = {
+        0xC0000005: "ACCESS_VIOLATION",
+        0xC0000094: "INT_DIVIDE_BY_ZERO",
+        0xC00000FD: "STACK_OVERFLOW",
+        0xC000001D: "ILLEGAL_INSTRUCTION",
+        0xC0000008: "INVALID_HANDLE",
+        0x80000003: "BREAKPOINT",
+        0x80000004: "SINGLE_STEP",
+    }
+    EXCEPTION_CONTINUE_SEARCH = 0
+
+    # ---- VEH（链表式，不会被覆盖）----
+    _veh_cb_type = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p)
+
+    @_veh_cb_type
+    def _veh_handler(exc_info_ptr):
+        code = 0
+        addr = 0
+        try:
+            p = ctypes.cast(exc_info_ptr, ctypes.POINTER(ctypes.c_void_p))
+            if p:
+                record_ptr = p[0]
+                if record_ptr:
+                    p32 = ctypes.cast(record_ptr, ctypes.POINTER(ctypes.c_uint32))
+                    code = p32[0]
+                    pv = ctypes.cast(record_ptr, ctypes.POINTER(ctypes.c_void_p))
+                    addr = ctypes.cast(pv[2], ctypes.c_void_p).value or 0
+        except Exception:
+            pass
+
+        exc_name = EXCEPTION_NAMES.get(code, f"0x{code:08X}")
+        path = _log_path("VEH")
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(f"[VEH] {datetime.now()}\n")
+                f.write(f"exception_code=0x{code:08X} ({exc_name})\n")
+                f.write(f"exception_address=0x{addr:016X}\n")
+                try:
+                    f.write("\nPython traceback:\n")
+                    traceback.print_stack(file=f)
+                except Exception:
+                    f.write("(unable to capture)\n")
+        except Exception:
+            pass
+
+        return EXCEPTION_CONTINUE_SEARCH
+
+    try:
+        kernel32.AddVectoredExceptionHandler(1, _veh_handler)
+    except Exception:
+        pass
+    _CALLBACK_REFS.append(_veh_handler)
+
+    # ---- SEH 兜底 ----
+    _seh_cb_type = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p)
+
+    @_seh_cb_type
+    def _seh_handler(exc_ptr):
+        try:
+            path = _log_path("SEH")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(f"[SEH] {datetime.now()}\n")
+                f.write(f"exception_info=0x{exc_ptr:016X}\n")
+                try:
+                    traceback.print_stack(file=f)
+                except Exception:
+                    f.write("(unable to capture)\n")
+        except Exception:
+            pass
+        return 0
+
+    try:
+        kernel32.SetUnhandledExceptionFilter(_seh_handler)
+    except Exception:
+        pass
+    _CALLBACK_REFS.append(_seh_handler)
+
+    # ---- CRT invalid parameter / purecall ----
     for dll_name in ("ucrtbase.dll", "msvcrt.dll"):
         try:
             crt = ctypes.CDLL(dll_name)
@@ -236,11 +305,11 @@ def _install_signal_handlers():
 # ===========================================================================
 def install():
     """安装全局崩溃日志钩子。在 main() 中最先调用。"""
-    _install_faulthandler()       # C 层崩溃主力
-    _install_python_hook()        # Python 主线程
-    _install_thread_hook()        # Python 子线程
-    _install_qthread_hook()       # Qt 工作线程
-    _install_qt_hook()            # Qt 内部致命错误
-    _install_windows_helpers()    # 抑制弹窗 + CRT 钩子
-    _install_signal_handlers()    # Unix 信号
-    _install_unraisable_hook()    # GC 异常
+    _install_faulthandler()        # C 层崩溃 → stderr（不创建文件）
+    _install_python_hook()         # Python 主线程
+    _install_thread_hook()         # Python 子线程
+    _install_qthread_hook()        # Qt 工作线程
+    _install_qt_hook()             # Qt 内部致命错误
+    _install_windows_handlers()    # VEH+SEH：只在崩溃时创建文件 + 抑制弹窗
+    _install_signal_handlers()     # Unix 信号
+    _install_unraisable_hook()     # GC 异常

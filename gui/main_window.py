@@ -160,8 +160,9 @@ class MainWindow(QMainWindow):
         # 禁用大小调整手柄
         status.setSizeGripEnabled(False)
 
-        # 创建状态标签
+        # 创建状态标签（必须用 Segoe MDL2 Assets 字体，否则 PUA 图标字符会触发字体引擎崩溃）
         self._state_lbl = QLabel(f"{FontIcons.Completed} 空闲")
+        self._state_lbl.setFont(QFont("Segoe MDL2 Assets", 10))
         # 设置样式
         self._state_lbl.setStyleSheet("color: #4caf50; font-weight: bold; background: transparent;")
         # 添加到状态栏
