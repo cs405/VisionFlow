@@ -758,11 +758,13 @@ class MainWindow(QMainWindow):
         self._live_preview_timer.stop()
         result = kwargs.get("result")
         msg = getattr(result, 'message', '流程错误') if result else '流程错误'
-        self._state_lbl.setText(f"{FontIcons.Error} 错误")
-        self._state_lbl.setStyleSheet("color: #f44336; font-weight: bold;")
-        self._msg_lbl.setText(msg)
-        self._diagram_status_strip.set_status(f"流程图错误：{msg}", "#f44336")
-        self._refresh_command_states(project_service.current_project)
+        QTimer.singleShot(0, lambda: (
+            self._state_lbl.setText(f"{FontIcons.Error} 错误"),
+            self._state_lbl.setStyleSheet("color: #f44336; font-weight: bold;"),
+            self._msg_lbl.setText(msg),
+            self._diagram_status_strip.set_status(f"流程图错误：{msg}", "#f44336"),
+            self._refresh_command_states(project_service.current_project)
+        ))
 
     def _on_wf_stopped(self, sender, **kwargs):
         self._continuous_mode = False
