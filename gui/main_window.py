@@ -1,7 +1,7 @@
 import os
 import cv2
 import ctypes
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal
+from PyQt5.QtCore import Qt, QEvent, QTimer, pyqtSignal
 from PyQt5.QtGui import QFont, QIcon, QPixmap
 from PyQt5.QtWidgets import (QMainWindow, QHBoxLayout, QVBoxLayout, QWidget,
                              QLabel, QMenuBar, QFrame, QPushButton, QSplitter,
@@ -198,6 +198,40 @@ class MainWindow(QMainWindow):
         self._resource_panel.file_selected.connect(self._on_resource_file_selected)
         # 资源面板文件双击信号
         self._resource_panel.file_double_clicked.connect(self._on_resource_file_double_clicked)
+
+    def eventFilter(self, obj, event):
+        """处理标题栏拖动——使无边框窗口可拖动
+
+        CaptionBar._install_drag_support() 将自身及其所有子控件的事件过滤器
+        指向 MainWindow，此方法提供实际的拖动逻辑。
+        """
+        if self._caption_bar is None:
+            return super().eventFilter(obj, event)
+
+        # 只处理属于标题栏的控件
+        if obj is not self._caption_bar and not self._caption_bar.isAncestorOf(obj):
+            return super().eventFilter(obj, event)
+
+        # 按钮、菜单栏不拦截——保持其正常交互
+        if isinstance(obj, (QPushButton, QMenuBar)):
+            return super().eventFilter(obj, event)
+
+        if event.type() == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
+            self._drag_pos = event.globalPos()
+            return True
+        elif event.type() == QEvent.MouseMove and hasattr(self, '_drag_pos'):
+            if event.buttons() & Qt.LeftButton:
+                delta = event.globalPos() - self._drag_pos
+                self.move(self.pos() + delta)
+                self._drag_pos = event.globalPos()
+            else:
+                del self._drag_pos
+            return True
+        elif event.type() == QEvent.MouseButtonRelease and hasattr(self, '_drag_pos'):
+            del self._drag_pos
+            return True
+
+        return super().eventFilter(obj, event)
 
     def _connect_events(self):
         """连接事件系统"""
