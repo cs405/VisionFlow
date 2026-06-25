@@ -34,7 +34,7 @@ class ModbusMultiWriteNode(ModbusBase):
             return self.error(mat, "无效的写入值列表")
         try:
             result = self._client.write_registers(
-                self.start_address, values, unit=self.slave_address)
+                self.start_address, values, device_id=self.slave_address)
             if hasattr(result, 'isError') and result.isError():
                 self._mark_error()
                 return self.error(mat, "Modbus 批量写入错误")

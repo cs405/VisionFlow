@@ -26,7 +26,7 @@ class ModbusReadNode(ModbusBase):
             return self.error(mat, "pymodbus 未安装，返回模拟数据: 0")
         try:
             result = self._client.read_holding_registers(
-                self.start_address, self.num_points, unit=self.slave_address)
+                self.start_address, self.num_points, device_id=self.slave_address)
             if hasattr(result, 'isError') and result.isError():
                 self._mark_error()
                 return self.error(mat, "Modbus 读取错误")
