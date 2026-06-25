@@ -23,7 +23,7 @@ class ModbusReadNode(ModbusBase):
                 return self.error(mat, f"Modbus 连接失败: {self.ip}:{self.port}")
         except ImportError:
             self.value = 0
-            return self.ok(mat, "pymodbus 未安装，返回模拟数据: 0")
+            return self.error(mat, "pymodbus 未安装，返回模拟数据: 0")
         try:
             result = self._client.read_holding_registers(
                 self.start_address, self.num_points, slave=self.slave_address)

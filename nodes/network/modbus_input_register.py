@@ -22,7 +22,7 @@ class ModbusInputRegisterNode(ModbusBase):
             if not self._ensure_connected():
                 return self.error(mat, f"连接失败: {self.ip}:{self.port}")
         except ImportError:
-            return self.ok(mat, "pymodbus 未安装")
+            return self.error(mat, "pymodbus 未安装")
         try:
             result = self._client.read_input_registers(
                 self.start_address, self.num_points, slave=self.slave_address)

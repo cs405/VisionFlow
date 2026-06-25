@@ -1,4 +1,4 @@
-from nodes.network.modbus_base import ModbusState, ModbusBase
+from nodes.network.modbus_base import ModbusState
 from nodes.network.modbus_read import ModbusReadNode
 from nodes.network.modbus_coil_read import ModbusCoilReadNode
 from nodes.network.modbus_discrete_input import ModbusDiscreteInputNode
