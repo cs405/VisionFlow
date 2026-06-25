@@ -194,20 +194,12 @@ def _install_windows_handlers():
             pass
 
         exc_name = EXCEPTION_NAMES.get(code, f"0x{code:08X}")
-        # 解析崩溃地址所在的模块名
+        # 解析崩溃地址所在模块（安全简化版，不在 VEH 上下文中做复杂 ctypes 调用）
         module_name = "unknown"
         try:
-            from ctypes import wintypes
-            kernel32.GetModuleHandleExW.restype = wintypes.BOOL
-            kernel32.GetModuleHandleExW.argtypes = [wintypes.DWORD, wintypes.LPCWSTR, ctypes.POINTER(wintypes.HMODULE)]
-            kernel32.GetModuleFileNameW.restype = wintypes.DWORD
-            kernel32.GetModuleFileNameW.argtypes = [wintypes.HMODULE, ctypes.c_wchar_p, wintypes.DWORD]
-            hmod = wintypes.HMODULE()
-            addr_c = ctypes.c_void_p(addr)
-            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS = 0x00000004
-            if kernel32.GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                                           ctypes.cast(ctypes.pointer(addr_c), ctypes.c_wchar_p),
-                                           ctypes.byref(hmod)):
+            hmod = ctypes.c_void_p()
+            # GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS = 0x04
+            if kernel32.GetModuleHandleExW(0x00000004, ctypes.c_void_p(addr), ctypes.byref(hmod)):
                 buf = ctypes.create_unicode_buffer(260)
                 kernel32.GetModuleFileNameW(hmod, buf, 260)
                 module_name = buf.value

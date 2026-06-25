@@ -41,6 +41,7 @@ from services.workflow_runner import WorkflowRunner
 
 class MainWindow(QMainWindow):
     _image_for_display = pyqtSignal(object)  # 跨线程安全：后台线程→主线程显示图像
+    _wf_status = pyqtSignal(dict)            # 跨线程安全：后台线程→主线程更新状态栏控件
 
     def __init__(self, ctx=None):
         super().__init__()
@@ -67,6 +68,7 @@ class MainWindow(QMainWindow):
         self._live_preview_timer.setInterval(33)                 # 设置定时器间隔为33毫秒（约30 FPS）
         self._live_preview_timer.timeout.connect(self._tick_live_preview)  # 连接定时器超时信号到实时预览更新方法
         self._image_for_display.connect(self._on_image_for_display)       # 后台线程→主线程图像显示
+        self._wf_status.connect(self._on_wf_status)                      # 后台线程→主线程状态更新
         self._connect_events()                                   # 连接事件
         self._on_new_project()                                   # 创建新项目，进入编辑状态
 
@@ -732,47 +734,82 @@ class MainWindow(QMainWindow):
         # 节点添加/删除 → CanStart 条件可能已改变
         self._refresh_command_states(project_service.current_project)
 
+    def _on_wf_status(self, data: dict):
+        """主线程槽：安全地更新状态栏控件"""
+        action = data.get("action", "")
+        if action == "stop_timer":
+            self._live_preview_timer.stop()
+        if action == "stop_polling":
+            editor = self._current_diagram_editor()
+            if editor:
+                editor.stop_state_polling()
+        if data.get("stop_continuous"):
+            self._continuous_mode = False
+        if "state_text" in data:
+            self._state_lbl.setText(data["state_text"])
+        if "state_style" in data:
+            self._state_lbl.setStyleSheet(data["state_style"])
+        if "msg_text" in data:
+            self._msg_lbl.setText(data["msg_text"])
+        if "status_text" in data:
+            self._diagram_status_strip.set_status(data["status_text"], data.get("status_color", "#4caf50"))
+        if data.get("refresh_cmds"):
+            self._refresh_command_states(project_service.current_project)
+        if "result_img" in data:
+            self._image_for_display.emit(data["result_img"])
+
     def _on_wf_start(self, sender, **kwargs):
-        self._state_lbl.setText(f"{FontIcons.Sync} 运行中")
-        self._state_lbl.setStyleSheet("color: #2196f3; font-weight: bold;")
-        self._msg_lbl.setText("流程运行中...")
-        self._diagram_status_strip.set_status("流程图运行中...", "#2196f3")
+        self._wf_status.emit({
+            "state_text": f"{FontIcons.Sync} 运行中",
+            "state_style": "color: #2196f3; font-weight: bold;",
+            "msg_text": "流程运行中...",
+            "status_text": "流程图运行中...",
+            "status_color": "#2196f3",
+        })
 
     def _on_wf_done(self, sender, **kwargs):
-        if not self._continuous_mode:
-            self._live_preview_timer.stop()
         label = "连续执行中" if self._continuous_mode else "流程执行完成"
-        self._state_lbl.setText(f"{FontIcons.Completed} {label}")
-        self._state_lbl.setStyleSheet("color: #4caf50; font-weight: bold;")
-        self._msg_lbl.setText(label)
-        self._diagram_status_strip.set_status(label, "#4caf50")
+        data = {
+            "state_text": f"{FontIcons.Completed} {label}",
+            "state_style": "color: #4caf50; font-weight: bold;",
+            "msg_text": label,
+            "status_text": label,
+            "status_color": "#4caf50",
+        }
+        if not self._continuous_mode:
+            data["action"] = "stop_timer"
         pending = getattr(self, '_run_all_pending_path', '')
         if pending:
             self._run_all_pending_path = ''
             result_img = sender.current_message.result_image_source if sender and sender.current_message else None
             if result_img is not None:
-                self._image_for_display.emit(result_img)
+                data["result_img"] = result_img
+        self._wf_status.emit(data)
 
     def _on_wf_err(self, sender, **kwargs):
-        self._continuous_mode = False
-        self._live_preview_timer.stop()
         result = kwargs.get("result")
         msg = getattr(result, 'message', '流程错误') if result else '流程错误'
-        QTimer.singleShot(0, lambda: (
-            self._state_lbl.setText(f"{FontIcons.Error} 错误"),
-            self._state_lbl.setStyleSheet("color: #f44336; font-weight: bold;"),
-            self._msg_lbl.setText(msg),
-            self._diagram_status_strip.set_status(f"流程图错误：{msg}", "#f44336"),
-            self._refresh_command_states(project_service.current_project)
-        ))
+        self._wf_status.emit({
+            "action": "stop_timer",
+            "stop_continuous": True,
+            "state_text": f"{FontIcons.Error} 错误",
+            "state_style": "color: #f44336; font-weight: bold;",
+            "msg_text": msg,
+            "status_text": f"流程图错误：{msg}",
+            "status_color": "#f44336",
+            "refresh_cmds": True,
+        })
 
     def _on_wf_stopped(self, sender, **kwargs):
-        self._continuous_mode = False
-        self._state_lbl.setText(f"{FontIcons.Stop} 已停止")
-        self._state_lbl.setStyleSheet("color: #ff9800; font-weight: bold;")
-        self._msg_lbl.setText("流程已被用户停止")
-        self._diagram_status_strip.set_status("流程图已停止", "#ff9800")
-        self._refresh_command_states(project_service.current_project)
+        self._wf_status.emit({
+            "stop_continuous": True,
+            "state_text": f"{FontIcons.Stop} 已停止",
+            "state_style": "color: #ff9800; font-weight: bold;",
+            "msg_text": "流程已被用户停止",
+            "status_text": "流程图已停止",
+            "status_color": "#ff9800",
+            "refresh_cmds": True,
+        })
 
     def _on_file_iteration_next(self, sender, **kwargs):
         """运行全部：记录当前文件路径，等流程跑完再显示"""
@@ -780,28 +817,27 @@ class MainWindow(QMainWindow):
         index = kwargs.get("index", 0)
         total = kwargs.get("total", 0)
         auto_switch = kwargs.get("auto_switch", True)
-
         self._run_all_pending_path = file_path
-
+        self._wf_status.emit({
+            "status_text": f"运行全部: {index + 1}/{total}",
+            "status_color": "#2196f3",
+        })
         if auto_switch and hasattr(self, '_resource_panel') and self._resource_panel.isVisible():
             self._resource_panel.refresh_selection()
-
-        self._diagram_status_strip.set_status(
-            f"运行全部: {index + 1}/{total}", "#2196f3")
 
     def _on_file_iteration_completed(self, sender, **kwargs):
         """运行全部完成"""
         total = kwargs.get("total", 0)
-        self._continuous_mode = False
         self._last_preview_src = None
-        self._diagram_status_strip.set_status(
-            f"运行全部完成: {total} 个文件", "#4caf50")
-        self._msg_lbl.setText(f"运行全部完成 ({total} 个文件)")
         self._run_all_pending_path = ""
-        self._live_preview_timer.stop()
-        editor = self._current_diagram_editor()
-        if editor:
-            editor.stop_state_polling()
+        self._wf_status.emit({
+            "action": "stop_timer",
+            "stop_continuous": True,
+            "msg_text": f"运行全部完成 ({total} 个文件)",
+            "status_text": f"运行全部完成: {total} 个文件",
+            "status_color": "#4caf50",
+        })
+        self._wf_status.emit({"action": "stop_polling"})
 
     def _on_proj_load(self, sender, **kwargs):
         """
