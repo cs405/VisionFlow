@@ -194,12 +194,33 @@ def _install_windows_handlers():
             pass
 
         exc_name = EXCEPTION_NAMES.get(code, f"0x{code:08X}")
+        # 解析崩溃地址所在的模块名
+        module_name = "unknown"
+        try:
+            from ctypes import wintypes
+            kernel32.GetModuleHandleExW.restype = wintypes.BOOL
+            kernel32.GetModuleHandleExW.argtypes = [wintypes.DWORD, wintypes.LPCWSTR, ctypes.POINTER(wintypes.HMODULE)]
+            kernel32.GetModuleFileNameW.restype = wintypes.DWORD
+            kernel32.GetModuleFileNameW.argtypes = [wintypes.HMODULE, ctypes.c_wchar_p, wintypes.DWORD]
+            hmod = wintypes.HMODULE()
+            addr_c = ctypes.c_void_p(addr)
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS = 0x00000004
+            if kernel32.GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                                           ctypes.cast(ctypes.pointer(addr_c), ctypes.c_wchar_p),
+                                           ctypes.byref(hmod)):
+                buf = ctypes.create_unicode_buffer(260)
+                kernel32.GetModuleFileNameW(hmod, buf, 260)
+                module_name = buf.value
+        except Exception:
+            pass
+
         path = _log_path("VEH")
         try:
             with open(path, "w", encoding="utf-8") as f:
                 f.write(f"[VEH] {datetime.now()}\n")
                 f.write(f"exception_code=0x{code:08X} ({exc_name})\n")
                 f.write(f"exception_address=0x{addr:016X}\n")
+                f.write(f"crash_module={module_name}\n")
                 try:
                     f.write("\nPython traceback:\n")
                     traceback.print_stack(file=f)

@@ -61,7 +61,7 @@ class ModbusBase(OpenCVNodeDataBase):
         try:
             from pymodbus.client import ModbusTcpClient
             self._client = ModbusTcpClient(
-                self.ip, port=self.port, timeout=self.timeout, retries=3)
+                host=self.ip, port=self.port, timeout=self.timeout)
             if self._client.connect():
                 self.modbus_state = ModbusState.CONNECTED.value
                 self._consecutive_failures = 0
