@@ -8,7 +8,7 @@ from nodes.network.modbus_base import ModbusBase
 class ModbusCoilReadNode(ModbusBase):
     """读取线圈 (0x)"""
 
-    start_address = Property(0, name="起始地址", group=PropertyGroupNames.RUN_PARAMETERS)
+    start_address = Property(0, name="线圈地址", group=PropertyGroupNames.RUN_PARAMETERS)
     num_points = Property(1, name="读取数量", group=PropertyGroupNames.RUN_PARAMETERS)
     value = Property(False, name="线圈状态", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)
 

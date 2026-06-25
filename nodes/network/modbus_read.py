@@ -8,7 +8,7 @@ from nodes.network.modbus_base import ModbusBase
 class ModbusReadNode(ModbusBase):
     """读取保持寄存器 (3x/4x)"""
 
-    start_address = Property(0, name="起始地址", group=PropertyGroupNames.RUN_PARAMETERS)
+    start_address = Property(0, name="寄存器地址", group=PropertyGroupNames.RUN_PARAMETERS)
     num_points = Property(1, name="读取数量", group=PropertyGroupNames.RUN_PARAMETERS)
     value = Property(0, name="读取值", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)
 

@@ -22,7 +22,7 @@ class ModbusWriteNode(ModbusBase):
             if not self._ensure_connected():
                 return self.error(mat, f"Modbus 连接失败: {self.ip}:{self.port}")
         except ImportError:
-            return self.ok(mat, "pymodbus 未安装，模拟写入")
+            return self.error(mat, "pymodbus 未安装")
         try:
             result = self._client.write_register(
                 self.start_address, self.write_value, slave=self.slave_address)

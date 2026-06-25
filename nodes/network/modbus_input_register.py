@@ -8,7 +8,7 @@ from nodes.network.modbus_base import ModbusBase
 class ModbusInputRegisterNode(ModbusBase):
     """读取输入寄存器 (3x)"""
 
-    start_address = Property(0, name="起始地址", group=PropertyGroupNames.RUN_PARAMETERS)
+    start_address = Property(0, name="寄存器地址", group=PropertyGroupNames.RUN_PARAMETERS)
     num_points = Property(1, name="读取数量", group=PropertyGroupNames.RUN_PARAMETERS)
     value = Property(0, name="输入寄存器值", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)
 

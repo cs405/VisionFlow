@@ -8,7 +8,7 @@ from nodes.network.modbus_base import ModbusBase
 class ModbusDiscreteInputNode(ModbusBase):
     """读取离散输入 (1x)"""
 
-    start_address = Property(0, name="起始地址", group=PropertyGroupNames.RUN_PARAMETERS)
+    start_address = Property(0, name="输入点地址", group=PropertyGroupNames.RUN_PARAMETERS)
     num_points = Property(1, name="读取数量", group=PropertyGroupNames.RUN_PARAMETERS)
     value = Property(False, name="输入状态", group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)
 

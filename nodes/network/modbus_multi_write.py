@@ -8,7 +8,7 @@ from nodes.network.modbus_base import ModbusBase
 class ModbusMultiWriteNode(ModbusBase):
     """批量写入多个保持寄存器"""
 
-    start_address = Property(0, name="起始地址", group=PropertyGroupNames.RUN_PARAMETERS)
+    start_address = Property(0, name="寄存器起始地址", group=PropertyGroupNames.RUN_PARAMETERS)
     write_values = Property("0", name="写入值列表", group=PropertyGroupNames.RUN_PARAMETERS,
                             description="逗号分隔，如 '100,200,300'")
 
@@ -28,7 +28,7 @@ class ModbusMultiWriteNode(ModbusBase):
             if not self._ensure_connected():
                 return self.error(mat, f"连接失败: {self.ip}:{self.port}")
         except ImportError:
-            return self.ok(mat, "pymodbus 未安装，模拟写入")
+            return self.error(mat, "pymodbus 未安装")
         values = self._parse_values()
         if not values:
             return self.error(mat, "无效的写入值列表")
