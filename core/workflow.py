@@ -539,7 +539,10 @@ class WorkflowEngine:
             return FlowableResult.ok()
         result = self._execute_node(node)
         self._on_level_error(result)
-        self._apply_port_routing(node, disabled)
+        if result.is_error:
+            self._disable_downstream(node_id, disabled)
+        else:
+            self._apply_port_routing(node, disabled)
         return result
 
     def _run_parallel(self, node_ids: list[str], disabled: set[str]) -> FlowableResult:
@@ -550,11 +553,14 @@ class WorkflowEngine:
             if r.is_error:
                 last = r
         self._on_level_error(last)
-        for nid in node_ids:
+        for i, nid in enumerate(node_ids):
             if nid not in disabled:
                 node = self._nodes.get(nid)
                 if node:
-                    self._apply_port_routing(node, disabled)
+                    if results[i].is_error:
+                        self._disable_downstream(nid, disabled)
+                    else:
+                        self._apply_port_routing(node, disabled)
         return last
 
     def _finish_execution(self, last_result: FlowableResult) -> FlowableResult:
