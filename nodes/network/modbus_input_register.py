@@ -25,7 +25,7 @@ class ModbusInputRegisterNode(ModbusBase):
             return self.error(mat, "pymodbus 未安装")
         try:
             result = self._client.read_input_registers(
-                self.start_address, self.num_points, device_id=self.slave_address)
+                self.start_address, count=self.num_points, device_id=self.slave_address)
             if hasattr(result, 'isError') and result.isError():
                 self._mark_error()
                 return self.error(mat, "读取输入寄存器失败")
