@@ -24,7 +24,7 @@ class ModbusCoilReadNode(ModbusBase):
         except ImportError:
             return self.error(mat, "pymodbus 未安装")
         try:
-            result = self._client.read_coils(self.start_address, self.num_points, slave=self.slave_address)
+            result = self._client.read_coils(self.start_address, self.num_points, unit=self.slave_address)
             if hasattr(result, 'isError') and result.isError():
                 self._mark_error()
                 return self.error(mat, "读取线圈失败")

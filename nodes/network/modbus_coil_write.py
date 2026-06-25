@@ -24,7 +24,7 @@ class ModbusCoilWriteNode(ModbusBase):
             return self.error(mat, "pymodbus 未安装")
         try:
             result = self._client.write_coil(
-                self.start_address, self.write_value, slave=self.slave_address)
+                self.start_address, self.write_value, unit=self.slave_address)
             if hasattr(result, 'isError') and result.isError():
                 self._mark_error()
                 return self.error(mat, "写入线圈失败")
