@@ -33,6 +33,8 @@ class ModbusReadNode(ModbusBase):
             if result.registers:
                 self.value = result.registers[0] if self.num_points == 1 else sum(result.registers)
                 self._mark_success()
+                if self._target_blocked(self.value):
+                    return self.break_(mat, f"等待目标值{self.target_value}，当前值{self.value}")
                 return self.ok(mat, f"读取值: {self.value}")
             self._mark_error()
             return self.error(mat, "未读取到数据")

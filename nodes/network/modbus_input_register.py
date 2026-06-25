@@ -14,7 +14,7 @@ class ModbusInputRegisterNode(ModbusBase):
 
     def __init__(self):
         super().__init__()
-        self.name = "Modbus读取(InputRegister)"
+        self.name = "Modbus读取(3x只读寄存器)"
 
     def invoke_core(self, src, from_node, diagram) -> FlowableResult:
         mat = self.get_input_mat(from_node.mat if from_node else None)
@@ -31,6 +31,8 @@ class ModbusInputRegisterNode(ModbusBase):
                 return self.error(mat, "读取输入寄存器失败")
             self.value = result.registers[0] if self.num_points == 1 else sum(result.registers)
             self._mark_success()
+            if self._target_blocked(self.value):
+                return self.break_(mat, f"等待目标值{self.target_value}，当前值{self.value}")
             return self.ok(mat, f"输入寄存器值: {self.value}")
         except Exception as e:
             self._mark_error(str(e)[:80])

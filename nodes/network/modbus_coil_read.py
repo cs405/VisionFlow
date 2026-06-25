@@ -22,7 +22,7 @@ class ModbusCoilReadNode(ModbusBase):
             if not self._ensure_connected():
                 return self.error(mat, f"连接失败: {self.ip}:{self.port}")
         except ImportError:
-            return self.ok(mat, "pymodbus 未安装")
+            return self.error(mat, "pymodbus 未安装")
         try:
             result = self._client.read_coils(self.start_address, self.num_points, slave=self.slave_address)
             if hasattr(result, 'isError') and result.isError():
@@ -30,6 +30,8 @@ class ModbusCoilReadNode(ModbusBase):
                 return self.error(mat, "读取线圈失败")
             self.value = result.bits[0] if result.bits else False
             self._mark_success()
+            if self._target_blocked(self.value):
+                return self.break_(mat, f"等待目标值{self.target_value}，当前值{self.value}")
             return self.ok(mat, f"线圈状态: {self.value}")
         except Exception as e:
             self._mark_error(str(e)[:80])

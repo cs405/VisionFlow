@@ -29,6 +29,7 @@ class ModbusBase(OpenCVNodeDataBase):
     slave_address = Property(1, name="Slave地址", group=PropertyGroupNames.RUN_PARAMETERS)
     timeout = Property(3.0, name="超时(秒)", group=PropertyGroupNames.RUN_PARAMETERS)
     sleep_milliseconds = Property(100, name="轮询间隔(ms)", group=PropertyGroupNames.RUN_PARAMETERS)
+    target_value = Property(-1, name="目标值(-1=禁用)", group=PropertyGroupNames.RUN_PARAMETERS)
     modbus_state = Property(ModbusState.STOPPED.value, name="连接状态",
                             group=PropertyGroupNames.RESULT_PARAMETERS, readonly=True)
     update_time = Property("", name="更新时间", group=PropertyGroupNames.RESULT_PARAMETERS,
@@ -79,6 +80,12 @@ class ModbusBase(OpenCVNodeDataBase):
     def _mark_success(self):
         self.update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.modbus_state = ModbusState.SUCCESS.value
+
+    def _target_blocked(self, current_value) -> bool:
+        """目标值未匹配时返回True(应阻塞下游)，target_value<0表示禁用"""
+        if self.target_value < 0:
+            return False
+        return current_value != self.target_value
 
     def _mark_error(self, msg: str = ""):
         self.modbus_state = ModbusState.ERROR.value
