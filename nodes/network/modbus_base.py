@@ -39,22 +39,39 @@ class ModbusBase(OpenCVNodeDataBase):
         super().__init__()
         self._client = None
         self._master = None
+        self._last_connect_attempt = 0.0
+        self._consecutive_failures = 0
+
+    def _backoff_seconds(self) -> float:
+        """指数退避: 1s, 2s, 4s, 8s, 16s, max 30s"""
+        return min(1.0 * (2 ** min(self._consecutive_failures, 5)), 30.0)
 
     def _connect(self) -> bool:
-        self._disconnect()
+        now = time.time()
+        if now - self._last_connect_attempt < self._backoff_seconds():
+            return False
+        self._last_connect_attempt = now
+
         self.modbus_state = ModbusState.CONNECTING.value
         try:
             from pymodbus.client import ModbusTcpClient
-            self._client = ModbusTcpClient(self.ip, port=self.port, timeout=self.timeout, retries=3)
+            # 复用已有 client 重连，避免频繁创建/销毁
+            if self._client is None:
+                self._client = ModbusTcpClient(
+                    self.ip, port=self.port, timeout=self.timeout, retries=3)
             if self._client.connect():
                 self.modbus_state = ModbusState.CONNECTED.value
+                self._consecutive_failures = 0
                 return True
+            self._consecutive_failures += 1
             self.modbus_state = ModbusState.UNCONNECTED.value
             return False
         except ImportError:
+            self._consecutive_failures += 1
             self.modbus_state = ModbusState.UNCONNECTED.value
             return False
         except Exception:
+            self._consecutive_failures += 1
             self.modbus_state = ModbusState.ERROR.value
             return False
 
@@ -64,18 +81,21 @@ class ModbusBase(OpenCVNodeDataBase):
                 self._client.close()
         except Exception:
             pass
-        self._client = None
-        self._master = None
+        finally:
+            self._client = None
+            self._master = None
         self.modbus_state = ModbusState.STOPPED.value
+        self._consecutive_failures = 0
 
     def dispose(self):
         self._disconnect()
         super().dispose()
 
     def _ensure_connected(self) -> bool:
-        if self._client is None or not self._client.is_socket_open():
-            return self._connect()
-        return True
+        if self._client is not None and self._client.is_socket_open():
+            self._consecutive_failures = 0
+            return True
+        return self._connect()
 
     def _mark_success(self):
         self.update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
