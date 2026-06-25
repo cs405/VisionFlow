@@ -1,6 +1,7 @@
 """Modbus 基类 — ModbusState 枚举 + 连接管理基类"""
 
 import time
+import threading
 from datetime import datetime
 from enum import Enum
 
@@ -39,8 +40,10 @@ class ModbusBase(OpenCVNodeDataBase):
         super().__init__()
         self._client = None
         self._master = None
+        self._lock = threading.Lock()
         self._last_connect_attempt = 0.0
         self._consecutive_failures = 0
+        self._dirty = False  # 操作失败后标记 client 为脏，下次强制重建
 
     def _backoff_seconds(self) -> float:
         """指数退避: 1s, 2s, 4s, 8s, 16s, max 30s"""
@@ -52,16 +55,17 @@ class ModbusBase(OpenCVNodeDataBase):
             return False
         self._last_connect_attempt = now
 
+        # 总是销毁旧 client 后重建 — 避免复用损坏的 client 导致 native 崩溃
+        self._destroy_client()
         self.modbus_state = ModbusState.CONNECTING.value
         try:
             from pymodbus.client import ModbusTcpClient
-            # 复用已有 client 重连，避免频繁创建/销毁
-            if self._client is None:
-                self._client = ModbusTcpClient(
-                    self.ip, port=self.port, timeout=self.timeout, retries=3)
+            self._client = ModbusTcpClient(
+                self.ip, port=self.port, timeout=self.timeout, retries=3)
             if self._client.connect():
                 self.modbus_state = ModbusState.CONNECTED.value
                 self._consecutive_failures = 0
+                self._dirty = False
                 return True
             self._consecutive_failures += 1
             self.modbus_state = ModbusState.UNCONNECTED.value
@@ -75,27 +79,39 @@ class ModbusBase(OpenCVNodeDataBase):
             self.modbus_state = ModbusState.ERROR.value
             return False
 
-    def _disconnect(self):
+    def _destroy_client(self):
+        """仅销毁 client 对象，不修改退避状态"""
         try:
             if self._client:
                 self._client.close()
         except Exception:
             pass
-        finally:
-            self._client = None
-            self._master = None
+        self._client = None
+        self._master = None
+
+    def _disconnect(self):
+        self._destroy_client()
         self.modbus_state = ModbusState.STOPPED.value
         self._consecutive_failures = 0
+        self._dirty = False
+
+    def _mark_client_dirty(self):
+        """modbus 操作失败后标记 client 为脏，下次 _ensure_connected 会强制重建"""
+        self._dirty = True
+        self._consecutive_failures += 1
 
     def dispose(self):
         self._disconnect()
         super().dispose()
 
     def _ensure_connected(self) -> bool:
-        if self._client is not None and self._client.is_socket_open():
-            self._consecutive_failures = 0
-            return True
-        return self._connect()
+        with self._lock:
+            if self._dirty:
+                self._destroy_client()
+            if self._client is not None and self._client.is_socket_open():
+                self._consecutive_failures = 0
+                return True
+            return self._connect()
 
     def _mark_success(self):
         self.update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")

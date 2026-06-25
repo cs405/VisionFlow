@@ -36,10 +36,12 @@ class ModbusMultiWriteNode(ModbusBase):
             result = self._client.write_registers(
                 self.start_address, values=values, device_id=self.slave_address)
             if hasattr(result, 'isError') and result.isError():
+                self._mark_client_dirty()
                 self._mark_error()
                 return self.error(mat, "Modbus 批量写入错误")
             self._mark_success()
             return self.ok(mat, f"批量写入成功: {len(values)} 个寄存器")
         except Exception as e:
+            self._mark_client_dirty()
             self._mark_error(str(e)[:80])
             return self.error(mat, str(e)[:120])

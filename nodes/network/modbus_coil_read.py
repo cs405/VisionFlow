@@ -26,6 +26,7 @@ class ModbusCoilReadNode(ModbusBase):
         try:
             result = self._client.read_coils(self.start_address, count=self.num_points, device_id=self.slave_address)
             if hasattr(result, 'isError') and result.isError():
+                self._mark_client_dirty()
                 self._mark_error()
                 return self.error(mat, "读取线圈失败")
             self.value = result.bits[0] if result.bits else False
@@ -34,5 +35,6 @@ class ModbusCoilReadNode(ModbusBase):
                 return self.break_(mat, f"等待目标值{self.target_value}，当前值{self.value}")
             return self.ok(mat, f"线圈状态: {self.value}")
         except Exception as e:
+            self._mark_client_dirty()
             self._mark_error(str(e)[:80])
             return self.error(mat, str(e)[:120])

@@ -27,6 +27,7 @@ class ModbusInputRegisterNode(ModbusBase):
             result = self._client.read_input_registers(
                 self.start_address, count=self.num_points, device_id=self.slave_address)
             if hasattr(result, 'isError') and result.isError():
+                self._mark_client_dirty()
                 self._mark_error()
                 return self.error(mat, "读取输入寄存器失败")
             self.value = result.registers[0] if self.num_points == 1 else sum(result.registers)
@@ -35,5 +36,6 @@ class ModbusInputRegisterNode(ModbusBase):
                 return self.break_(mat, f"等待目标值{self.target_value}，当前值{self.value}")
             return self.ok(mat, f"输入寄存器值: {self.value}")
         except Exception as e:
+            self._mark_client_dirty()
             self._mark_error(str(e)[:80])
             return self.error(mat, str(e)[:120])

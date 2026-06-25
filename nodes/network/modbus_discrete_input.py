@@ -27,6 +27,7 @@ class ModbusDiscreteInputNode(ModbusBase):
             result = self._client.read_discrete_inputs(
                 self.start_address, count=self.num_points, device_id=self.slave_address)
             if hasattr(result, 'isError') and result.isError():
+                self._mark_client_dirty()
                 self._mark_error()
                 return self.error(mat, "读取离散输入失败")
             self.value = result.bits[0] if result.bits else False
@@ -35,5 +36,6 @@ class ModbusDiscreteInputNode(ModbusBase):
                 return self.break_(mat, f"等待目标值{self.target_value}，当前值{self.value}")
             return self.ok(mat, f"离散输入: {self.value}")
         except Exception as e:
+            self._mark_client_dirty()
             self._mark_error(str(e)[:80])
             return self.error(mat, str(e)[:120])

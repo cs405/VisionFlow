@@ -27,10 +27,12 @@ class ModbusWriteNode(ModbusBase):
             result = self._client.write_register(
                 self.start_address, value=self.write_value, device_id=self.slave_address)
             if hasattr(result, 'isError') and result.isError():
+                self._mark_client_dirty()
                 self._mark_error()
                 return self.error(mat, "Modbus 写入错误")
             self._mark_success()
             return self.ok(mat, f"写入成功: {self.write_value} @ 地址 {self.start_address}")
         except Exception as e:
+            self._mark_client_dirty()
             self._mark_error(str(e)[:80])
             return self.error(mat, str(e)[:120])

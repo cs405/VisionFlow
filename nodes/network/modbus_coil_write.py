@@ -26,10 +26,12 @@ class ModbusCoilWriteNode(ModbusBase):
             result = self._client.write_coil(
                 self.start_address, value=self.write_value, device_id=self.slave_address)
             if hasattr(result, 'isError') and result.isError():
+                self._mark_client_dirty()
                 self._mark_error()
                 return self.error(mat, "写入线圈失败")
             self._mark_success()
             return self.ok(mat, f"线圈写入成功: {self.write_value}")
         except Exception as e:
+            self._mark_client_dirty()
             self._mark_error(str(e)[:80])
             return self.error(mat, str(e)[:120])

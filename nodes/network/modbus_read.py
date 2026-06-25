@@ -28,6 +28,7 @@ class ModbusReadNode(ModbusBase):
             result = self._client.read_holding_registers(
                 self.start_address, count=self.num_points, device_id=self.slave_address)
             if hasattr(result, 'isError') and result.isError():
+                self._mark_client_dirty()
                 self._mark_error()
                 return self.error(mat, "Modbus 读取错误")
             if result.registers:
@@ -36,8 +37,10 @@ class ModbusReadNode(ModbusBase):
                 if self._target_blocked(self.value):
                     return self.break_(mat, f"等待目标值{self.target_value}，当前值{self.value}")
                 return self.ok(mat, f"读取值: {self.value}")
+            self._mark_client_dirty()
             self._mark_error()
             return self.error(mat, "未读取到数据")
         except Exception as e:
+            self._mark_client_dirty()
             self._mark_error(str(e)[:80])
             return self.error(mat, str(e)[:120])
